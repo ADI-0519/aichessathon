@@ -21,15 +21,26 @@ HARD_DEADLINE_FACTOR = 2.5
 MAX_CHECK_EXTENSION_PLY = 40
 FIFTY_MOVE_EXACT_FROM = 80
 STALEMATE_CHECK_PIECES = 8
+MAX_TIME_EXTENSIONS = 2
 
 EXACT = 0
 LOWER = 1
 UPPER = 2
 
+NULL_MOVE_MIN_DEPTH = 3
+NULL_MOVE_BASE_REDUCTION = 2
+DELTA_MARGIN = 120
+FUTILITY_MARGIN = (0, 200)
+FUTILITY_MAX_DEPTH = 1
+
 MG_VALUE = (0, 100, 320, 330, 500, 900, 0)
 EG_VALUE = (0, 120, 310, 335, 525, 900, 0)
 PHASE_VALUE = (0, 0, 1, 1, 2, 4, 0)
 MAX_PHASE = 24
+
+# The king is priced out of the exchange table so a swap sequence never proposes
+# trading it; a king recapture into a defended square is illegal, not merely bad.
+SEE_VALUE = (0, 100, 320, 330, 500, 900, 10_000)
 
 
 @dataclass(slots=True)
@@ -177,6 +188,60 @@ def _pawn_and_rook_features(board: chess.Board, color: chess.Color) -> tuple[int
                     middlegame += 9
 
     return middlegame, endgame
+
+
+def _static_exchange(board: chess.Board, move: chess.Move) -> int:
+    """Material won or lost if both sides keep recapturing on ``move.to_square``.
+
+    Ordering by victim alone cannot tell a queen grabbing a defended pawn from a
+    free one, so quiescence used to search every losing capture to the bottom.
+    """
+    to_square = move.to_square
+    attacker = board.piece_type_at(move.from_square)
+    if attacker is None:
+        return 0
+
+    occupied = board.occupied
+    if board.is_en_passant(move):
+        captured_value = SEE_VALUE[chess.PAWN]
+        captured_square = to_square + (-8 if board.turn == chess.WHITE else 8)
+        occupied &= ~chess.BB_SQUARES[captured_square]
+    else:
+        victim = board.piece_type_at(to_square)
+        captured_value = 0 if victim is None else SEE_VALUE[victim]
+    occupied &= ~chess.BB_SQUARES[move.from_square]
+
+    if move.promotion is None:
+        exposed = SEE_VALUE[attacker]
+    else:
+        captured_value += SEE_VALUE[move.promotion] - SEE_VALUE[chess.PAWN]
+        exposed = SEE_VALUE[move.promotion]
+
+    # gains[index] is the swap-off balance for the side to move at that ply.
+    gains = [captured_value]
+    color = not board.turn
+    index = 0
+    while True:
+        attackers = board.attackers_mask(color, to_square, occupied) & occupied
+        if not attackers:
+            break
+        for piece_type in range(chess.PAWN, chess.KING + 1):
+            subset = attackers & board.pieces_mask(piece_type, color)
+            if subset:
+                break
+        else:
+            break
+        occupied &= ~chess.BB_SQUARES[chess.lsb(subset)]
+        index += 1
+        gains.append(exposed - gains[index - 1])
+        exposed = SEE_VALUE[piece_type]
+        color = not color
+
+    # Fold back: at every ply the side to move may decline to recapture.
+    while index:
+        gains[index - 1] = -max(-gains[index - 1], gains[index])
+        index -= 1
+    return gains[0]
 
 
 def evaluate(board: chess.Board) -> int:
@@ -366,6 +431,18 @@ class Searcher:
             moves.sort(key=lambda move: self.move_score(board, move, None, ply), reverse=True)
 
         for move in moves:
+            if not in_check and move.promotion is None:
+                victim = board.piece_at(move.to_square)
+                victim_value = (
+                    MG_VALUE[chess.PAWN] if victim is None else MG_VALUE[victim.piece_type]
+                )
+                # Delta: even winning this piece for free would not reach alpha.
+                if stand_pat + victim_value + DELTA_MARGIN < alpha:
+                    continue
+                # And a capture that loses material on the recapture is not a way to
+                # quieten the position, which is the only thing quiescence is for.
+                if _static_exchange(board, move) < 0:
+                    continue
             board.push(move)
             try:
                 score = -self.quiescence(board, -beta, -alpha, ply + 1, qply + 1)
@@ -386,7 +463,15 @@ class Searcher:
         key = _move_key(move)
         _history[key] = min(1_000_000, _history.get(key, 0) + depth * depth)
 
-    def search(self, board: chess.Board, depth: int, alpha: int, beta: int, ply: int) -> int:
+    def search(
+        self,
+        board: chess.Board,
+        depth: int,
+        alpha: int,
+        beta: int,
+        ply: int,
+        allow_null: bool = True,
+    ) -> int:
         self.check_time()
         draw = self.draw_score(board, ply)
         if draw is not None:
@@ -416,13 +501,54 @@ class Searcher:
             if alpha >= beta:
                 return table_score
 
+        # Null move: hand the opponent a free move. If the position is still good
+        # enough to fail high after that, it is far too good to be worth searching in
+        # full. Skipped in check, and skipped without a piece on the board to move,
+        # because those are the positions where being obliged to move is the problem.
+        if (
+            allow_null
+            and not in_check
+            and depth >= NULL_MOVE_MIN_DEPTH
+            and beta < MATE_BOUND
+            and board.occupied_co[board.turn] & ~(board.pawns | board.kings)
+        ):
+            reduction = NULL_MOVE_BASE_REDUCTION + depth // 6
+            board.push(chess.Move.null())
+            try:
+                null_score = -self.search(
+                    board, depth - 1 - reduction, -beta, -beta + 1, ply + 1, allow_null=False
+                )
+            finally:
+                board.pop()
+            if null_score >= beta:
+                # Returning beta rather than the null score: a mate found beyond a
+                # move the opponent never actually gets to skip is not a real mate.
+                return beta
+
         best = -INFINITY
         best_move: chess.Move | None = None
         moves = self.ordered_moves(board, entry.move if entry is not None else None, ply)
         if not moves:
             return -MATE_SCORE + ply if in_check else 0
+
+        # Futility: near the horizon, a quiet move in a position already far enough
+        # below alpha will not bridge the gap, so only forcing moves are worth the node.
+        futile = False
+        if not in_check and depth <= FUTILITY_MAX_DEPTH and abs(alpha) < MATE_BOUND:
+            futile = evaluate(board) + FUTILITY_MARGIN[depth] <= alpha
+
         for index, move in enumerate(moves):
             quiet = not board.is_capture(move) and move.promotion is None
+            if (
+                futile
+                and quiet
+                and index > 0
+                and best > -INFINITY
+                and not board.gives_check(move)
+            ):
+                # A quiet check is never futile: it forces a reply, and the reply is
+                # where the mates this engine keeps missing actually live.
+                continue
             reduce_quiet = depth >= 3 and index >= 4 and quiet and not in_check
             if reduce_quiet and board.gives_check(move):
                 reduce_quiet = False
@@ -496,6 +622,7 @@ class Searcher:
     def best_move(self, board: chess.Board, fallback: chess.Move) -> chess.Move:
         best_move = fallback
         previous_score = 0
+        extensions = 0
 
         for depth in range(1, MAX_DEPTH + 1):
             # Start any iteration the soft deadline still allows. The old predictor
@@ -519,6 +646,12 @@ class Searcher:
                 if self.root_completed >= 1 and self.root_best_move is not None:
                     best_move = self.root_best_move
                 break
+            # A root move that changed at this depth means the previous depth was
+            # wrong about the position. That is exactly when the overrun is worth
+            # spending, so push the soft deadline out once toward the hard one.
+            if depth > 2 and candidate != best_move and extensions < MAX_TIME_EXTENSIONS:
+                extensions += 1
+                self.soft_deadline += (self.deadline - self.soft_deadline) * 0.4
             best_move = candidate
             previous_score = score
         return best_move
