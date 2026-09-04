@@ -12,13 +12,16 @@ from harness.referee import Outcome
 from tools import backtest
 from tools.backtest_core import (
     GameRecord,
+    acquire_output_lock,
     append_record,
     ensure_manifest,
     fingerprint_agent,
     load_epd,
+    load_fen,
     load_pgn,
     load_records,
     positions_from_fens,
+    release_output_lock,
     stable_split,
     suite_digest,
     summarize,
@@ -29,9 +32,7 @@ class BacktestCoreTests(unittest.TestCase):
     def test_normalization_deduplicates_phantom_en_passant(self) -> None:
         plain = "8/8/8/8/8/8/4K3/7k w - - 0 1"
         phantom = "8/8/8/8/8/8/4K3/7k w - e3 0 1"
-        positions = positions_from_fens(
-            (("plain", plain), ("phantom", phantom)), split_seed="test"
-        )
+        positions = positions_from_fens((("plain", plain), ("phantom", phantom)), split_seed="test")
         self.assertEqual(len(positions), 1)
         self.assertEqual(positions[0].fen, plain)
 
@@ -75,6 +76,14 @@ class BacktestCoreTests(unittest.TestCase):
                 first_board.push_uci(move)
             self.assertEqual(pgn_positions[0].fen, first_board.fen())
 
+    def test_loads_complete_fen_lines_without_losing_clock_state(self) -> None:
+        fen = "8/5pk1/6p1/3p4/3P4/5KP1/5P2/8 w - - 17 42"
+        with tempfile.TemporaryDirectory() as temporary:
+            path = Path(temporary) / "suite.fen"
+            path.write_text(f"# comment\n{fen}\n", encoding="utf-8")
+            positions = load_fen(path, split_seed="test")
+        self.assertEqual(positions[0].fen, fen)
+
     def test_agent_fingerprint_matches_packaged_inputs_only(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
@@ -97,6 +106,28 @@ class BacktestCoreTests(unittest.TestCase):
             self.assertEqual(created, resumed)
             with self.assertRaisesRegex(ValueError, "different experiment"):
                 ensure_manifest(output, {"candidate": "two"})
+
+    def test_output_lock_rejects_a_second_writer_and_can_be_reacquired(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            output = Path(temporary)
+            first = acquire_output_lock(output)
+            with self.assertRaisesRegex(RuntimeError, "another backtest owns"):
+                acquire_output_lock(output)
+            release_output_lock(first)
+            second = acquire_output_lock(output)
+            release_output_lock(second)
+            self.assertFalse((output / ".run.lock").exists())
+
+    def test_run_claims_output_before_creating_a_manifest(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            output = Path(temporary)
+            existing_lock = acquire_output_lock(output)
+            try:
+                with self.assertRaisesRegex(RuntimeError, "another backtest owns"):
+                    backtest.run(argparse.Namespace(output=output))
+                self.assertFalse((output / "manifest.json").exists())
+            finally:
+                release_output_lock(existing_lock)
 
     def test_journal_round_trip_and_duplicate_rejection(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
@@ -134,6 +165,19 @@ class BacktestCoreTests(unittest.TestCase):
         )
         self.assertEqual(summary["candidate_failures"], 1)
         self.assertEqual(summary["opponent_failures"], 1)
+
+    def test_perfect_small_sample_keeps_an_uncertain_interval(self) -> None:
+        records = [
+            make_record("00001-white", "p1", "white", "win"),
+            make_record("00001-black", "p1", "black", "win"),
+            make_record("00002-white", "p2", "white", "win"),
+            make_record("00002-black", "p2", "black", "win"),
+        ]
+        interval = summarize(records)["confidence_95"]
+        self.assertIsInstance(interval, dict)
+        assert isinstance(interval, dict)
+        self.assertLess(interval["score_low"], 1.0)
+        self.assertEqual(interval["score_high"], 1.0)
 
     def test_result_mapping_handles_colors_draws_and_voids(self) -> None:
         white_win = Outcome("white", "checkmate", "")

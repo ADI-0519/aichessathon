@@ -39,6 +39,8 @@ files = [
     "engine.py",
     "search.py",
     "harness",
+    "tools/build_suite.py",
     "tools/backtest.py",
     "tools/backtest_core.py",
+    "tools/cli.py",
 ]

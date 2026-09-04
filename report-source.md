@@ -26,7 +26,7 @@ Primary source: https://aichessathon.com/docs
 - Runtime: Python 3.12; torch 2.13 CPU, numpy 2.5.2, python-chess 1.11.2,
   onnxruntime 1.29 and numba 0.67; no install step or network; one CPU core; 2 GB RAM;
   read-only filesystem except 256 MB `/tmp`.
-- Lifecycle: 60 seconds to import; one process per game; module state survives; the process retains
+- Lifecycle: 90 seconds to import; one process per game; module state survives; the process retains
   its core after a move and pondering is allowed.
 - Clock: 120 seconds plus 0.5 seconds per move; an illegal output, exception, OOM, init timeout or
   flag is a loss. Games stop at 300 plies and are adjudicated by material.
@@ -34,7 +34,7 @@ Primary source: https://aichessathon.com/docs
   moves in, so a book that only knows the initial position is inadequate.
 - Third-party runtime engines are forbidden, but engine-annotated training data is permitted.
   Any shipped model must be trained by the team. Books and tablebases are expressly permitted.
-- Operations: six uploads per team/day; the latest passing upload plays; upload close is
+- Operations: ten uploads per team/day; the latest passing upload plays; upload close is
   2026-09-11 11:00 London. The ladder only seeds the 13-round qualification Swiss. Final tiebreaks
   include earlier submission.
 

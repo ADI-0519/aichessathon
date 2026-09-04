@@ -130,7 +130,7 @@ def positions_from_fens(
 
 
 def load_epd(path: Path, *, split_seed: str) -> list[SuitePosition]:
-    """Load one EPD/FEN position per non-comment line."""
+    """Load one EPD position per non-comment line."""
     entries: list[tuple[str, str]] = []
     with path.open(encoding="utf-8-sig") as handle:
         for line_number, raw_line in enumerate(handle, start=1):
@@ -144,6 +144,18 @@ def load_epd(path: Path, *, split_seed: str) -> list[SuitePosition]:
                 raise ValueError(f"{path}:{line_number}: invalid EPD: {error}") from error
             raw_identifier = operations.get("id", f"epd-{line_number:06d}")
             entries.append((str(raw_identifier), canonical_fen(board)))
+    return positions_from_fens(entries, split_seed=split_seed)
+
+
+def load_fen(path: Path, *, split_seed: str) -> list[SuitePosition]:
+    """Load one complete FEN per non-comment line."""
+    entries: list[tuple[str, str]] = []
+    with path.open(encoding="utf-8-sig") as handle:
+        for line_number, raw_line in enumerate(handle, start=1):
+            fen = raw_line.strip()
+            if not fen or fen.startswith("#"):
+                continue
+            entries.append((f"fen-{line_number:06d}", fen))
     return positions_from_fens(entries, split_seed=split_seed)
 
 
@@ -167,6 +179,21 @@ def load_pgn(path: Path, *, split_seed: str) -> list[SuitePosition]:
             identifier = game.headers.get("Opening") or f"pgn-{game_number:06d}"
             entries.append((identifier, canonical_fen(board)))
     return positions_from_fens(entries, split_seed=split_seed)
+
+
+def load_suite_file(path: Path, *, split_seed: str) -> list[SuitePosition]:
+    """Load a supported suite file without duplicating format dispatch in CLIs."""
+    resolved = path.resolve()
+    if not resolved.is_file():
+        raise ValueError(f"suite file not found: {resolved}")
+    suffix = resolved.suffix.lower()
+    if suffix == ".epd":
+        return load_epd(resolved, split_seed=split_seed)
+    if suffix == ".fen":
+        return load_fen(resolved, split_seed=split_seed)
+    if suffix == ".pgn":
+        return load_pgn(resolved, split_seed=split_seed)
+    raise ValueError("suite must be a .epd, .fen, or .pgn file")
 
 
 def suite_digest(positions: Sequence[SuitePosition]) -> str:
@@ -262,6 +289,40 @@ def atomic_write_json(path: Path, value: object) -> None:
     os.replace(temporary, path)
 
 
+def atomic_write_text(path: Path, value: str) -> None:
+    """Replace a UTF-8 text file atomically."""
+    temporary = path.with_name(path.name + ".tmp")
+    temporary.write_text(value, encoding="utf-8", newline="\n")
+    os.replace(temporary, path)
+
+
+def acquire_output_lock(output: Path) -> tuple[Path, int]:
+    """Atomically claim an experiment directory for one writer process."""
+    path = output / ".run.lock"
+    try:
+        descriptor = os.open(path, os.O_CREAT | os.O_EXCL | os.O_WRONLY)
+    except FileExistsError as error:
+        raise RuntimeError(
+            f"another backtest owns {output}; if no run is active, remove {path.name}"
+        ) from error
+    owner = f"pid={os.getpid()}\nstarted_at={datetime.now(UTC).isoformat()}\n"
+    try:
+        os.write(descriptor, owner.encode())
+        os.fsync(descriptor)
+    except OSError:
+        os.close(descriptor)
+        path.unlink(missing_ok=True)
+        raise
+    return path, descriptor
+
+
+def release_output_lock(lock: tuple[Path, int]) -> None:
+    """Release a lock returned by :func:`acquire_output_lock`."""
+    path, descriptor = lock
+    os.close(descriptor)
+    path.unlink(missing_ok=True)
+
+
 def ensure_manifest(output: Path, configuration: dict[str, object]) -> dict[str, object]:
     """Create the immutable run manifest or verify it before resuming."""
     path = output / "manifest.json"
@@ -316,6 +377,20 @@ def _score_to_elo(score: float) -> float | None:
     return 400.0 * math.log10(score / (1.0 - score))
 
 
+def _wilson_interval(score: float, samples: int) -> tuple[float, float]:
+    """Return a bounded descriptive interval that remains honest at 0% and 100%."""
+    z = 1.96
+    z_squared = z * z
+    denominator = 1.0 + z_squared / samples
+    center = (score + z_squared / (2.0 * samples)) / denominator
+    margin = (
+        z
+        * math.sqrt(score * (1.0 - score) / samples + z_squared / (4.0 * samples**2))
+        / denominator
+    )
+    return max(0.0, center - margin), min(1.0, center + margin)
+
+
 def summarize(records: Sequence[GameRecord]) -> dict[str, object]:
     """Summarize games and paired outcomes without treating voids as draws."""
     result_counts = Counter(record.candidate_result for record in records)
@@ -349,13 +424,10 @@ def summarize(records: Sequence[GameRecord]) -> dict[str, object]:
 
     pentanomial = Counter(f"{pair_score:.1f}" for pair_score in pair_scores)
     interval: dict[str, float | None] | None = None
-    if len(pair_scores) >= 2:
+    if pair_scores:
         normalized = [pair_score / 2.0 for pair_score in pair_scores]
         mean = sum(normalized) / len(normalized)
-        variance = sum((value - mean) ** 2 for value in normalized) / (len(normalized) - 1)
-        margin = 1.96 * math.sqrt(variance / len(normalized))
-        low = max(0.0, mean - margin)
-        high = min(1.0, mean + margin)
+        low, high = _wilson_interval(mean, len(normalized))
         interval = {
             "score_low": low,
             "score_high": high,
