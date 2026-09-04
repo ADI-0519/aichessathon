@@ -63,6 +63,9 @@ def main() -> None:
     parser.add_argument("--increment-ms", type=int, default=50)
     parser.add_argument("--offset", type=int, default=0)
     parser.add_argument("--limit", type=int)
+    parser.add_argument("--positions", type=int)
+    parser.add_argument("--seed", type=int, default=20260904)
+    parser.add_argument("--no-curated", action="store_true")
     parser.add_argument("--pgn-dir", type=Path)
     args = parser.parse_args()
 
@@ -76,7 +79,7 @@ def main() -> None:
         args.pgn_dir.mkdir(parents=True, exist_ok=True)
 
     candidate = args.candidate.resolve()
-    suite = positions()[args.offset :]
+    suite = positions(args.positions, args.seed, not args.no_curated)[args.offset :]
     suite = suite[: args.limit]
     if not suite:
         parser.error("--offset selects no positions")

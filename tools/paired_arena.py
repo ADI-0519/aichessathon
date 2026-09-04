@@ -26,16 +26,24 @@ FIXED_FENS = (
 )
 
 
-def positions() -> list[str]:
-    result = [chess.STARTING_FEN]
-    for line in OPENING_LINES:
-        board = chess.Board()
-        for uci in line:
-            board.push_uci(uci)
-        result.append(board.fen())
-    result.extend(FIXED_FENS)
+EXTRA_PLIES = (12, 16, 18, 22, 24, 28, 30, 34, 36, 40, 42, 46)
 
-    rng = random.Random(20260904)
+
+def positions(
+    count: int | None = None, seed: int = 20260904, curated: bool = True
+) -> list[str]:
+    # curated=False drops the shared openings for a disjoint set
+    result: list[str] = []
+    if curated:
+        result.append(chess.STARTING_FEN)
+        for line in OPENING_LINES:
+            board = chess.Board()
+            for uci in line:
+                board.push_uci(uci)
+            result.append(board.fen())
+        result.extend(FIXED_FENS)
+
+    rng = random.Random(seed)
     for target_plies in (14, 20, 26, 32, 38, 44):
         board = chess.Board()
         for _ in range(target_plies):
@@ -44,7 +52,20 @@ def positions() -> list[str]:
             board.push(rng.choice(list(board.legal_moves)))
         if not board.is_game_over(claim_draw=True):
             result.append(board.fen())
-    return result
+    if count is None:
+        return result
+
+    index = 0
+    while len(result) < count:
+        board = chess.Board()
+        for _ in range(EXTRA_PLIES[index % len(EXTRA_PLIES)]):
+            if board.is_game_over(claim_draw=True):
+                break
+            board.push(rng.choice(list(board.legal_moves)))
+        index += 1
+        if not board.is_game_over(claim_draw=True):
+            result.append(board.fen())
+    return result[:count]
 
 
 def main() -> None:
@@ -55,14 +76,21 @@ def main() -> None:
     parser.add_argument("--increment-ms", type=int, default=50)
     parser.add_argument("--offset", type=int, default=0)
     parser.add_argument("--limit", type=int)
+    parser.add_argument("--positions", type=int)
+    parser.add_argument("--seed", type=int, default=20260904)
+    parser.add_argument("--no-curated", action="store_true")
     arguments = parser.parse_args()
 
     if arguments.offset < 0:
         parser.error("--offset must be non-negative")
+    if arguments.positions is not None and arguments.positions <= 0:
+        parser.error("--positions must be positive")
 
     candidate = arguments.candidate.resolve()
     opponent = arguments.opponent.resolve()
-    suite = positions()[arguments.offset :]
+    suite = positions(arguments.positions, arguments.seed, not arguments.no_curated)[
+        arguments.offset :
+    ]
     suite = suite[: arguments.limit]
     if not suite:
         parser.error("--offset selects no positions")
