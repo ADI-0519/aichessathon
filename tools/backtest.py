@@ -8,12 +8,12 @@ from __future__ import annotations
 import argparse
 import io
 import json
-import os
 import random
 import time
 from collections import Counter
 from collections.abc import Callable, Sequence
 from dataclasses import asdict
+from functools import wraps
 from pathlib import Path
 from typing import Literal, cast
 
@@ -27,37 +27,26 @@ from tools.backtest_core import (
     CandidateResult,
     GameRecord,
     SuitePosition,
+    acquire_output_lock,
     append_record,
     atomic_write_json,
+    atomic_write_text,
     ensure_manifest,
     fingerprint_agent,
     fingerprint_file,
     git_state,
-    load_epd,
-    load_pgn,
     load_records,
+    load_suite_file,
     positions_from_fens,
+    release_output_lock,
     suite_digest,
     summarize,
 )
+from tools.cli import nonnegative_int, positive_int
 from tools.paired_arena import positions as builtin_fens
 from tools.stockfish_arena import StockfishAgent
 
 AgentFactory = Callable[[], Agent]
-
-
-def positive_int(value: str) -> int:
-    parsed = int(value)
-    if parsed <= 0:
-        raise argparse.ArgumentTypeError("expected a positive integer")
-    return parsed
-
-
-def nonnegative_int(value: str) -> int:
-    parsed = int(value)
-    if parsed < 0:
-        raise argparse.ArgumentTypeError("expected a non-negative integer")
-    return parsed
 
 
 def load_suite(source: str, split_seed: str) -> tuple[list[SuitePosition], str]:
@@ -68,14 +57,7 @@ def load_suite(source: str, split_seed: str) -> tuple[list[SuitePosition], str]:
         ]
         return positions_from_fens(entries, split_seed=split_seed), "builtin"
     path = Path(source).resolve()
-    if not path.is_file():
-        raise ValueError(f"suite file not found: {path}")
-    suffix = path.suffix.lower()
-    if suffix in {".epd", ".fen"}:
-        return load_epd(path, split_seed=split_seed), str(path)
-    if suffix == ".pgn":
-        return load_pgn(path, split_seed=split_seed), str(path)
-    raise ValueError("suite must be 'builtin' or a .epd, .fen, or .pgn file")
+    return load_suite_file(path, split_seed=split_seed), str(path)
 
 
 def select_positions(
@@ -120,12 +102,6 @@ def annotate_pgn(
     game.headers["Black"] = opponent_name if candidate_is_white else candidate_name
     game.headers["BacktestId"] = game_id
     return str(game) + "\n", game.end().ply() - game.ply()
-
-
-def write_text_atomic(path: Path, text: str) -> None:
-    temporary = path.with_name(path.name + ".tmp")
-    temporary.write_text(text, encoding="utf-8")
-    os.replace(temporary, path)
 
 
 def print_summary(summary: dict[str, object]) -> None:
@@ -249,6 +225,25 @@ def validate_arguments(arguments: argparse.Namespace) -> None:
         raise ValueError("holdout access requires --unlock-holdout")
 
 
+def with_output_lock(
+    function: Callable[[argparse.Namespace], int],
+) -> Callable[[argparse.Namespace], int]:
+    """Serialize every read and write associated with one output directory."""
+
+    @wraps(function)
+    def locked(arguments: argparse.Namespace) -> int:
+        output = arguments.output.resolve()
+        output.mkdir(parents=True, exist_ok=True)
+        lock = acquire_output_lock(output)
+        try:
+            return function(arguments)
+        finally:
+            release_output_lock(lock)
+
+    return locked
+
+
+@with_output_lock
 def run(arguments: argparse.Namespace) -> int:
     validate_arguments(arguments)
     candidate = arguments.candidate.resolve()
@@ -263,7 +258,6 @@ def run(arguments: argparse.Namespace) -> int:
         arguments.limit,
     )
     output = arguments.output.resolve()
-    output.mkdir(parents=True, exist_ok=True)
     games_directory = output / "games"
     games_directory.mkdir(exist_ok=True)
 
@@ -311,9 +305,7 @@ def run(arguments: argparse.Namespace) -> int:
         for position_index, position in enumerate(selected, start=1):
             position_id = f"{position.source_index:06d}:{position.identifier}"
             for candidate_is_white in (True, False):
-                color: Literal["white", "black"] = (
-                    "white" if candidate_is_white else "black"
-                )
+                color: Literal["white", "black"] = "white" if candidate_is_white else "black"
                 game_id = f"{position_index:05d}-{color}"
                 if game_id in completed:
                     print(f"skip {game_id}: already complete")
@@ -349,7 +341,7 @@ def run(arguments: argparse.Namespace) -> int:
                     candidate_name=candidate_name,
                     opponent_name=opponent_name,
                 )
-                write_text_atomic(output / relative_pgn, pgn)
+                atomic_write_text(output / relative_pgn, pgn)
                 record = GameRecord(
                     game_id=game_id,
                     position_id=position_id,

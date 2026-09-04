@@ -2,7 +2,7 @@
 
 The pattern worth copying is the warm-up call at the bottom of this file. numba compiles on
 first call, and that first call costs far more than the move it is part of. Running it at
-import spends the compile inside the 60 second init budget instead of on your clock.
+import spends the compile inside the 90 second init budget instead of on your clock.
 """
 
 import math
