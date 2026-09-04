@@ -1,12 +1,16 @@
 from __future__ import annotations
 
+import pathlib
 import random
+import subprocess
+import sys
 import unittest
 
 import chess
 import numpy as np
 
 from challengers.numba_v1 import engine, search
+from harness.rules import INIT_BUDGET_S
 
 
 class NumbaSearchTests(unittest.TestCase):
@@ -140,6 +144,27 @@ class NumbaSearchTests(unittest.TestCase):
                 with self.subTest(ply=ply, score=score):
                     stored = search._score_to_table(score, ply)
                     self.assertEqual(search._score_from_table(stored, ply), score)
+
+    def test_cold_import_and_warmup_fit_the_initialization_allowance(self) -> None:
+        # only a fresh process measures what the platform pays before move one
+        package = pathlib.Path(__file__).resolve().parent.parent / "challengers" / "numba_v1"
+        script = (
+            "import time;"
+            "started = time.perf_counter();"
+            "import search;"
+            "search.warmup();"
+            "print(time.perf_counter() - started)"
+        )
+        completed = subprocess.run(
+            [sys.executable, "-c", script],
+            cwd=package,
+            capture_output=True,
+            text=True,
+            timeout=INIT_BUDGET_S * 3,
+            check=True,
+        )
+        elapsed = float(completed.stdout.strip().splitlines()[-1])
+        self.assertLess(elapsed, INIT_BUDGET_S * 2 / 3)
 
     def test_quiet_position_still_searches_and_stalemate_returns_no_move(self) -> None:
         # position with no captures must not dead-end on the stand-pat score
