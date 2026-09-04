@@ -13,8 +13,8 @@ import agent
 
 
 class ProfilingSearcher(agent.Searcher):
-    def __init__(self, deadline: float) -> None:
-        super().__init__(deadline)
+    def __init__(self, deadline: float, soft_deadline: float | None = None) -> None:
+        super().__init__(deadline, soft_deadline)
         self.completed_depth = 0
 
     def search_root(
@@ -58,7 +58,13 @@ def main() -> None:
     for seconds in (float(value) for value in args.seconds.split(",")):
         agent._eval_cache.clear()
         agent._transposition_table.clear()
-        searcher = ProfilingSearcher(time.monotonic() + seconds)
+        # Mirror the production split: `seconds` is the hard cut-off, and no new
+        # iteration begins after the soft one, so the reported depth is the depth the
+        # agent would really reach on a budget of this size.
+        now = time.monotonic()
+        searcher = ProfilingSearcher(
+            now + seconds, now + seconds / agent.HARD_DEADLINE_FACTOR
+        )
         started = time.monotonic()
         move = searcher.best_move(board, fallback)
         elapsed = time.monotonic() - started

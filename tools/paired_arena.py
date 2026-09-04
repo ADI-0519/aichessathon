@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import argparse
+import math
 import random
 from pathlib import Path
 
@@ -26,7 +27,13 @@ FIXED_FENS = (
 )
 
 
-def positions() -> list[str]:
+def positions(extra: int = 6, seed: int = 20260904) -> list[str]:
+    """The fixed suite, plus ``extra`` random positions drawn from ``seed``.
+
+    Rated games start from curated positions the platform does not publish, so a
+    suite that is only openings measures the wrong thing. The random positions are
+    the cheap stand-in; raising ``extra`` is how the sample size goes up.
+    """
     result = [chess.STARTING_FEN]
     for line in OPENING_LINES:
         board = chess.Board()
@@ -35,16 +42,46 @@ def positions() -> list[str]:
         result.append(board.fen())
     result.extend(FIXED_FENS)
 
-    rng = random.Random(20260904)
-    for target_plies in (14, 20, 26, 32, 38, 44):
+    rng = random.Random(seed)
+    while len(result) < len(OPENING_LINES) + len(FIXED_FENS) + 1 + extra:
         board = chess.Board()
-        for _ in range(target_plies):
+        for _ in range(rng.choice((12, 16, 20, 24, 28, 32, 36, 40, 44))):
             if board.is_game_over(claim_draw=True):
                 break
             board.push(rng.choice(list(board.legal_moves)))
         if not board.is_game_over(claim_draw=True):
             result.append(board.fen())
     return result
+
+
+def elo(score: float) -> float:
+    """Convert a score fraction to an Elo difference, clamped at the extremes."""
+    if score <= 0.001:
+        return -800.0
+    if score >= 0.999:
+        return 800.0
+    return -400.0 * math.log10(1.0 / score - 1.0)
+
+
+def report(results: list[float]) -> str:
+    """Score, 95% interval and Elo, so a run says whether it resolved anything."""
+    total = len(results)
+    score = sum(results) / total
+    if total < 2:
+        return f"score {score:.1%} over {total} games"
+    mean = score
+    variance = sum((value - mean) ** 2 for value in results) / (total - 1)
+    error = 1.96 * math.sqrt(variance / total)
+    low, high = max(0.0, score - error), min(1.0, score + error)
+    verdict = (
+        "stronger" if low > 0.5 else "weaker" if high < 0.5 else "NOT RESOLVED at this sample size"
+    )
+    return (
+        f"score {score:.1%} +/- {error:.1%} over {total} games "
+        f"(95% CI {low:.1%} to {high:.1%})\n"
+        f"Elo {elo(score):+.0f} (95% CI {elo(low):+.0f} to {elo(high):+.0f})\n"
+        f"verdict: candidate is {verdict}"
+    )
 
 
 def main() -> None:
@@ -54,12 +91,20 @@ def main() -> None:
     parser.add_argument("--base-ms", type=int, default=1_000)
     parser.add_argument("--increment-ms", type=int, default=50)
     parser.add_argument("--limit", type=int)
+    parser.add_argument(
+        "--extra-positions",
+        type=int,
+        default=6,
+        help="random positions added to the fixed suite; each is played twice",
+    )
+    parser.add_argument("--seed", type=int, default=20260904)
     arguments = parser.parse_args()
 
     candidate = arguments.candidate.resolve()
     opponent = arguments.opponent.resolve()
-    suite = positions()[: arguments.limit]
+    suite = positions(arguments.extra_positions, arguments.seed)[: arguments.limit]
     wins = draws = losses = 0
+    results: list[float] = []
     failures: dict[str, int] = {}
 
     game_number = 0
@@ -78,12 +123,15 @@ def main() -> None:
             candidate_won = (outcome.result == "white") == candidate_is_white
             if outcome.result in {"draw", "void"}:
                 draws += 1
+                results.append(0.5)
                 marker = "="
             elif candidate_won:
                 wins += 1
+                results.append(1.0)
                 marker = "+"
             else:
                 losses += 1
+                results.append(0.0)
                 marker = "-"
             if outcome.termination in FAILED_TERMINATIONS:
                 failures[outcome.termination] = failures.get(outcome.termination, 0) + 1
@@ -93,9 +141,8 @@ def main() -> None:
                 f"{marker} by {outcome.termination}"
             )
 
-    total = wins + draws + losses
-    score = (wins + draws / 2) / total
-    print(f"\n+{wins} ={draws} -{losses}, score {score:.1%} over {total} paired games")
+    print(f"\n+{wins} ={draws} -{losses}")
+    print(report(results))
     if failures:
         raise SystemExit(
             "candidate failures: " + ", ".join(f"{key} {value}" for key, value in failures.items())
