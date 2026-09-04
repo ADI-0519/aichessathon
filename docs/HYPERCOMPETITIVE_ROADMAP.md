@@ -26,7 +26,7 @@ remain the current champion unless a small, isolated improvement clears the gate
 The Numba core is the post-trial challenger.
 
 This conclusion follows from the actual competition shape: one core, no GPU or network, 2 GB RAM,
-a 50 MB package, a generous 60-second import window for JIT warm-up, persistent per-game state and
+a 50 MB package, a generous 90-second import window for JIT warm-up, persistent per-game state and
 explicit permission to ponder. Books and tablebases are allowed, engine-annotated training data is
 allowed, but third-party engines and borrowed runtime models are not. The canonical details are in
 the live [AI Chessathon documentation](https://aichessathon.com/docs) and the dated
@@ -42,14 +42,14 @@ the live [AI Chessathon documentation](https://aichessathon.com/docs) and the da
 | `get_move(fen, time_left_ms) -> UCI` | There is no opponent metadata or move history input; reconstruct history only from successive FENs within the game. |
 | Python 3.12; Numba 0.67, NumPy 2.5.2, python-chess 1.11.2 | A native-speed engine is feasible if its complete hot path uses Numba-compatible primitive arrays. |
 | One dedicated CPU core, no GPU/network | Large policy networks, hosted inference, root parallel search and AlphaZero-style MCTS are poor fits. |
-| 60-second import budget | Precompute attacks and compile every Numba signature before the chess clock starts. Cold-JIT paths during a game are unacceptable. |
+| 90-second import budget | Precompute attacks and compile every Numba signature before the chess clock starts. Cold-JIT paths during a game are unacceptable. |
 | 120 seconds + 0.5 seconds/move | Use iterative deepening with separate soft and hard limits, a clock reserve and an always-legal completed-iteration move. |
 | Process persists for one game | Preserve TT/history, reconstruct repetition state and prepare a ponder search while the opponent thinks. |
 | Core remains available after returning | Pondering is free compute if only one search owns the core at a time and can be stopped safely. |
 | Illegal/crash/OOM/flag/init failure loses | Reliability is part of Elo. Root move validation and a deterministic legal fallback are non-negotiable. |
 | Curated, near-level starting positions | Test from diverse middlegame-adjacent opening positions, not just the initial board. |
 | 300-ply material adjudication | When adjudication is near, material becomes the literal objective; avoid shuffling while materially behind and simplify while ahead. |
-| Six uploads/day; latest valid one plays | Maintain an immutable champion. Never let an unproven upload displace it late in the day. |
+| Ten uploads/day; latest valid one plays | Maintain an immutable champion. Never let an unproven upload displace it late in the day. |
 
 The site currently says hourly ladder games only seed a 13-round Swiss, with points, Buchholz,
 head-to-head and earlier final submission as tiebreaks. That makes variance control and an early
@@ -332,7 +332,7 @@ Goal: guarantee that tomorrow has a serious, legal entry even if later work fail
 - Archive the exact accepted zip and log under a versioned name outside the build output.
 - Do not let exploratory code overwrite this file or become the latest passing upload.
 
-Exit gate: correct root layout, platform validation passes both colors, import well below 60s, no
+Exit gate: correct root layout, platform validation passes both colors, import below 75s, no
 unexplained warnings, hash recorded.
 
 ### Phase 1 — build the measurement laboratory (today, 3-5 hours)
@@ -401,7 +401,7 @@ Correctness gates:
 - make then unmake restores every bitboard, scalar, hash and evaluation accumulator bit-for-bit;
 - targeted cases for illegal EP exposing check, Chess960-like castling fields rejected/handled as
   appropriate, underpromotions, double check, stalemate, mate, repetition and fifty-move state;
-- JIT import comfortably below 60 seconds in a fresh cache-less environment.
+- JIT import comfortably below 75 seconds in a fresh cache-less environment.
 
 Performance gate: at least a 10x increase over the current complex-position search throughput on
 the same machine, while all correctness gates remain exact. Raw perft NPS alone does not qualify.
@@ -459,7 +459,7 @@ Goal: raise evaluation ceiling if the team has enough training compute and data 
 - Compare net accuracy **and** end-to-end nodes per second against tuned HCE.
 
 Promotion gate: clear paired Elo gain at relevant time controls after accounting for lower NPS;
-package remains below 50 MB; import remains below 60s; all accumulator property tests pass. If not,
+package remains below 50 MB; import remains below 75s; all accumulator property tests pass. If not,
 ship tuned HCE. “Neural” has no value on the scoreboard by itself.
 
 ### Phase 7 — pondering, final operations and freeze (last 1-2 days)
@@ -503,7 +503,7 @@ entry while work continues.
 
 - archive contains `agent.py` at root and only intended files;
 - expanded size below 50 MB with explicit headroom;
-- fresh-container import below 45 seconds, leaving 15 seconds contingency;
+- fresh-container import below 75 seconds, leaving 15 seconds contingency;
 - peak RSS below 1.5 GB;
 - no writes outside `/tmp`, network or external processes;
 - all dependencies belong to the fixed platform set;

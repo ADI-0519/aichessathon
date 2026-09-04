@@ -88,6 +88,6 @@ fast time control is how you get them. Keep the previous version around as an op
 - Flagging. See above.
 - Crashing on an edge case: no legal moves, a promotion, an en passant capture. Play a few hundred
   games against a random baseline and the rare paths show up.
-- Blowing the 60 second import budget loading weights.
+- Blowing the 90 second import budget loading weights.
 - Writing anywhere but `/tmp`. Everything else is read-only.
 - More threads than cores. `torch.set_num_threads(1)`.

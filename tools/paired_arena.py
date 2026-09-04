@@ -90,6 +90,7 @@ def main() -> None:
     parser.add_argument("--opponent", type=Path, required=True)
     parser.add_argument("--base-ms", type=int, default=1_000)
     parser.add_argument("--increment-ms", type=int, default=50)
+    parser.add_argument("--offset", type=int, default=0)
     parser.add_argument("--limit", type=int)
     parser.add_argument(
         "--extra-positions",
@@ -100,9 +101,15 @@ def main() -> None:
     parser.add_argument("--seed", type=int, default=20260904)
     arguments = parser.parse_args()
 
+    if arguments.offset < 0:
+        parser.error("--offset must be non-negative")
+
     candidate = arguments.candidate.resolve()
     opponent = arguments.opponent.resolve()
-    suite = positions(arguments.extra_positions, arguments.seed)[: arguments.limit]
+    suite = positions(arguments.extra_positions, arguments.seed)[arguments.offset :]
+    suite = suite[: arguments.limit]
+    if not suite:
+        parser.error("--offset selects no positions")
     wins = draws = losses = 0
     results: list[float] = []
     failures: dict[str, int] = {}
