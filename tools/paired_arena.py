@@ -55,10 +55,13 @@ def main() -> None:
     parser.add_argument("--increment-ms", type=int, default=50)
     parser.add_argument("--offset", type=int, default=0)
     parser.add_argument("--limit", type=int)
+    parser.add_argument("--pgn-dir", type=Path)
     arguments = parser.parse_args()
 
     if arguments.offset < 0:
         parser.error("--offset must be non-negative")
+    if arguments.pgn_dir is not None:
+        arguments.pgn_dir.mkdir(parents=True, exist_ok=True)
 
     candidate = arguments.candidate.resolve()
     opponent = arguments.opponent.resolve()
@@ -94,6 +97,9 @@ def main() -> None:
                 marker = "-"
             if outcome.termination in FAILED_TERMINATIONS:
                 failures[outcome.termination] = failures.get(outcome.termination, 0) + 1
+            if arguments.pgn_dir is not None:
+                name = f"game-{game_number:02d}-{marker}.pgn"
+                (arguments.pgn_dir / name).write_text(outcome.pgn, encoding="utf-8")
             print(
                 f"game {game_number}/{len(suite) * 2}, position {position_number}, "
                 f"candidate {'white' if candidate_is_white else 'black'}: "
