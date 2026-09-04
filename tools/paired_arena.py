@@ -99,6 +99,11 @@ def main() -> None:
         help="random positions added to the fixed suite; each is played twice",
     )
     parser.add_argument("--seed", type=int, default=20260904)
+    parser.add_argument(
+        "--pgn-dir",
+        type=Path,
+        help="write each game as a PGN here, for tools/blunder_audit.py",
+    )
     arguments = parser.parse_args()
 
     if arguments.offset < 0:
@@ -106,6 +111,8 @@ def main() -> None:
 
     candidate = arguments.candidate.resolve()
     opponent = arguments.opponent.resolve()
+    if arguments.pgn_dir is not None:
+        arguments.pgn_dir.mkdir(parents=True, exist_ok=True)
     suite = positions(arguments.extra_positions, arguments.seed)[arguments.offset :]
     suite = suite[: arguments.limit]
     if not suite:
@@ -140,6 +147,10 @@ def main() -> None:
                 losses += 1
                 results.append(0.0)
                 marker = "-"
+            if arguments.pgn_dir is not None:
+                colour = "w" if candidate_is_white else "b"
+                destination = arguments.pgn_dir / f"game{game_number:03d}{colour}.pgn"
+                destination.write_text(outcome.pgn + "\n", encoding="utf-8")
             if outcome.termination in FAILED_TERMINATIONS:
                 failures[outcome.termination] = failures.get(outcome.termination, 0) + 1
             print(
