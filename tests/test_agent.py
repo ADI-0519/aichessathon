@@ -53,7 +53,9 @@ class AgentTests(unittest.TestCase):
     def test_low_clock_keeps_reserve(self) -> None:
         for remaining in (0, 10, 99, 100, 500, 1_000, 120_000):
             with self.subTest(remaining=remaining):
-                self.assertLess(agent._move_budget_ms(remaining), max(remaining, 1))
+                soft, hard = agent._move_budget_ms(remaining)
+                self.assertLessEqual(soft, hard)
+                self.assertLess(hard, max(remaining, 1))
 
     def test_unexpected_internal_error_uses_legal_emergency_move(self) -> None:
         board = chess.Board()
@@ -95,16 +97,40 @@ class AgentTests(unittest.TestCase):
             self.assertIn(move, board.legal_moves)
 
     def test_official_clock_schedule_retains_time_for_300_moves(self) -> None:
+        # Worst case: every move overruns its soft budget and is cut off at the hard
+        # one. The clock has to survive the full ply cap even then.
         clock = 120_000
         for _ in range(300):
-            budget = agent._move_budget_ms(clock)
-            self.assertLess(budget, clock)
-            clock = clock - budget + 500
+            _, hard = agent._move_budget_ms(clock)
+            self.assertLess(hard, clock)
+            clock = clock - hard + 500
         self.assertGreater(clock, 0)
+
+    def test_hard_budget_never_exceeds_a_quarter_of_the_clock(self) -> None:
+        for remaining in (200, 1_000, 5_000, 20_000, 60_000, 120_000):
+            with self.subTest(remaining=remaining):
+                soft, hard = agent._move_budget_ms(remaining)
+                self.assertLessEqual(hard, max(soft, remaining // 4))
+
+    def test_quiescence_scores_stalemate_as_a_draw(self) -> None:
+        # No captures exist, so capture-only generation cannot see that Black is
+        # stalemated; the endgame guard has to.
+        board = chess.Board("7k/5Q2/6K1/8/8/8/8/8 b - - 0 1")
+        searcher = agent.Searcher(time.monotonic() + 1.0)
+        self.assertEqual(
+            searcher.quiescence(board, -agent.INFINITY, agent.INFINITY, 0), 0
+        )
+
+    def test_quiescence_finds_a_hanging_queen(self) -> None:
+        # Capture-only generation still has to produce the winning capture.
+        board = chess.Board("4k3/8/8/3q4/4P3/8/8/4K3 w - - 0 1")
+        searcher = agent.Searcher(time.monotonic() + 1.0)
+        score = searcher.quiescence(board, -agent.INFINITY, agent.INFINITY, 0)
+        self.assertGreater(score, agent.evaluate(board) + agent.MG_VALUE[chess.QUEEN] // 2)
 
     def test_transposition_table_survives_between_searchers(self) -> None:
         first = agent.Searcher(time.monotonic() + 1.0)
-        key = ("sentinel", 0)
+        key = 0x5E9713
         entry = agent.TableEntry(4, 123, agent.EXACT, None)
         first.table[key] = entry
         second = agent.Searcher(time.monotonic() + 1.0)

@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import time
-from collections.abc import Hashable
 from dataclasses import dataclass
 from functools import lru_cache
 
@@ -16,8 +15,12 @@ MAX_DEPTH = 16
 MAX_QUIESCENCE_PLY = 10
 MAX_CHECK_QUIESCENCE_PLY = 14
 TIME_CHECK_MASK = 31
-EVAL_CACHE_SIZE = 65_536
-TT_MAX_SIZE = 100_000
+EVAL_CACHE_SIZE = 200_000
+TT_MAX_SIZE = 900_000
+HARD_DEADLINE_FACTOR = 2.5
+MAX_CHECK_EXTENSION_PLY = 40
+FIFTY_MOVE_EXACT_FROM = 80
+STALEMATE_CHECK_PIECES = 8
 
 EXACT = 0
 LOWER = 1
@@ -43,8 +46,8 @@ class SearchTimeout(Exception):
 
 _game_board: chess.Board | None = None
 _history: dict[int, int] = {}
-_eval_cache: dict[Hashable, int] = {}
-_transposition_table: dict[Hashable, TableEntry] = {}
+_eval_cache: dict[int, int] = {}
+_transposition_table: dict[int, TableEntry] = {}
 
 
 def _move_key(move: chess.Move) -> int:
@@ -81,6 +84,21 @@ def _piece_square(
         home_safety = 28 if rank == 0 and file_index in (2, 6) else 0
         return home_safety - center * 5, center * 5
     return 0, 0
+
+
+_PST: tuple[tuple[tuple[tuple[int, int], ...], ...], ...] = tuple(
+    tuple(
+        tuple(_piece_square(piece_type, square, color) for square in range(64))
+        for color in (chess.BLACK, chess.WHITE)
+    )
+    for piece_type in range(7)
+)
+"""``_PST[piece_type][int(color)][square]`` is ``_piece_square`` precomputed.
+
+The function is pure and has only 768 distinct results, but the old code re-derived
+it once per piece per evaluation: a quarter of a million calls in a three-second
+search.  Building the table at import moves that work into the 90 s init budget.
+"""
 
 
 @lru_cache(maxsize=32_768)
@@ -163,7 +181,7 @@ def _pawn_and_rook_features(board: chess.Board, color: chess.Color) -> tuple[int
 
 def evaluate(board: chess.Board) -> int:
     """Tapered evaluation, always from the side-to-move's perspective."""
-    key = board._transposition_key()
+    key = hash(board._transposition_key())
     cached = _eval_cache.get(key)
     if cached is not None:
         return cached
@@ -171,12 +189,23 @@ def evaluate(board: chess.Board) -> int:
     middlegame = 0
     endgame = 0
     phase = 0
-    for square, piece in board.piece_map().items():
-        sign = 1 if piece.color == chess.WHITE else -1
-        mg_square, eg_square = _piece_square(piece.piece_type, square, piece.color)
-        middlegame += sign * (MG_VALUE[piece.piece_type] + mg_square)
-        endgame += sign * (EG_VALUE[piece.piece_type] + eg_square)
-        phase += PHASE_VALUE[piece.piece_type]
+    # Walking the piece bitboards avoids building the whole piece_map dict per call.
+    for piece_type in range(chess.PAWN, chess.KING + 1):
+        mg_base = MG_VALUE[piece_type]
+        eg_base = EG_VALUE[piece_type]
+        phase_value = PHASE_VALUE[piece_type]
+        white_table = _PST[piece_type][1]
+        for square in chess.scan_forward(board.pieces_mask(piece_type, chess.WHITE)):
+            mg_square, eg_square = white_table[square]
+            middlegame += mg_base + mg_square
+            endgame += eg_base + eg_square
+            phase += phase_value
+        black_table = _PST[piece_type][0]
+        for square in chess.scan_forward(board.pieces_mask(piece_type, chess.BLACK)):
+            mg_square, eg_square = black_table[square]
+            middlegame -= mg_base + mg_square
+            endgame -= eg_base + eg_square
+            phase += phase_value
 
     for color, sign in ((chess.WHITE, 1), (chess.BLACK, -1)):
         mg_features, eg_features = _pawn_and_rook_features(board, color)
@@ -197,14 +226,21 @@ def evaluate(board: chess.Board) -> int:
 
 
 class Searcher:
-    def __init__(self, deadline: float) -> None:
+    def __init__(self, deadline: float, soft_deadline: float | None = None) -> None:
+        # ``deadline`` is the hard stop the tree polls against. ``soft_deadline`` is
+        # the earlier point past which a *new* iteration is not begun; an iteration
+        # already running may overrun it and keep whatever root moves it finished.
         self.deadline = deadline
+        self.soft_deadline = deadline if soft_deadline is None else soft_deadline
         if len(_transposition_table) >= TT_MAX_SIZE:
             _transposition_table.clear()
         self.table = _transposition_table
         self.killers: dict[int, tuple[chess.Move | None, chess.Move | None]] = {}
         self.nodes = 0
         self.qnodes = 0
+        self.root_completed = 0
+        self.root_best_move: chess.Move | None = None
+        self.root_best_score = -INFINITY
 
     def check_time(self) -> None:
         self.nodes += 1
@@ -239,8 +275,16 @@ class Searcher:
         return score
 
     @staticmethod
-    def _position_key(board: chess.Board) -> Hashable:
-        return board._transposition_key(), min(board.halfmove_clock, 100)
+    def _position_key(board: chess.Board) -> int:
+        # Keying on the exact halfmove clock split every position across up to a
+        # hundred entries and destroyed the hit rate.  The clock only changes a
+        # score as the fifty-move draw comes into view, so discriminate on it
+        # there and share one bucket everywhere else.  Hashing to a machine int
+        # keeps the table small enough to hold nearly a million entries.
+        clock = board.halfmove_clock
+        return hash(
+            (board._transposition_key(), clock if clock >= FIFTY_MOVE_EXACT_FROM else 0)
+        )
 
     def move_score(
         self, board: chess.Board, move: chess.Move, hash_move: chess.Move | None, ply: int
@@ -286,28 +330,39 @@ class Searcher:
             return draw
 
         in_check = board.is_check()
-        legal_moves = self.ordered_moves(board, None, ply) if in_check else list(board.legal_moves)
-        if not legal_moves:
-            return -MATE_SCORE + ply if in_check else 0
-
-        limit = MAX_CHECK_QUIESCENCE_PLY if in_check else MAX_QUIESCENCE_PLY
-        if qply >= limit:
-            return evaluate(board)
-
         if in_check:
-            moves = legal_moves
+            # In check, every legal move has to be considered, so this is the one
+            # place quiescence still has to pay for full move generation.
+            moves = self.ordered_moves(board, None, ply)
+            if not moves:
+                return -MATE_SCORE + ply
+            if qply >= MAX_CHECK_QUIESCENCE_PLY:
+                return evaluate(board)
             best = -INFINITY
         else:
+            if qply >= MAX_QUIESCENCE_PLY:
+                return evaluate(board)
             stand_pat = evaluate(board)
             if stand_pat >= beta:
                 return stand_pat
-            alpha = max(alpha, stand_pat)
+            if stand_pat > alpha:
+                alpha = stand_pat
             best = stand_pat
-            moves = [
-                move
-                for move in legal_moves
-                if board.is_capture(move) or move.promotion is not None
-            ]
+            # Generating captures directly, rather than every legal move and then
+            # discarding the quiet ones, is the largest single saving available here:
+            # roughly three quarters of all nodes searched are quiescence nodes.
+            moves = list(board.generate_legal_captures())
+            back_rank = chess.BB_RANK_8 if board.turn == chess.WHITE else chess.BB_RANK_1
+            moves.extend(board.generate_legal_moves(board.pawns, back_rank & ~board.occupied))
+            if not moves:
+                # Capture-only generation cannot see stalemate. It is only worth the
+                # movegen to rule out in the endgames where a wrong draw score decides
+                # the game; in the middlegame a stalemate with no captures cannot occur.
+                if chess.popcount(board.occupied) <= STALEMATE_CHECK_PIECES and not any(
+                    board.legal_moves
+                ):
+                    return 0
+                return best
             moves.sort(key=lambda move: self.move_score(board, move, None, ply), reverse=True)
 
         for move in moves:
@@ -336,6 +391,13 @@ class Searcher:
         draw = self.draw_score(board, ply)
         if draw is not None:
             return draw
+
+        in_check = board.is_check()
+        if in_check and ply < MAX_CHECK_EXTENSION_PLY:
+            # Never hand a position with the king attacked to quiescence: it resolves
+            # captures only, so a forced evasion can park a lost piece just past the
+            # horizon. Searching the reply is what stops the tactic being invisible.
+            depth += 1
         if depth <= 0:
             return self.quiescence(board, alpha, beta, ply)
 
@@ -354,7 +416,6 @@ class Searcher:
             if alpha >= beta:
                 return table_score
 
-        in_check = board.is_check()
         best = -INFINITY
         best_move: chess.Move | None = None
         moves = self.ordered_moves(board, entry.move if entry is not None else None, ply)
@@ -404,6 +465,9 @@ class Searcher:
     ) -> tuple[int, chess.Move]:
         best_score = -INFINITY
         best_move = preferred
+        self.root_completed = 0
+        self.root_best_move = None
+        self.root_best_score = -INFINITY
         for index, move in enumerate(self.ordered_moves(board, preferred, 0)):
             board.push(move)
             try:
@@ -418,6 +482,11 @@ class Searcher:
             if score > best_score:
                 best_score = score
                 best_move = move
+            # Published per completed root move, so a timeout later in this iteration
+            # can keep the improvement instead of discarding the whole pass.
+            self.root_completed += 1
+            self.root_best_move = best_move
+            self.root_best_score = best_score
             if score > alpha:
                 alpha = score
             if alpha >= beta:
@@ -427,15 +496,13 @@ class Searcher:
     def best_move(self, board: chess.Board, fallback: chess.Move) -> chess.Move:
         best_move = fallback
         previous_score = 0
-        previous_iteration_s = 0.0
 
         for depth in range(1, MAX_DEPTH + 1):
-            now = time.monotonic()
-            if now >= self.deadline:
+            # Start any iteration the soft deadline still allows. The old predictor
+            # refused to begin one it guessed would not finish and then sat idle,
+            # which threw away a quarter to a third of every move's thinking time.
+            if time.monotonic() >= self.soft_deadline:
                 break
-            if previous_iteration_s and now + previous_iteration_s * 1.8 >= self.deadline:
-                break
-            iteration_started = now
             window = 45
             alpha = -INFINITY if depth == 1 else previous_score - window
             beta = INFINITY if depth == 1 else previous_score + window
@@ -446,10 +513,14 @@ class Searcher:
                         board, depth, -INFINITY, INFINITY, best_move
                     )
             except SearchTimeout:
+                # Ordering searches the previous best first, so once one root move has
+                # completed, anything that replaced it did so on a deeper search than
+                # the one that chose it. That is an improvement worth keeping.
+                if self.root_completed >= 1 and self.root_best_move is not None:
+                    best_move = self.root_best_move
                 break
             best_move = candidate
             previous_score = score
-            previous_iteration_s = time.monotonic() - iteration_started
         return best_move
 
 
@@ -468,16 +539,29 @@ def _sync_board(fen: str) -> chess.Board:
     return _game_board
 
 
-def _move_budget_ms(time_left_ms: int) -> int:
+def _move_budget_ms(time_left_ms: int) -> tuple[int, int]:
+    """Return the soft and hard move budgets, in milliseconds.
+
+    The soft budget is the point past which no new iteration starts; the hard budget
+    is where a running iteration is cut off. Separating them lets a promising
+    iteration overrun rather than leaving the clock unspent, while the reserve keeps
+    the hard stop comfortably inside what the referee allows.
+    """
     reserve_ms = max(100, min(1_200, time_left_ms // 10))
     usable_ms = max(0, time_left_ms - reserve_ms)
     if time_left_ms >= 60_000:
         # Rated games add 500 ms per move. Spend more of the large opening reserve:
         # the old schedule left 45--70 seconds unused in all three supplied games.
-        target_ms = min(4_000, time_left_ms // 35 + 300)
+        soft_ms = min(4_000, time_left_ms // 35 + 300)
     else:
-        target_ms = min(3_000, time_left_ms // 45 + 220)
-    return max(0, min(target_ms, usable_ms))
+        soft_ms = min(3_000, time_left_ms // 45 + 220)
+    soft_ms = max(0, min(soft_ms, usable_ms))
+    # Never let the overrun reach past a quarter of the remaining clock, so one hard
+    # position cannot cascade into time trouble when the clock is already low.
+    hard_ms = min(
+        int(soft_ms * HARD_DEADLINE_FACTOR), usable_ms, max(soft_ms, time_left_ms // 4)
+    )
+    return soft_ms, max(0, hard_ms)
 
 
 def _choose_move(fen: str, time_left_ms: int) -> str:
@@ -508,12 +592,13 @@ def _choose_move(fen: str, time_left_ms: int) -> str:
         board.push(fallback)
         return fallback.uci()
 
-    budget_ms = _move_budget_ms(time_left_ms)
+    soft_ms, hard_ms = _move_budget_ms(time_left_ms)
     chosen = fallback
-    if budget_ms > 0:
-        deadline = time.monotonic() + budget_ms / 1000.0
+    if hard_ms > 0:
+        started = time.monotonic()
         try:
-            chosen = Searcher(deadline).best_move(board, fallback)
+            searcher = Searcher(started + hard_ms / 1000.0, started + soft_ms / 1000.0)
+            chosen = searcher.best_move(board, fallback)
         except Exception as error:
             print(f"search failed, using fallback: {type(error).__name__}: {error}")
             chosen = fallback
