@@ -871,6 +871,39 @@ def generate_legal_moves(
 
 
 @njit(cache=False)
+def generate_legal_captures(
+    pieces: NDArray[np.uint64],
+    state: NDArray[np.int64],
+    key: NDArray[np.uint64],
+    legal_moves: NDArray[np.int32],
+    pseudo_moves: NDArray[np.int32],
+    scratch_undo: NDArray[np.int64],
+    scratch_undo_key: NDArray[np.uint64],
+) -> int:
+    # -1 not 0 (keeps stalemate distinct from pos with no captures)
+    moving_side = int(state[STATE_SIDE])
+    pseudo_count = generate_pseudo_legal_moves(pieces, state, pseudo_moves)
+    legal_count = 0
+    saw_legal = False
+    for index in range(pseudo_count):
+        move = int(pseudo_moves[index])
+        tactical = move_flags(move) & (FLAG_CAPTURE | FLAG_PROMOTION) != 0
+        if saw_legal and not tactical:
+            continue
+        if not make_move(pieces, state, key, move, scratch_undo, scratch_undo_key):
+            continue
+        legal = not is_in_check(pieces, moving_side)
+        unmake_move(pieces, state, key, move, scratch_undo, scratch_undo_key)
+        if not legal:
+            continue
+        saw_legal = True
+        if tactical:
+            legal_moves[legal_count] = np.int32(move)
+            legal_count += 1
+    return legal_count if saw_legal else -1
+
+
+@njit(cache=False)
 def _perft(
     pieces: NDArray[np.uint64],
     state: NDArray[np.int64],
@@ -1004,6 +1037,25 @@ def legal_moves_uci(position: Position) -> set[str]:
     return {move_to_uci(int(move)) for move in legal_moves(position)}
 
 
+def legal_captures(position: Position) -> tuple[NDArray[np.int32], bool]:
+    legal_buffer = np.empty(MAX_MOVES, dtype=np.int32)
+    pseudo_buffer = np.empty(MAX_MOVES, dtype=np.int32)
+    undo = np.empty(UNDO_SIZE, dtype=np.int64)
+    undo_key = np.empty(1, dtype=np.uint64)
+    count = generate_legal_captures(
+        position.pieces,
+        position.state,
+        position.key,
+        legal_buffer,
+        pseudo_buffer,
+        undo,
+        undo_key,
+    )
+    if count < 0:
+        return legal_buffer[:0].copy(), False
+    return legal_buffer[:count].copy(), True
+
+
 def perft(position: Position, depth: int) -> int:
     if depth < 0:
         raise ValueError("depth must be non-negative")
@@ -1032,4 +1084,5 @@ def warmup() -> None:
     """Compile every current hot-path signature outside a future match clock."""
     position = position_from_board(chess.Board())
     legal_moves(position)
+    legal_captures(position)
     perft(position, 1)
