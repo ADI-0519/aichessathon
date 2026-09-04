@@ -589,17 +589,30 @@ def _quiescence(
 
     side = int(state[engine.STATE_SIDE])
     in_check = engine.is_in_check(pieces, side)
-    count = engine.generate_legal_moves(
-        pieces,
-        state,
-        key,
-        legal_stack[ply],
-        pseudo_stack[ply],
-        undo_stack[ply],
-        undo_key_stack[ply],
-    )
-    if count == 0:
-        return (-MATE_SCORE + ply if in_check else 0), False
+    if in_check:
+        count = engine.generate_legal_moves(
+            pieces,
+            state,
+            key,
+            legal_stack[ply],
+            pseudo_stack[ply],
+            undo_stack[ply],
+            undo_key_stack[ply],
+        )
+        if count == 0:
+            return -MATE_SCORE + ply, False
+    else:
+        count = engine.generate_legal_captures(
+            pieces,
+            state,
+            key,
+            legal_stack[ply],
+            pseudo_stack[ply],
+            undo_stack[ply],
+            undo_key_stack[ply],
+        )
+        if count < 0:
+            return 0, False
     if engine.has_rule_draw(
         pieces, state, key[0], history, history_count, root_history_count
     ):
@@ -632,8 +645,6 @@ def _quiescence(
     for index in range(count):
         move = int(legal_stack[ply, index])
         flags = engine.move_flags(move)
-        if not in_check and flags & (engine.FLAG_CAPTURE | engine.FLAG_PROMOTION) == 0:
-            continue
         material_gain = 0
         if not in_check:
             material_gain = _immediate_material_gain(pieces, state, move)
