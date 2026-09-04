@@ -39,6 +39,9 @@ keeps it too. Every rated game leaves a log on your dashboard next to the PGN, h
 output plus your init time, your time on each move, and the clock you had left. Only your team
 can read it.
 
+For reproducible paired experiments, resumable reports, source fingerprints, and protected dataset
+splits, use the [Backtest Suite V2](docs/BACKTESTING.md).
+
 ## The ladder
 
 Measured with `harness/arena.py`. Beating greedy is a search. Beating minimax is a search plus an
