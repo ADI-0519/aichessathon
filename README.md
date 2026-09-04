@@ -16,7 +16,8 @@ When you like it, `make zip` and drop `submission.zip` on your dashboard.
 
 ## Writing an agent
 
-`agent.py` is the whole submission. One function:
+The production agent is split across three readable source files, all placed at the submission
+zip root. `agent.py` exposes the one required function:
 
 ```python
 def get_move(fen: str, time_left_ms: int) -> str:
@@ -33,8 +34,10 @@ uv run python -m harness.play --black baselines/minimax --pgn game.pgn
 uv run python -m harness.arena --opponent ../my-old-version --games 200
 ```
 
-Anything your agent writes to stdout or stderr shows up under the result, so `print` debugging
-works. The platform discards it during rated games and shows it in your validation log.
+Anything your agent prints shows up under the result, so `print` debugging works. The platform
+keeps it too. Every rated game leaves a log on your dashboard next to the PGN, holding your
+output plus your init time, your time on each move, and the clock you had left. Only your team
+can read it.
 
 ## The ladder
 
@@ -57,7 +60,9 @@ evaluation worth searching with.
 ## What's here
 
 ```
-agent.py             your submission
+agent.py             public get_move boundary
+engine.py            compiled board, move generation, make/unmake, and hashing
+search.py            compiled evaluation and search
 baselines/           random, greedy, minimax, numba; each is a directory with an agent.py
 harness/runner.py    the process the platform runs your agent in
 harness/referee.py   the clock, legality, draw and adjudication rules

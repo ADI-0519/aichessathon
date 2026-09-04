@@ -5,12 +5,13 @@ artifact currently playing, over enough games that the result means something.
 
 ## The champion
 
-`champion/agent.py` is a frozen copy of the agent that is currently uploaded. It is the opponent
+`champions/python_v2/agent.py` is the previous uploaded agent, and `champions/` holds every
+frozen build worth playing against. The most recently uploaded one is the opponent
 every challenger has to beat. It is not edited; it is *replaced*, and only by a challenger that
 cleared the gate below.
 
 ```bash
-cp agent.py champion/agent.py
+mkdir champions/<name> && cp agent.py champions/<name>/agent.py
 ```
 
 Do that only at the moment you promote, and note the date and the score it won by.
@@ -21,7 +22,7 @@ Do that only at the moment you promote, and note the date and the score it won b
 win on the luck of the draw.
 
 ```bash
-uv run python -m tools.paired_arena --candidate . --opponent champion --base-ms 2000 --increment-ms 50 --extra-positions 20
+uv run python -m tools.paired_arena --candidate . --opponent champions/python_v2 --base-ms 2000 --increment-ms 50 --extra-positions 20
 ```
 
 - `--extra-positions N` adds N random positions to the nine fixed ones. Every position is two
@@ -67,7 +68,7 @@ A challenger is promoted when all of these hold.
 2. `uv run python -m unittest discover -s tests` passes.
 3. No `crash`, `illegal`, `flag`, or `init` termination appears in any arena game. The arena
    exits non-zero if one does; that is a hard stop, not a note.
-4. The paired arena verdict against `champion` is `stronger`, not `NOT RESOLVED`.
+4. The paired arena verdict against the current upload is `stronger`, not `NOT RESOLVED`.
 5. `uv run python -m harness.play` completes one game at the real 120 s + 0.5 s control without
    a flag.
 

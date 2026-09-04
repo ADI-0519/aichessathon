@@ -1,7 +1,7 @@
 # Search upgrade: what was changed and what it was worth
 
 Date: 4 September 2026
-Baseline: `champion/agent.py`, a frozen copy of the uploaded agent (SHA-256
+Baseline: the then-uploaded agent, now `champions/python_v2/agent.py` (SHA-256
 `391082CC…`, the artifact described in [TRIAL_RECOVERY_REPORT.md](TRIAL_RECOVERY_REPORT.md))
 
 ## Headline
@@ -121,5 +121,5 @@ affordable. Filled to the cap alongside the eval cache, both together cost 177 M
 See [PROMOTION_TESTING.md](PROMOTION_TESTING.md). In short:
 
 ```bash
-uv run python -m tools.paired_arena --candidate . --opponent champion --base-ms 4000 --increment-ms 100 --extra-positions 20
+uv run python -m tools.paired_arena --candidate champions/python_tuned --opponent champions/python_v2 --base-ms 4000 --increment-ms 100 --extra-positions 20
 ```

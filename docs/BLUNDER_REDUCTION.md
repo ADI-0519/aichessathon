@@ -13,7 +13,7 @@ You cannot minimise what you do not count.
 
 ```bash
 # play games and keep the game files
-uv run python -m tools.paired_arena --candidate challengers/numba_v1 --opponent champion \
+uv run python -m tools.paired_arena --candidate . --opponent champions/python_tuned \
     --base-ms 10000 --increment-ms 300 --extra-positions 14 --pgn-dir games/
 
 # score every move against a much deeper search

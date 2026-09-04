@@ -14,8 +14,8 @@ import numpy as np
 try:
     from . import engine, search
 except ImportError:  # pragma: no cover - runner imports this as top-level agent
-    import engine  # type: ignore[import-not-found, no-redef]
-    import search  # type: ignore[import-not-found, no-redef]
+    import engine  # type: ignore[no-redef]
+    import search  # type: ignore[no-redef]
 
 _memory = search.SearchMemory.create()
 _game_board: chess.Board | None = None
