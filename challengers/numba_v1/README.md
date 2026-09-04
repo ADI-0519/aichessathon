@@ -105,19 +105,20 @@ The Round 4 `12...Rxc3` regression remains unresolved. The selective search chos
 and 200,000 nodes, `b5` at 50,000, and `f5` after depth 8 at one million. This instability means
 the tactical regression is not counted as solved.
 
-The initial playing screens were deliberately small:
+The playing screens now include the complete 15-position paired suite:
 
 - `+2 =0 -0` against starter minimax over one paired opening;
 - before selectivity, `+5 =1 -0` against the frozen Python champion over three paired openings at
   2,000+50 ms;
-- after SEE/LMR, `+2 =0 -0` against that champion over the first paired opening at the same control;
-- after SEE/LMR, `+0 =4 -2` against Stockfish at 500 nodes/move over the first three paired openings
-  at the comparable 10,000+100 ms control. The archived Python champion scored `+0 =1 -5` in those
-  exact six games.
+- after SEE/LMR, `+24 =6 -0` against that champion over all 30 games at the same control, for 90.0%;
+- after SEE/LMR, `+9 =9 -12` against Stockfish at 500 nodes/move over all 30 games at the comparable
+  10,000+100 ms control, for 45.0%. The archived Python champion scored `+3 =13 -14` in those exact
+  games, for 31.7%.
 
-The exact-opening Stockfish comparison improved from 8.3% to 33.3%, but six games are far too few
-for promotion. The full previous-champion baseline was 31.7% over 30 games, so the selective build
-still needs a substantially larger comparable-control confirmation.
+Every PGN reparses with a completely legal main line, and neither screen contained a technical
+failure. The exact-position Stockfish score improved by 13.3 percentage points, while the champion
+screen clears the roadmap's 55% promotion threshold decisively. Thirty deterministic paired games
+remain directional evidence rather than a precise Elo estimate.
 
 Run the standard gate:
 
@@ -143,8 +144,11 @@ as search NPS.
 
 ## Next engineering boundary
 
-The immediate next step is a larger paired match at the comparable control. If the gain survives,
-profile its losses to decide between evaluation work and one additional guarded pruning feature;
-do not stack speculative search changes. Every change must pass unit/perft/fuzz, deterministic
+The current search stack has cleared its directional strength gate. Loss analysis against SF-500
+found that the largest recoverable swings were mostly quiet choices rather than illegal moves or
+SEE failures, so the next isolated challenger should improve and tune the classical evaluation.
+First confirm the strength gradient against SF-2K; then fit or add evaluation features without
+stacking more speculative search changes. Every change must pass unit/perft/fuzz, deterministic
 positions, a paired champion screen, and external confirmation. The frozen root submission remains
-the active safety build until a much larger promotion match.
+the active safety build until the compiled challenger passes its packaging and platform-style
+reliability gate.

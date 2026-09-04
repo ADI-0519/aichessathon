@@ -16,10 +16,7 @@ import numpy as np
 from numba import njit
 from numpy.typing import NDArray
 
-try:
-    from . import engine
-except ImportError:  # pragma: no cover - used when the directory is an agent root
-    import engine  # type: ignore[no-redef]
+import engine
 
 INFINITY = 32_000
 MATE_SCORE = 30_000
