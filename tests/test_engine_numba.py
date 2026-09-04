@@ -270,6 +270,18 @@ class NumbaBoardTests(unittest.TestCase):
                 np.testing.assert_array_equal(position.state, original_state)
                 np.testing.assert_array_equal(position.key, original_key)
 
+    def test_reference_perft_suite(self) -> None:
+        # the castling, promotion and discovered-check cases filter might skip
+        cases = (
+            ("r3k2r/p1ppqpb1/bn2pnp1/3PN3/1p2P3/2N2Q1p/PPPBBPPP/R3K2R w KQkq - 0 1", 4_085_603),
+            ("r3k2r/Pppp1ppp/1b3nbN/nP6/BBP1P3/q4N2/Pp1P2PP/R2Q1RK1 w kq - 0 1", 422_333),
+            ("rnbq1k1r/pp1Pbppp/2p5/8/2B5/8/PPP1NnPP/RNBQK2R w KQ - 1 8", 2_103_487),
+            ("r4rk1/1pp1qppp/p1np1n2/2b1p1B1/2B1P1b1/P1NP1N2/1PP1QPPP/R4RK1 w - - 0 10", 3_894_594),
+        )
+        for fen, nodes in cases:
+            with self.subTest(fen=fen):
+                self.assertEqual(engine.perft(engine.position_from_fen(fen), 4), nodes)
+
     def test_legal_captures_match_python_chess(self) -> None:
         fens = (
             chess.STARTING_FEN,
