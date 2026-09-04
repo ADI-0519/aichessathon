@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import argparse
 from pathlib import Path
+from typing import cast
 
 import chess
 import chess.engine
@@ -60,19 +61,25 @@ def main() -> None:
     parser.add_argument("--nodes", type=int, required=True)
     parser.add_argument("--base-ms", type=int, default=3_000)
     parser.add_argument("--increment-ms", type=int, default=50)
+    parser.add_argument("--offset", type=int, default=0)
     parser.add_argument("--limit", type=int)
     parser.add_argument("--pgn-dir", type=Path)
     args = parser.parse_args()
 
     if args.nodes <= 0:
         parser.error("--nodes must be positive")
+    if args.offset < 0:
+        parser.error("--offset must be non-negative")
     if not args.engine.is_file():
         parser.error(f"engine not found: {args.engine}")
     if args.pgn_dir is not None:
         args.pgn_dir.mkdir(parents=True, exist_ok=True)
 
     candidate = args.candidate.resolve()
-    suite = positions()[: args.limit]
+    suite = positions()[args.offset :]
+    suite = suite[: args.limit]
+    if not suite:
+        parser.error("--offset selects no positions")
     totals = {"+": 0, "=": 0, "-": 0}
     failures: dict[str, int] = {}
     game_number = 0
@@ -82,13 +89,14 @@ def main() -> None:
             game_number += 1
             stockfish = StockfishAgent(args.engine.resolve(), args.nodes)
             candidate_agent = local(candidate)
-            white: Agent | StockfishAgent
-            black: Agent | StockfishAgent
+            benchmark_agent = cast(Agent, stockfish)
+            white: Agent
+            black: Agent
             if candidate_is_white:
-                white, black = candidate_agent, stockfish
+                white, black = candidate_agent, benchmark_agent
             else:
-                white, black = stockfish, candidate_agent
-            outcome = play_match(  # type: ignore[arg-type]
+                white, black = benchmark_agent, candidate_agent
+            outcome = play_match(
                 white,
                 black,
                 args.base_ms,
