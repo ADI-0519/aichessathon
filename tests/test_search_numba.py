@@ -84,6 +84,10 @@ class NumbaSearchTests(unittest.TestCase):
         self.assertEqual(first.score, second.score)
         self.assertEqual(first.depth, second.depth)
         self.assertEqual(first.nodes, second.nodes)
+        self.assertEqual(first.lmr_reductions, second.lmr_reductions)
+        self.assertEqual(first.lmr_researches, second.lmr_researches)
+        self.assertGreater(first.lmr_reductions, 0)
+        self.assertLessEqual(first.lmr_researches, first.lmr_reductions)
 
     def test_timed_stop_returns_promptly_with_a_legal_completed_move(self) -> None:
         board = chess.Board()
