@@ -141,6 +141,23 @@ class NumbaSearchTests(unittest.TestCase):
                     stored = search._score_to_table(score, ply)
                     self.assertEqual(search._score_from_table(stored, ply), score)
 
+    def test_quiet_position_still_searches_and_stalemate_returns_no_move(self) -> None:
+        # position with no captures must not dead-end on the stand-pat score
+        quiet = engine.position_from_fen("8/5pk1/6p1/3p4/3P4/5KP1/5P2/8 w - - 0 1")
+        result = search.search_position(quiet, search.SearchMemory.create(), node_limit=20_000)
+        self.assertIn(
+            engine.move_to_uci(result.move),
+            {move.uci() for move in engine.board_from_position(quiet).legal_moves},
+        )
+
+        stalemate = engine.position_from_fen("7k/5Q2/6K1/8/8/8/8/8 b - - 0 1")
+        self.assertEqual(
+            search.search_position(
+                stalemate, search.SearchMemory.create(), node_limit=1_000
+            ).move,
+            0,
+        )
+
 
 if __name__ == "__main__":
     unittest.main()
