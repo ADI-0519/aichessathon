@@ -20,11 +20,15 @@ not passed the full promotion gate.
 - a fully compiled recursive perft driver;
 - iterative deepening, PVS, aspiration windows, a fixed-array transposition table, quiescence,
   and TT/capture/killer/history ordering;
+- static exchange evaluation (SEE), losing-capture deferral, and conservative qsearch delta
+  pruning while preserving every check evasion and checking move;
+- guarded one-ply late-move reductions for late quiet moves, with mandatory full-depth
+  verification whenever a reduced search raises alpha;
 - a tapered material, piece-square, pawn-structure, rook-file, and king-shield evaluation;
 - deterministic fixed-node searches and a wall-clock stop flag observed by a `nogil` search;
 - persistent per-game TT/history plus python-chess root validation and emergency fallback.
 
-The search is intentionally conservative. It does not yet contain LMR, null-move pruning, SEE,
+The search is intentionally conservative. It does not yet contain null-move pruning, main-search
 futility pruning, trained evaluation weights, an opening oracle, or pondering. Each belongs in an
 isolated challenger only after the baseline's correctness and strength are measured.
 
@@ -90,26 +94,30 @@ As of 4 September 2026:
 - strict mypy and Ruff clean;
 - warm perft approximately 3.7–4.7 million leaf nodes/second on the development machine.
 
-Fresh-process search warm-up measured approximately 21–34 seconds. On the deterministic scaling
-run, starting-position searches sustained roughly 145,000 total nodes/second: 50,000 nodes
-completed depth 6 in 0.34 seconds and one million nodes completed depth 7 in 6.85 seconds. These
-figures are machine-specific.
+Fresh-process search warm-up measured approximately 30–47 seconds. With SEE and conservative LMR,
+the deterministic starting-position scaling run completed depth 7 at 50,000 nodes, depth 8 at
+200,000 nodes, and depth 9 at one million nodes, at roughly 79,000 total nodes/second. The earlier
+unselective search reached depths 6, 6, and 7 at those budgets. SEE costs raw nodes/second, but the
+selectivity gains about two completed plies at the useful larger budgets. These figures are
+machine-specific.
 
-In the Round 4 `12...Rxc3` regression position, the challenger still selected `Rxc3` through depth
-5 at 200,000 nodes, but changed to `f5` after completing depth 6 at one million nodes. That removes
-the sacrifice only at an impractical current move budget and identifies qsearch selectivity and
-deeper tactical search as the next strength bottleneck; it is not counted as a solved regression.
+The Round 4 `12...Rxc3` regression remains unresolved. The selective search chose `Rxc3` at 10,000
+and 200,000 nodes, `b5` at 50,000, and `f5` after depth 8 at one million. This instability means
+the tactical regression is not counted as solved.
 
 The initial playing screens were deliberately small:
 
 - `+2 =0 -0` against starter minimax over one paired opening;
-- `+5 =1 -0` against the frozen Python champion over three paired openings at 2,000+50 ms;
-- `+0 =1 -1` against Stockfish at 500 nodes/move over one paired opening at the comparable
-  10,000+100 ms control.
+- before selectivity, `+5 =1 -0` against the frozen Python champion over three paired openings at
+  2,000+50 ms;
+- after SEE/LMR, `+2 =0 -0` against that champion over the first paired opening at the same control;
+- after SEE/LMR, `+0 =4 -2` against Stockfish at 500 nodes/move over the first three paired openings
+  at the comparable 10,000+100 ms control. The archived Python champion scored `+0 =1 -5` in those
+  exact six games.
 
-The champion result justifies continued development. The Stockfish result is not a promotion pass;
-the full previous-champion baseline was 31.7% over 30 games, and the compiled challenger needs a
-larger comparable-control confirmation after search-strength improvements.
+The exact-opening Stockfish comparison improved from 8.3% to 33.3%, but six games are far too few
+for promotion. The full previous-champion baseline was 31.7% over 30 games, so the selective build
+still needs a substantially larger comparable-control confirmation.
 
 Run the standard gate:
 
@@ -135,9 +143,8 @@ as search NPS.
 
 ## Next engineering boundary
 
-The next changes should improve selective depth one feature at a time. Because qsearch consumed
-roughly 74–90% of nodes in the measured positions, begin with exact SEE, bad-capture deferral, and
-conservative delta pruning. Then add LMR with full-depth verification and guarded main-search
-pruning. Every change must pass unit/perft/fuzz, deterministic positions, a paired champion screen,
-and external confirmation. The frozen root submission remains the active safety build until a much
-larger promotion match.
+The immediate next step is a larger paired match at the comparable control. If the gain survives,
+profile its losses to decide between evaluation work and one additional guarded pruning feature;
+do not stack speculative search changes. Every change must pass unit/perft/fuzz, deterministic
+positions, a paired champion screen, and external confirmation. The frozen root submission remains
+the active safety build until a much larger promotion match.
