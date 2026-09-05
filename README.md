@@ -62,7 +62,7 @@ evaluation worth searching with.
 agent.py             your submission
 baselines/           random, greedy, minimax, numba; each is a directory with an agent.py
 harness/runner.py    the process the platform runs your agent in
-harness/referee.py   the clock, legality, draw and adjudication rules
+harness/referee.py   the clock, legality, draw and cap rules
 harness/rules.py     the event constants the harness enforces
 harness/sandbox.py   the one process, spoken to as the platform speaks to a container
 harness/play.py      one game between two agent directories

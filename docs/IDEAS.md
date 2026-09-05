@@ -55,7 +55,8 @@ learn from. Whatever you train on, the model has to be one you trained.
 
 ## Time management
 
-120 seconds plus 0.5 per move. A flag is a loss, and it is the most common self-inflicted one.
+120 seconds plus 0.5 per move. A flag is a loss unless the other side cannot mate, and it is
+the most common self-inflicted one.
 
 - Budget per move from the clock you were handed, not from a constant. Something like
   `time_left_ms / max(20, expected_moves_left)` is enough to start.
