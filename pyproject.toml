@@ -46,4 +46,9 @@ files = [
     "tools/search_ablations.py",
     "tools/search_diagnostics.py",
     "tools/search_memory_replay.py",
+    "tools/evaluation_dataset.py",
+    "tools/evaluation_features.py",
+    "tools/fit_hce.py",
+    "tools/label_positions.py",
+    "tools/sample_evaluation_positions.py",
 ]

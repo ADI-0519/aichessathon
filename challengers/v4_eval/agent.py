@@ -1,4 +1,8 @@
-"""Safe public boundary for the isolated V4 lazy-ordering challenger."""
+"""Safe public boundary for the compiled Numba challenger.
+
+This file is runnable as an isolated harness candidate.  It is not part of the
+root submission until the challenger clears the champion promotion gates.
+"""
 
 from __future__ import annotations
 
@@ -9,7 +13,7 @@ import numpy as np
 
 try:
     from . import engine, search
-except ImportError:  # pragma: no cover - used when the directory is an agent root
+except ImportError:  # pragma: no cover - runner imports this as top-level agent
     import engine  # type: ignore[no-redef]
     import search  # type: ignore[no-redef]
 
@@ -113,7 +117,7 @@ def get_move(fen: str, time_left_ms: int) -> str:
     try:
         return _choose_move(fen, time_left_ms)
     except Exception as error:
-        print(f"lazy-order challenger failed, using fallback: {type(error).__name__}: {error}")
+        print(f"compiled challenger failed, using fallback: {type(error).__name__}: {error}")
         board = chess.Board(fen)
         try:
             move = next(iter(board.legal_moves))
