@@ -503,63 +503,6 @@ def _move_order_score(
 
 
 @njit(cache=False)
-def _prepare_move_scores(
-    pieces: NDArray[np.uint64],
-    state: NDArray[np.int64],
-    side: int,
-    moves: NDArray[np.int32],
-    count: int,
-    tt_move: int,
-    ply: int,
-    killers: NDArray[np.int32],
-    quiet_history: NDArray[np.int32],
-    scores: NDArray[np.int32],
-    see_gains: NDArray[np.int32],
-) -> None:
-    """Snapshot every ordering score before child searches mutate history."""
-    for index in range(count):
-        scores[index] = _move_order_score(
-            pieces,
-            state,
-            side,
-            int(moves[index]),
-            tt_move,
-            ply,
-            killers,
-            quiet_history,
-            see_gains,
-        )
-
-
-@njit(cache=False, inline="always")
-def _pick_next_move(
-    moves: NDArray[np.int32], scores: NDArray[np.int32], index: int, count: int
-) -> None:
-    """Move the stable highest-scoring suffix item into ``index``.
-
-    Extracting rather than swapping preserves the exact tie order produced by
-    the reference stable insertion sort.  Calling this immediately before a
-    move is searched avoids sorting the unused suffix after a beta cutoff.
-    """
-    best_index = index
-    best_score = int(scores[index])
-    for candidate in range(index + 1, count):
-        candidate_score = int(scores[candidate])
-        if candidate_score > best_score:
-            best_index = candidate
-            best_score = candidate_score
-    if best_index == index:
-        return
-
-    best_move = moves[best_index]
-    for candidate in range(best_index, index, -1):
-        moves[candidate] = moves[candidate - 1]
-        scores[candidate] = scores[candidate - 1]
-    moves[index] = best_move
-    scores[index] = np.int32(best_score)
-
-
-@njit(cache=False)
 def _order_moves(
     pieces: NDArray[np.uint64],
     state: NDArray[np.int64],
@@ -573,20 +516,18 @@ def _order_moves(
     scores: NDArray[np.int32],
     see_gains: NDArray[np.int32],
 ) -> None:
-    """Fully order moves for callers, such as quiescence, that need a filterable list."""
-    _prepare_move_scores(
-        pieces,
-        state,
-        side,
-        moves,
-        count,
-        tt_move,
-        ply,
-        killers,
-        quiet_history,
-        scores,
-        see_gains,
-    )
+    for index in range(count):
+        scores[index] = _move_order_score(
+            pieces,
+            state,
+            side,
+            int(moves[index]),
+            tt_move,
+            ply,
+            killers,
+            quiet_history,
+            see_gains,
+        )
     for index in range(1, count):
         move = moves[index]
         score = scores[index]
@@ -852,7 +793,7 @@ def _negamax(
                 stats[STAT_TT_CUTOFFS] += 1
                 return tt_score, False
 
-    _prepare_move_scores(
+    _order_moves(
         pieces,
         state,
         side,
@@ -868,7 +809,6 @@ def _negamax(
     best = -INFINITY
     best_move = 0
     for index in range(count):
-        _pick_next_move(legal_stack[ply], score_stack[ply], index, count)
         move = int(legal_stack[ply, index])
         flags = engine.move_flags(move)
         quiet = flags & (engine.FLAG_CAPTURE | engine.FLAG_PROMOTION) == 0
@@ -1082,7 +1022,7 @@ def _search_root(
     tt_move = preferred_move
     if tt_keys[tt_index] == key[0] and int(tt_data[tt_index, TT_MOVE]) != 0:
         tt_move = int(tt_data[tt_index, TT_MOVE])
-    _prepare_move_scores(
+    _order_moves(
         pieces,
         state,
         side,
@@ -1099,7 +1039,6 @@ def _search_root(
     best = -INFINITY
     best_move = preferred_move if preferred_move != 0 else int(legal_stack[0, 0])
     for index in range(count):
-        _pick_next_move(legal_stack[0], score_stack[0], index, count)
         move = int(legal_stack[0, index])
         engine.make_move(pieces, state, key, move, undo_stack[0], undo_key_stack[0])
         history[history_count] = key[0]

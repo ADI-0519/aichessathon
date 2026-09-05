@@ -1,0 +1,69 @@
+{
+  "feature_names": [
+    "pawn_balance",
+    "knight_balance",
+    "bishop_balance",
+    "rook_balance",
+    "queen_balance",
+    "bishop_pair_balance",
+    "mobility_balance",
+    "doubled_pawn_balance",
+    "isolated_pawn_balance",
+    "passed_pawn_balance",
+    "open_rook_file_balance",
+    "semiopen_rook_file_balance",
+    "king_shield_balance",
+    "center_control_balance",
+    "tempo"
+  ],
+  "integer_intercept": 34,
+  "integer_weights": [
+    3,
+    12,
+    5,
+    0,
+    0,
+    5,
+    1,
+    17,
+    19,
+    7,
+    0,
+    -1,
+    11,
+    1,
+    0
+  ],
+  "intercept": 33.90320716542899,
+  "labels_sha256": "c6b51f22e1672623be35529d658ef4bc0d6eef1b0789a5fac6b5e576bb290b49",
+  "metrics": {
+    "development": {
+      "bias_cp": 3.694822225952521e-15,
+      "count": 50,
+      "mae_cp": 22.767105932366743,
+      "rmse_cp": 28.974512021529737
+    }
+  },
+  "ridge": 1.0,
+  "schema_version": 1,
+  "status": "rejected-smoke-only",
+  "train_count": 50,
+  "train_split": "development",
+  "weights": [
+    2.6389027806891407,
+    12.1008448340039,
+    5.150113011562641,
+    0.0,
+    0.0,
+    5.150113011562614,
+    0.8555295223730675,
+    17.245777421633772,
+    19.24073162207746,
+    6.530284092962633,
+    0.0,
+    -1.3602332429278936,
+    11.157841301951029,
+    0.6638892803435499,
+    0.0
+  ]
+}

@@ -1,0 +1,32 @@
+{
+  "count": 50,
+  "engine": "C:\\Users\\adirj\\AppData\\Local\\Microsoft\\WinGet\\Packages\\Stockfish.Stockfish_Microsoft.Winget.Source_8wekyb3d8bbwe\\stockfish\\stockfish-windows-x86-64-avx2.exe",
+  "engine_sha256": "c86215fa1977d53b82ed854540a4c7b025be4cd042276c85ba3de53fb9118911",
+  "feature_names": [
+    "pawn_balance",
+    "knight_balance",
+    "bishop_balance",
+    "rook_balance",
+    "queen_balance",
+    "bishop_pair_balance",
+    "mobility_balance",
+    "doubled_pawn_balance",
+    "isolated_pawn_balance",
+    "passed_pawn_balance",
+    "open_rook_file_balance",
+    "semiopen_rook_file_balance",
+    "king_shield_balance",
+    "center_control_balance",
+    "tempo"
+  ],
+  "label_sha256": "c6b51f22e1672623be35529d658ef4bc0d6eef1b0789a5fac6b5e576bb290b49",
+  "labels": "C:\\Users\\adirj\\OneDrive\\Documents\\GitHub\\aichessathon\\benchmarks\\datasets\\v4_dev_50.jsonl",
+  "nodes": 500,
+  "schema_version": 1,
+  "status": "rejected-smoke-only",
+  "split_counts": {
+    "development": 50
+  },
+  "suite": "C:\\Users\\adirj\\OneDrive\\Documents\\GitHub\\aichessathon\\benchmarks\\suites\\openings_8moves_v3_500.epd",
+  "suite_sha256": "2fe0d104b2da3ee85ce1a1268b1545b1b4da046e8bcacedae0983d4e6cfb7835"
+}
