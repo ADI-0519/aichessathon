@@ -1216,18 +1216,11 @@ def search_position(
     best_score = 0
     completed_depth = 0
     stopped = False
-    previous_iteration_s = 0.0
     try:
         for depth in range(1, max_depth + 1):
-            elapsed = time.perf_counter() - started
-            if time_limit_s is not None:
-                remaining = time_limit_s - elapsed
-                if remaining <= 0 or (
-                    previous_iteration_s > 0 and previous_iteration_s * 1.8 >= remaining
-                ):
-                    stopped = True
-                    break
-            iteration_started = time.perf_counter()
+            if time_limit_s is not None and time.perf_counter() - started >= time_limit_s:
+                stopped = True
+                break
             window = 45
             alpha = -INFINITY if depth <= 2 else best_score - window
             beta = INFINITY if depth <= 2 else best_score + window
@@ -1299,7 +1292,6 @@ def search_position(
             best_move = move
             best_score = score
             completed_depth = depth
-            previous_iteration_s = time.perf_counter() - iteration_started
             if abs(score) >= MATE_BOUND:
                 break
     finally:
