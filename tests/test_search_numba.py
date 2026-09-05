@@ -76,6 +76,91 @@ class NumbaSearchTests(unittest.TestCase):
         )
         self.assertEqual(engine.move_to_uci(result.move), "a1a2")
 
+    def test_null_move_round_trip_matches_a_recomputed_key(self) -> None:
+        rng = random.Random(20260904)
+        board = chess.Board()
+        undo = np.empty(engine.UNDO_SIZE, dtype=np.int64)
+        undo_key = np.empty(1, dtype=np.uint64)
+        for _ in range(300):
+            if board.is_game_over(claim_draw=True):
+                board = chess.Board()
+            board.push(rng.choice(list(board.legal_moves)))
+            position = engine.position_from_board(board)
+            pieces = position.pieces.copy()
+            state = position.state.copy()
+            key = position.key.copy()
+            engine.make_null_move(
+                position.pieces, position.state, position.key, undo, undo_key
+            )
+            self.assertEqual(
+                position.key[0],
+                engine.recompute_zobrist(position.pieces, position.state),
+                board.fen(),
+            )
+            engine.unmake_null_move(position.state, position.key, undo, undo_key)
+            np.testing.assert_array_equal(position.pieces, pieces)
+            np.testing.assert_array_equal(position.state, state)
+            np.testing.assert_array_equal(position.key, key)
+
+    def test_null_move_needs_a_piece_to_risk(self) -> None:
+        pawns = engine.position_from_fen("8/5pk1/6p1/3p4/3P4/5KP1/5P2/8 w - - 0 1")
+        pieces = engine.position_from_fen(
+            "r2q1rk1/1Qp1bppp/2np4/p7/2BPn3/5N2/PP3PPP/R1B2RK1 b - - 0 12"
+        )
+        self.assertFalse(search._has_non_pawn_material(pawns.pieces, engine.WHITE))
+        self.assertTrue(search._has_non_pawn_material(pieces.pieces, engine.BLACK))
+
+    def test_null_move_is_not_tried_while_in_check(self) -> None:
+        # every other null-move condition holds, so only guard can agree these
+        board = chess.Board("4k3/8/8/8/7b/8/6P1/4K2R w K - 0 1")
+        self.assertTrue(board.is_check())
+        arms = []
+        for allow_null in (True, False):
+            position = engine.position_from_board(board)
+            memory = search.SearchMemory.create(12)
+            stats = np.zeros(search.STAT_COUNT, dtype=np.int64)
+            history = np.zeros(search.MAX_HISTORY, dtype=np.uint64)
+            history[0] = position.key[0]
+            score, aborted = search._negamax(
+                position.pieces,
+                position.state,
+                position.key,
+                4,
+                -5_000,
+                -4_999,
+                0,
+                allow_null,
+                history,
+                1,
+                1,
+                np.empty((search.MAX_PLY, engine.MAX_MOVES), dtype=np.int32),
+                np.empty((search.MAX_PLY, engine.MAX_MOVES), dtype=np.int32),
+                np.empty((search.MAX_PLY, engine.UNDO_SIZE), dtype=np.int64),
+                np.empty((search.MAX_PLY, 1), dtype=np.uint64),
+                np.empty((search.MAX_PLY, engine.MAX_MOVES), dtype=np.int32),
+                np.empty((search.MAX_PLY, search.SEE_MAX_EXCHANGES), dtype=np.int32),
+                np.zeros((search.MAX_PLY, 2), dtype=np.int32),
+                memory.quiet_history,
+                memory.tt_keys,
+                memory.tt_data,
+                1,
+                np.zeros(1, dtype=np.uint8),
+                0,
+                stats,
+            )
+            arms.append((score, aborted, int(stats[search.STAT_NODES])))
+        self.assertEqual(arms[0], arms[1])
+
+    def test_zugzwang_position_survives_null_move_pruning(self) -> None:
+        # black is lost only because it must move, which a cutoff would hide
+        board = chess.Board("1q1k4/2Rr4/8/2Q3K1/8/8/8/8 w - - 0 1")
+        result = search.search_position(
+            engine.position_from_board(board),
+            search.SearchMemory.create(16),
+            node_limit=400_000,
+        )
+        self.assertEqual(engine.move_to_uci(result.move), "g5h6")
+
     def test_fixed_node_search_is_deterministic(self) -> None:
         position = engine.position_from_board(chess.Board())
         first = search.search_position(
