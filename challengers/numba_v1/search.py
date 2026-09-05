@@ -705,6 +705,14 @@ def _quiescence(
     return best, False
 
 
+@njit(cache=False, inline="always")
+def _has_non_pawn_material(pieces: NDArray[np.uint64], side: int) -> bool:
+    occupied = np.uint64(0)
+    for kind in range(engine.KNIGHT, engine.QUEEN + 1):
+        occupied |= pieces[engine.piece_index(side, kind)]
+    return occupied != np.uint64(0)
+
+
 @njit(cache=False)
 def _negamax(
     pieces: NDArray[np.uint64],
@@ -714,6 +722,7 @@ def _negamax(
     alpha: int,
     beta: int,
     ply: int,
+    allow_null: bool,
     history: NDArray[np.uint64],
     history_count: int,
     root_history_count: int,
@@ -804,6 +813,53 @@ def _negamax(
                 stats[STAT_TT_CUTOFFS] += 1
                 return tt_score, False
 
+    # null-move pruning, R=2; the material test is the zugzwang guard
+    if (
+        allow_null
+        and depth >= 3
+        and not in_check
+        and beta - alpha == 1
+        and abs(beta) < MATE_BOUND
+        and _has_non_pawn_material(pieces, side)
+        and evaluate(pieces, state) >= beta
+    ):
+        engine.make_null_move(
+            pieces, state, key, undo_stack[ply], undo_key_stack[ply]
+        )
+        null_score, aborted = _negamax(
+            pieces,
+            state,
+            key,
+            depth - 3,
+            -beta,
+            -beta + 1,
+            ply + 1,
+            False,
+            history,
+            history_count,
+            root_history_count,
+            legal_stack,
+            pseudo_stack,
+            undo_stack,
+            undo_key_stack,
+            score_stack,
+            see_gain_stack,
+            killers,
+            quiet_history,
+            tt_keys,
+            tt_data,
+            generation,
+            stop,
+            node_limit,
+            stats,
+        )
+        engine.unmake_null_move(state, key, undo_stack[ply], undo_key_stack[ply])
+        if aborted:
+            return 0, True
+        if -null_score >= beta:
+            # mate found behind a free move isn't a mate we can claim
+            return beta if -null_score >= MATE_BOUND else -null_score, False
+
     _order_moves(
         pieces,
         state,
@@ -847,6 +903,7 @@ def _negamax(
                 -beta,
                 -alpha,
                 ply + 1,
+                True,
                 history,
                 history_count + 1,
                 root_history_count,
@@ -874,6 +931,7 @@ def _negamax(
                 -alpha - 1,
                 -alpha,
                 ply + 1,
+                True,
                 history,
                 history_count + 1,
                 root_history_count,
@@ -902,6 +960,7 @@ def _negamax(
                     -alpha - 1,
                     -alpha,
                     ply + 1,
+                    True,
                     history,
                     history_count + 1,
                     root_history_count,
@@ -929,6 +988,7 @@ def _negamax(
                     -beta,
                     -alpha,
                     ply + 1,
+                    True,
                     history,
                     history_count + 1,
                     root_history_count,
@@ -1063,6 +1123,7 @@ def _search_root(
                 -beta,
                 -alpha,
                 1,
+                True,
                 history,
                 history_count + 1,
                 root_history_count,
@@ -1090,6 +1151,7 @@ def _search_root(
                 -alpha - 1,
                 -alpha,
                 1,
+                True,
                 history,
                 history_count + 1,
                 root_history_count,
@@ -1117,6 +1179,7 @@ def _search_root(
                     -beta,
                     -alpha,
                     1,
+                    True,
                     history,
                     history_count + 1,
                     root_history_count,
