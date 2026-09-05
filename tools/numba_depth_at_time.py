@@ -54,7 +54,7 @@ def main() -> None:
         total_nodes = 0
         total_elapsed = 0.0
         print(f"\n--- {budget:g}s per move")
-        print(f"{'position':<16}{'depth':>6}{'nodes':>12}{'nps':>10}  move")
+        print(f"{'position':<16}{'depth':>6}{'nodes':>12}{'nps':>10}{'used':>7}  move")
         for name, fen in POSITIONS:
             result = search.search_position(
                 engine.position_from_board(chess.Board(fen)),
@@ -66,13 +66,16 @@ def main() -> None:
             total_elapsed += result.elapsed_s
             nps = result.nodes / result.elapsed_s if result.elapsed_s else 0.0
             print(
-                f"{name:<16}{result.depth:>6}{result.nodes:>12,}{nps:>10,.0f}  "
+                f"{name:<16}{result.depth:>6}{result.nodes:>12,}{nps:>10,.0f}"
+                f"{result.elapsed_s / budget:>6.0%}  "
                 f"{engine.move_to_uci(result.move)}"
             )
         overall = total_nodes / total_elapsed if total_elapsed else 0.0
         print(
             f"mean depth {statistics.mean(depths):.2f}, total depth {sum(depths)}, "
-            f"{overall:,.0f} nodes/s over {len(POSITIONS)} positions"
+            f"{overall:,.0f} nodes/s, "
+            f"{total_elapsed / (budget * len(POSITIONS)):.0%} of budget used "
+            f"over {len(POSITIONS)} positions"
         )
 
 
