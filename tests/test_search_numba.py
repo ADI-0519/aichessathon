@@ -106,6 +106,43 @@ class NumbaSearchTests(unittest.TestCase):
         self.assertGreaterEqual(result.depth, 1)
         self.assertLess(result.elapsed_s, 0.30)
 
+    def test_timed_search_spends_the_whole_budget(self) -> None:
+        position = engine.position_from_fen(
+            "r1bqkb1r/pp2pppp/2np1n2/8/3NP3/2N5/PPP2PPP/R1BQKB1R w KQkq - 0 6"
+        )
+        budget = 0.4
+        result = search.search_position(
+            position, search.SearchMemory.create(14), time_limit_s=budget
+        )
+        self.assertTrue(result.stopped)
+        self.assertGreater(result.elapsed_s, budget * 0.9)
+
+    def test_abort_before_any_root_move_completes_keeps_the_first_legal_move(self) -> None:
+        position = engine.position_from_board(chess.Board())
+        result = search.search_position(
+            position,
+            search.SearchMemory.create(12),
+            node_limit=1,
+            max_depth=search.MAX_DEPTH,
+        )
+        self.assertTrue(result.stopped)
+        self.assertEqual(result.depth, 0)
+        self.assertEqual(result.move, int(engine.legal_moves(position)[0]))
+
+    def test_interrupted_iterations_return_a_legal_root_move(self) -> None:
+        board = chess.Board("r2q1rk1/1Qp1bppp/2np4/p7/2BPn3/5N2/PP3PPP/R1B2RK1 b - - 0 12")
+        position = engine.position_from_board(board)
+        # node limits chosen to land inside iteration rather than between two
+        for node_limit in (2, 37, 419, 3_001, 24_007):
+            result = search.search_position(
+                position,
+                search.SearchMemory.create(14),
+                node_limit=node_limit,
+                max_depth=search.MAX_DEPTH,
+            )
+            move = chess.Move.from_uci(engine.move_to_uci(result.move))
+            self.assertIn(move, board.legal_moves, f"node_limit {node_limit}")
+
     def test_search_never_mutates_caller_position(self) -> None:
         position = engine.position_from_fen(
             "r3k2r/p1ppqpb1/bn2pnp1/2pP4/1p2P3/2N2N2/PPQ1BPPP/R3K2R w KQkq - 0 1"
