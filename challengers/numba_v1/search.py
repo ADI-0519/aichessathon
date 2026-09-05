@@ -1012,9 +1012,9 @@ def _search_root(
     stop: NDArray[np.uint8],
     node_limit: int,
     stats: NDArray[np.int64],
-) -> tuple[int, int, bool]:
+) -> tuple[int, int, bool, int]:
     if _visit_node(stats, stop, node_limit, False):
-        return 0, preferred_move, True
+        return 0, preferred_move, True, 0
     side = int(state[engine.STATE_SIDE])
     count = engine.generate_legal_moves(
         pieces,
@@ -1027,7 +1027,7 @@ def _search_root(
     )
     if count == 0:
         score = -MATE_SCORE if engine.is_in_check(pieces, side) else 0
-        return score, 0, False
+        return score, 0, False, 0
 
     tt_index = int(key[0] & np.uint64(len(tt_keys) - 1))
     tt_move = preferred_move
@@ -1049,6 +1049,7 @@ def _search_root(
 
     best = -INFINITY
     best_move = preferred_move if preferred_move != 0 else int(legal_stack[0, 0])
+    improved_move = 0
     for index in range(count):
         move = int(legal_stack[0, index])
         engine.make_move(pieces, state, key, move, undo_stack[0], undo_key_stack[0])
@@ -1136,16 +1137,19 @@ def _search_root(
                 )
         engine.unmake_move(pieces, state, key, move, undo_stack[0], undo_key_stack[0])
         if aborted:
-            return 0, best_move, True
+            return 0, best_move, True, improved_move
         score = -child_score
         if score > best:
             best = score
             best_move = move
         if score > alpha:
             alpha = score
+            # only a raised alpha has full-window score behind it
+            if index > 0:
+                improved_move = move
         if alpha >= beta:
             break
-    return best, best_move, False
+    return best, best_move, False, 0
 
 
 def _history_buffer(
@@ -1173,7 +1177,6 @@ def search_position(
     max_depth: int = MAX_DEPTH,
     prior_history: NDArray[np.uint64] | None = None,
 ) -> SearchResult:
-    """Return the last fully completed iterative-deepening result."""
     if time_limit_s is None and node_limit <= 0:
         raise ValueError("a positive time or node limit is required")
     if time_limit_s is not None and time_limit_s <= 0:
@@ -1228,7 +1231,7 @@ def search_position(
             window = 45
             alpha = -INFINITY if depth <= 2 else best_score - window
             beta = INFINITY if depth <= 2 else best_score + window
-            score, move, aborted = _search_root(
+            score, move, aborted, carried = _search_root(
                 working.pieces,
                 working.state,
                 working.key,
@@ -1255,10 +1258,12 @@ def search_position(
                 stats,
             )
             if aborted:
+                if carried != 0:
+                    best_move = carried
                 stopped = True
                 break
             if score <= alpha or score >= beta:
-                score, move, aborted = _search_root(
+                score, move, aborted, improved = _search_root(
                     working.pieces,
                     working.state,
                     working.key,
@@ -1284,7 +1289,11 @@ def search_position(
                     node_limit,
                     stats,
                 )
+                if improved != 0:
+                    carried = improved
                 if aborted:
+                    if carried != 0:
+                        best_move = carried
                     stopped = True
                     break
             best_move = move
