@@ -863,6 +863,34 @@ def unmake_move(
     key[0] = undo_key[0]
 
 
+@njit(cache=False)
+def make_null_move(
+    pieces: NDArray[np.uint64],
+    state: NDArray[np.int64],
+    key: NDArray[np.uint64],
+    undo: NDArray[np.int64],
+    undo_key: NDArray[np.uint64],
+) -> None:
+    undo_key[0] = key[0]
+    undo[UNDO_EP_SQUARE] = state[STATE_EP_SQUARE]
+    # ep component must come out while square and pawns are in agreement
+    key[0] = key[0] ^ _ep_hash_component(pieces, state) ^ ZOBRIST_SIDE
+    state[STATE_EP_SQUARE] = -1
+    state[STATE_SIDE] = BLACK if int(state[STATE_SIDE]) == WHITE else WHITE
+
+
+@njit(cache=False)
+def unmake_null_move(
+    state: NDArray[np.int64],
+    key: NDArray[np.uint64],
+    undo: NDArray[np.int64],
+    undo_key: NDArray[np.uint64],
+) -> None:
+    state[STATE_SIDE] = BLACK if int(state[STATE_SIDE]) == WHITE else WHITE
+    state[STATE_EP_SQUARE] = undo[UNDO_EP_SQUARE]
+    key[0] = undo_key[0]
+
+
 @njit(cache=False, inline="always")
 def _king_legality_context(
     pieces: NDArray[np.uint64], state: NDArray[np.int64]
@@ -1145,3 +1173,7 @@ def warmup() -> None:
     legal_moves(position)
     legal_captures(position)
     perft(position, 1)
+    undo = np.empty(UNDO_SIZE, dtype=np.int64)
+    undo_key = np.empty(1, dtype=np.uint64)
+    make_null_move(position.pieces, position.state, position.key, undo, undo_key)
+    unmake_null_move(position.state, position.key, undo, undo_key)
