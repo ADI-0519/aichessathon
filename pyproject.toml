@@ -43,4 +43,7 @@ files = [
     "tools/backtest.py",
     "tools/backtest_core.py",
     "tools/cli.py",
+    "tools/search_ablations.py",
+    "tools/search_diagnostics.py",
+    "tools/search_memory_replay.py",
 ]

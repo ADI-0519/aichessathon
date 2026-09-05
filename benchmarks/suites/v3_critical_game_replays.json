@@ -1,0 +1,45 @@
+{
+  "schema_version": 1,
+  "description": "Rated-game move histories used to reconstruct V3 TT/history state before critical decisions.",
+  "games": [
+    {
+      "id": "corundum-ai",
+      "initial_fen": "r1bqk2r/pp2ppbp/2np1np1/2p5/4P2P/2NP2P1/PPP2PB1/R1BQK1NR w KQkq - 1 7",
+      "engine_color": "white",
+      "targets": [
+        {"case_id": "corundum-20-bxf4", "fullmove": 20},
+        {"case_id": "corundum-39-be1", "fullmove": 39},
+        {"case_id": "corundum-43-kg1", "fullmove": 43}
+      ],
+      "moves": [
+        "g1e2", "e8g8", "e1g1", "c8g4", "f2f3", "g4e6", "g3g4", "c6d4",
+        "e2d4", "c5d4", "c3e2", "d8b6", "e2f4", "a8c8", "f4e6", "f7e6",
+        "b2b3", "e6e5", "g4g5", "f6h5", "g2h3", "c8d8", "h3e6", "g8h8",
+        "c1d2", "h5f4", "e6g4", "b6c5", "b3b4", "c5c7", "a2a4", "h8g8",
+        "a1a3", "c7c6", "b4b5", "c6c5", "a3b3", "f8f7", "d2a5", "b7b6",
+        "a5b4", "c5c7", "b3a3", "e7e6", "c2c3", "d8e8", "f1f2", "e8f8",
+        "f2c2", "f8c8", "a3a2", "d4c3", "a2a3", "c7e7", "a3c3", "c8c3",
+        "c2c3", "h7h5", "g5h6", "g7h6", "c3c6", "e7h4", "c6c8", "f7f8",
+        "d1c2", "h4g3", "g1f1", "f8c8", "c2c8", "g8h7", "c8c2", "g3h4",
+        "c2c7"
+      ]
+    },
+    {
+      "id": "negamaximus",
+      "initial_fen": "r1bq1rk1/2p1bppp/p2p1n2/np2p3/4P3/P2P1N2/BPP2PPP/RNBQR1K1 b - - 2 10",
+      "engine_color": "black",
+      "targets": [
+        {"case_id": "negamaximus-37-rxb2", "fullmove": 37}
+      ],
+      "moves": [
+        "c7c5", "b1c3", "d8c7", "a3a4", "b5b4", "c3d5", "f6d5", "a2d5",
+        "c8b7", "d5b7", "c7b7", "c1e3", "f7f5", "e4f5", "f8f5", "c2c3",
+        "h7h5", "c3b4", "c5b4", "a1c1", "a8c8", "c1c8", "b7c8", "e3d2",
+        "c8b8", "f3d4", "e5d4", "e1e7", "a5c6", "d1b3", "g8h8", "e7e1",
+        "a6a5", "b3e6", "f5e5", "e6g6", "c6e7", "g6f7", "b8g8", "f7f4",
+        "e7c6", "e1c1", "g8e8", "f4f3", "e5e2", "f3c6", "e8c6", "c1c6",
+        "e2d2", "g2g3", "d2d3", "c6d6", "d3d2", "d6d5", "g7g6"
+      ]
+    }
+  ]
+}

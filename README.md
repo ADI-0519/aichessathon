@@ -43,6 +43,14 @@ For reproducible paired experiments, resumable reports, source fingerprints, the
 500-position opening suite, and protected dataset splits, use the
 [Backtest Suite V2](docs/BACKTESTING.md).
 
+For fixed-node choice traces, independently scored root moves, legal PVs, and the rated-game
+critical-position suite, use the [search diagnostics](docs/SEARCH_DIAGNOSTICS.md).
+The first controlled search-profile results are recorded in the
+[V4 search ablation report](docs/V4_SEARCH_ABLATIONS.md).
+
+The current architecture decision, research synthesis, experiment gates, and dated build schedule
+are in the [Post-Day-1 competitive engine plan](docs/POST_DAY1_DEEP_RESEARCH.md).
+
 ## The ladder
 
 Measured with `harness/arena.py`. Beating greedy is a search. Beating minimax is a search plus an
@@ -75,6 +83,9 @@ harness/sandbox.py   the one process, spoken to as the platform speaks to a cont
 harness/play.py      one game between two agent directories
 harness/arena.py     many games, with a score
 harness/package.py   builds submission.zip with agent.py at the root
+tools/search_diagnostics.py  fixed-node, root-score, and PV investigation
+tools/search_ablations.py    isolated V4 search-profile comparison
+tools/search_memory_replay.py  rated-game TT/history reconstruction
 docs/IDEAS.md        where the strength actually comes from
 ```
 
