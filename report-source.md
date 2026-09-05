@@ -1,7 +1,8 @@
 # Internal research source: AI Chessathon competitive engine
 
-Status: synthesis source for `docs/HYPERCOMPETITIVE_ROADMAP.md`. This is an internal
-research ledger, not the user-facing deliverable. Facts were rechecked on 2026-09-04.
+Status: canonical internal research ledger for `docs/HYPERCOMPETITIVE_ROADMAP.md` and
+`docs/POST_DAY1_DEEP_RESEARCH.md`. This is not the user-facing deliverable. Competition facts were
+rechecked against the live documentation on 2026-09-05.
 
 ## Decision
 
@@ -26,8 +27,9 @@ Primary source: https://aichessathon.com/docs
 - Runtime: Python 3.12; torch 2.13 CPU, numpy 2.5.2, python-chess 1.11.2,
   onnxruntime 1.29 and numba 0.67; no install step or network; one CPU core; 2 GB RAM;
   read-only filesystem except 256 MB `/tmp`.
-- Lifecycle: 90 seconds to import; one process per game; module state survives; the process retains
-  its core after a move and pondering is allowed.
+- Lifecycle: 90 seconds to import; one process per game; module state survives. The live docs now
+  say the process is suspended while the opponent moves, so pondering is no longer useful. This
+  differs from the 2026-09-04 copy and is a material rules change.
 - Clock: 120 seconds plus 0.5 seconds per move; an illegal output, exception, OOM, init timeout or
   flag is a loss. Games stop at 300 plies and are adjudicated by material.
 - Openings: curated positions close to level; public games show ordinary named openings several
@@ -128,7 +130,7 @@ https://official-stockfish.github.io/docs/fishtest-wiki/Fishtest-FAQ.html,
 https://official-stockfish.github.io/docs/fishtest-wiki/Fishtest-Mathematics.html and
 https://official-stockfish.github.io/docs/stockfish-wiki/Regression-Tests.html
 
-## Local evidence
+## Local evidence (historical V2 snapshot)
 
 The current 517-line agent is a useful safe champion: iterative deepening PVS, aspiration, LMR,
 TT, qsearch, tapered hand evaluation, time reserve and an exception-safe legal fallback. Previous
@@ -152,24 +154,22 @@ https://numba.readthedocs.io/en/stable/user/jit.html
 
 | Question | Current evidence | Confidence | Required experiment |
 |---|---|---:|---|
-| Does a general book hit curated starts? | Public games show common named openings at roughly ply 11-16; books allowed. | Medium | Replay every public FEN against candidate book and report coverage, without targeting hidden data. |
-| Will Numba beat the Python champion? | Architecture proof and local Python profile. | High on speed, unknown on Elo | Perft first, then fixed-node tactical and paired game benchmarks. |
-| Is NNUE better than tuned HCE here? | Strong external architecture, no team-trained net yet. | Low | Train both, compare NPS and paired Elo on the same compiled core. |
-| Does pondering add useful depth? | Explicitly allowed; state persists. | Medium | Measure ponder-hit rate, extra completed depth and clock safety over 1,000 games. |
-| Which pruning margins win? | Strong-engine precedents only. | Low | One-parameter/one-patch paired SPRT; include zugzwang tests for null-move changes. |
-| Are small tablebases worth package space? | Mechanically supported, likely rare. | Low | Measure occurrence and conversion failures in representative games before allocation. |
+| Does a general book hit curated starts? | Books are allowed; exact hidden start distribution remains unknown. | Medium | Measure exact-position coverage on development and validation suites, then book-on/book-off paired games. |
+| Did the Numba architecture work? | Resolved: V3 is a legal, tested custom Numba bitboard/PVS engine and decisively beat V2 in the initial official-clock check. | High | Continue measuring absolute strength and regressions; do not reopen the architecture decision. |
+| Is NNUE better than tuned HCE here? | Strong external architecture, no team-trained net yet. | Low | Build the shared data pipeline, train both, then compare end-to-end equal-time games on the same core. |
+| Can pondering add useful depth? | Resolved negatively: the 2026-09-05 live docs say the process is suspended during the opponent's move. | High | None unless the canonical contract changes again. |
+| Which pruning margins win? | Strong-engine precedents only. | Low | One-idea paired tests; include zugzwang tests for null-move changes. |
+| Are small tablebases worth package space? | Full five-piece WDL+DTZ is 939 MB and cannot fit; smaller coverage is likely rare. | Low | Defer unless final-game evidence shows repeated conversion failures at four pieces. |
 
 ## Recommended order
 
-1. Upload/freeze safe champion; archive hash and validation log.
-2. Create the real test lab and benchmark against Loki/Rustic/Zagreus-class local opponents.
-3. Add broad book coverage and low-risk persistence/time improvements to the champion only if they
-   pass reliability and paired strength gates.
-4. Build a fully jitted bitboard core behind python-chess root validation.
-5. Add search features one at a time.
-6. Tune a compact classical evaluation from data.
-7. Train and test a small NNUE; ship only if net Elo after its NPS cost is positive.
-8. Add pondering; consider tiny tablebases last.
+1. Keep V3 and its archive hash as the immutable control and rollback submission.
+2. Complete independent SF500/SF2000 anchors and classify PGN losses by subsystem.
+3. Build the provenance-tracked evaluation dataset and reference feature extractor.
+4. Produce V4 by tuning a compact classical evaluator; test a broad book separately.
+5. Produce V5 with one search/order patch at a time, retesting any retained union.
+6. Give a small team-trained NNUE a hard 9 September go/no-go gate.
+7. Freeze the strongest validated build on 10 September; do not pursue pondering or full tablebases.
 
 ## 2026-09-04 live-game and recovery addendum
 
@@ -218,3 +218,53 @@ from 15 positions, with no technical failures. This is the new uphill benchmark.
 included in the submission; current Chessathon
 rules permit engine-labelled offline work but prohibit third-party engines, published chess nets,
 or runtime databases of engine answers in the submitted artifact.
+
+## 2026-09-05 post-Day-1 research addendum
+
+Current V3 source audit:
+
+- Team-written Numba bitboards, legal make/unmake, incremental Zobrist, repetition/50-move logic.
+- Iterative-deepening PVS, aspirations, TT, qsearch, SEE, delta pruning, killers, quiet history and
+  conservative one-ply LMR.
+- Static evaluation remains procedural: material/PST, tapering, bishop pair, basic isolated/
+  doubled/passed pawns, rook file terms, simple king shield and tempo.
+- Missing high-value evaluation interactions include mobility, king-ring pressure, threats, richer
+  pawn relations, outposts/space/development and endgame scaling.
+- Missing selective search mechanisms include countermove/history maluses, reverse futility,
+  guarded null move, shallow futility/LMP and extensions. These are candidates, not assumed gains.
+
+Primary evidence ledger:
+
+- Live competition contract and rule changes: https://aichessathon.com/docs
+- Stockfish search architecture: https://github.com/official-stockfish/Stockfish/blob/master/src/search.cpp
+- Stockfish test discipline: https://official-stockfish.github.io/docs/fishtest-wiki/Creating-my-first-test.html
+- Stockfish NNUE integration: https://stockfishchess.org/blog/2020/introducing-nnue-evaluation/
+- NNUE accumulation, training loss and quantisation:
+  https://github.com/official-stockfish/nnue-pytorch/blob/master/docs/nnue.md
+- AlphaZero paper: https://arxiv.org/abs/1712.01815
+- Lc0 PUCT and network topology: https://lczero.org/dev/lc0/search/alphazero/ and
+  https://lczero.org/dev/old/nn/
+- Maia objective: https://arxiv.org/abs/2006.01855
+- Deep Blue system factors: https://research.ibm.com/publications/deep-blue
+- Sunfish compact Python architecture: https://github.com/thomasahle/sunfish
+- Independent engine development paths: https://github.com/cosmobobak/viridithas,
+  https://github.com/connormcmonigle/seer-nnue and https://github.com/AndyGrant/Ethereal
+- Training data provenance: https://database.lichess.org/
+- NNUE data workflow reference: https://github.com/jw1912/bullet/blob/main/docs/3-data.md
+- Opening test suites: https://github.com/official-stockfish/books
+- Tablebase size/capability: https://github.com/syzygy1/tb
+
+Second-wave gap resolution:
+
+- AlphaZero/Lc0 is rejected for this event because deployment is CPU-only and the remaining work
+  includes both policy/value training and a new search regime. This is an engineering inference
+  from the architecture and constraints, not a claim that MCTS is inherently weaker.
+- Maia is rejected because its published target is human move prediction by rating, not optimal
+  move selection.
+- NNUE remains conditional. Official material confirms CPU suitability but also confirms the need
+  for incremental accumulators, quantisation and special king-move refresh logic. The deadline risk
+  is implementation correctness, not model-file size alone.
+- A tuned HCE is the primary V4 route because its data pipeline transfers to NNUE, its inference is
+  cheap, and every coefficient remains explainable for the finalist walkthrough.
+- Pondering is removed because the live lifecycle now suspends the agent process between calls.
+- Full five-piece Syzygy is ruled out by size: 378 MB WDL plus 561 MB DTZ versus 50 MB total.
