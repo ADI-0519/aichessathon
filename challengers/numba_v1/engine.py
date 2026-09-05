@@ -916,7 +916,7 @@ def _needs_legality_test(
         return True
     if move_flags(move) & FLAG_EN_PASSANT:
         return True
-    return king_rays & bit(from_square) != np.uint64(0)
+    return bool(king_rays & bit(from_square) != np.uint64(0))
 
 
 @njit(cache=False)

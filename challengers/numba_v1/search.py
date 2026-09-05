@@ -710,7 +710,7 @@ def _has_non_pawn_material(pieces: NDArray[np.uint64], side: int) -> bool:
     occupied = np.uint64(0)
     for kind in range(engine.KNIGHT, engine.QUEEN + 1):
         occupied |= pieces[engine.piece_index(side, kind)]
-    return occupied != np.uint64(0)
+    return bool(occupied != np.uint64(0))
 
 
 @njit(cache=False)
