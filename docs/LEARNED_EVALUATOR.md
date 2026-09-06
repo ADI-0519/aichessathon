@@ -126,3 +126,67 @@ handcrafted evaluation more control in the positions least represented by the ne
 
 This is only a hypothesis until it passes the critical-position probes and paired games. It must
 not replace the fixed V5 candidate during its held-out validation run.
+
+## Held-out V5 result
+
+The selected V5-50 artifact completed its 20-pair validation match against exact V4 with 30 wins,
+5 draws, 5 losses, and no technical failures: 81.25% score and an estimated +255 Elo. The paired
+95% score interval was 59.8% to 92.7%, so the result is positive despite the modest sample.
+
+The five losses did not expose one common crash or illegal-search defect. Fixed-node Stockfish
+review found separate errors involving central tension, rook placement, king activity, and passed
+pawn control. Their first major swings now live in `benchmarks/suites/v5_validation_losses.json`.
+Because those positions have been inspected, they are diagnostic regressions and must never be
+presented as untouched validation evidence again.
+
+At 50,000 nodes, the phase taper fixed the `Kh7` ladder case and retained two other reference
+moves, but failed to repair the queen-conversion sequence and made two choices worse. It remains
+an isolated arena experiment rather than a justified replacement for V5-50.
+
+## Strategic residual pilot
+
+A reproducible 20,000-position pilot was labelled from the balanced Lichess suite with Stockfish
+at 10,000 nodes per position. The completed manifest records 11,995 development, 3,941 validation,
+and 4,064 untouched holdout positions; 997 mate scores were excluded from fitting. The holdout has
+not been inspected. The fitted 24-channel tapered linear correction selected ridge 100 and reduced
+validation residual RMSE from 236.3 to 209.6 cp (11.3%) and MAE from 165.9 to 152.0 cp (8.4%)
+against the handcrafted evaluator. Integer rounding was effectively lossless.
+
+That offline improvement is promising but is not a promotion result. Recomputing the target
+against the actual V5-50 blended static score showed an even larger gap before correction (267.6
+cp RMSE), and a refitted full feature set reduced it to 204.1 cp. This also shows why a correction
+must be fitted against V5 directly rather than blindly added to the earlier V4 target: the NNUE and
+the strategic features are not independent.
+
+The feature cost matters. On the V4 target, an intercept-only model reached 232.2 cp validation
+RMSE, hanging-piece channels reached 226.3, the twelve cheaper tactical/activity channels reached
+219.5, all non-mobility channels reached 213.5, and the full set reached 209.6. Mobility therefore
+adds measurable information, but only a timed throughput measurement can say whether it earns its
+leaf cost.
+
+The fit does not directly cure the known failures. At one ply it favoured the reference only for
+`dxc4`, was neutral on `Ra5`, and favoured the played error in the other three validation cases.
+At 200,000 search nodes, unmodified V5 found `Kg8`, `Ra5`, and `dxc4`, but still missed `h6` and
+`Rac1`. The next learned-evaluation experiment must therefore be a separate V5-residual challenger
+with exact Python/Numba feature parity and a measured nodes-per-second gate. It must not replace V5
+unless it wins timed development pairs; the two unresolved positions remain diagnostic cases, not
+training or validation evidence.
+
+## Search challenger results
+
+The isolated V6 countermove/history-maluses challenger completed 20 development pairs against V5
+at 10 seconds plus 100 ms. It scored 12 wins, 8 draws, and 20 losses (40.0%, approximately -70
+Elo) with no technical failures. Its pentanomial result was four lost pairs, three 0.5-point pairs,
+ten split pairs, three 1.5-point pairs, and no won pairs. The paired interval is too wide to prove
+the heuristic is universally harmful, but this candidate has no promotion evidence and is
+rejected in its current form.
+
+The first phase-taper arena attempt did not produce chess evidence: its first game was lost during
+initialization on a slow Colab CPU. The same machine took about 88 seconds to initialize ordinary
+V5, leaving almost no margin under the 90-second contract. The phase challenger no longer invokes
+the development-only engine warm-up, which redundantly compiled public perft and convenience
+wrappers before compiling the real root search. On the development machine, the revised import
+completed in 35.0 seconds and the first move incurred no deferred compilation. NNUE parity over
+506 positions, focused unit tests, lint, and configured strict type checking all still pass. The
+phase hypothesis therefore needs a fresh timed match; the initialization failure is not a loss to
+V5 and must not be included in its chess score.

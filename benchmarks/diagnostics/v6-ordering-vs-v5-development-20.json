@@ -1,0 +1,52 @@
+{
+  "schema_version": 1,
+  "experiment": "v6-ordering-vs-v5-development-20",
+  "decision": "reject",
+  "reason": "The isolated countermove/history-maluses challenger scored below V5 with no won pairs.",
+  "source": {
+    "archive": "v6-ordering-vs-v5-development-20-20260906T204924Z-1-001.zip",
+    "archive_sha256": "09f8b6402d900a572ed2d13f32aa5b2880303a17f1327eda8d17e03110ea06e0",
+    "complete_local_run": "benchmarks/runs/v6-ordering-vs-v5-development-20"
+  },
+  "configuration": {
+    "git_commit": "cc588c0af9af3c8a4a36bb606337ed38e5e07c65",
+    "candidate": {
+      "path": "challengers/v6_ordering",
+      "sha256": "43556fc78c17c06c575cc8e61118448081e1068e56e150193e0a75eb60cd57b6"
+    },
+    "opponent": {
+      "path": "challengers/v5_nnue",
+      "sha256": "00c6566d59ff9b55cbfd5b0ff36a1e432b10aa2e4d593075c64747dbbcde617a"
+    },
+    "suite_sha256": "2716e72baad04e73eacdd0c09c8b660fc726a416f2d396dbeb7bfdb57abd3f58",
+    "split": "development",
+    "offset": 0,
+    "pairs": 20,
+    "base_ms": 10000,
+    "increment_ms": 100
+  },
+  "result": {
+    "wins": 12,
+    "draws": 8,
+    "losses": 20,
+    "score": 0.4,
+    "elo": -70.43650362227247,
+    "candidate_failures": 0,
+    "opponent_failures": 0,
+    "pentanomial": {
+      "0.0": 4,
+      "0.5": 3,
+      "1.0": 10,
+      "1.5": 3,
+      "2.0": 0
+    },
+    "paired_95_percent_score_interval": [
+      0.21880396741419272,
+      0.613422057684794
+    ],
+    "paired_95_percent_elo_interval": [
+      -221.0819346059735,
+      80.20892736142855
+    ]
+  }
+}

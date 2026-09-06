@@ -329,6 +329,14 @@ def analyze_root_moves(
         stats = np.zeros(search_module.STAT_COUNT, dtype=np.int64)
         memory = search_module.SearchMemory.create(tt_bits)
         generation = memory.next_generation()
+        negamax_function = getattr(
+            search_module._negamax, "py_func", search_module._negamax
+        )
+        negamax_parameters = inspect.signature(negamax_function).parameters
+        move_stack = None
+        if "move_stack" in negamax_parameters:
+            move_stack = np.zeros(search_module.MAX_PLY, dtype=np.int32)
+            move_stack[0] = np.int32(root_move)
 
         if accumulator_stack is not None:
             search_module.nnue.update_for_move(
@@ -373,8 +381,7 @@ def analyze_root_moves(
                 1,
             ]
         )
-        negamax_function = getattr(search_module._negamax, "py_func", search_module._negamax)
-        if "allow_null" in inspect.signature(negamax_function).parameters:
+        if "allow_null" in negamax_parameters:
             negamax_arguments.append(True)
         negamax_arguments.extend(
             [
@@ -389,12 +396,20 @@ def analyze_root_moves(
         )
         if accumulator_stack is not None:
             negamax_arguments.append(accumulator_stack)
+        if move_stack is not None:
+            negamax_arguments.append(move_stack)
         negamax_arguments.extend(
             [
                 score_stack,
                 see_gain_stack,
                 killers,
                 memory.quiet_history,
+            ]
+        )
+        if "countermoves" in negamax_parameters:
+            negamax_arguments.append(memory.countermoves)
+        negamax_arguments.extend(
+            [
                 memory.tt_keys,
                 memory.tt_data,
                 generation,
