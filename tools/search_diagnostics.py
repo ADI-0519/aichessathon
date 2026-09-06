@@ -258,6 +258,17 @@ def _principal_variation(
     return tuple(variation)
 
 
+def _negamax_parameters(search_module: ModuleType) -> tuple[str, ...]:
+    """Parameter names of a module's _negamax, jitted or not.
+
+    v4 inserted an explicit no-double-null flag after ply; v3 has no such
+    parameter. This tool is pointed at both, so it adapts rather than assuming.
+    """
+    target = getattr(search_module._negamax, "py_func", search_module._negamax)
+    code = target.__code__
+    return code.co_varnames[: code.co_argcount]
+
+
 def analyze_root_moves(
     engine_module: Any,
     search_module: Any,
@@ -332,6 +343,12 @@ def analyze_root_moves(
                 -search_module.INFINITY,
                 search_module.INFINITY,
                 1,
+            ]
+        )
+        if "allow_null" in _negamax_parameters(search_module):
+            negamax_arguments.append(True)
+        negamax_arguments.extend(
+            [
                 history,
                 history_count + 1,
                 root_history_count,

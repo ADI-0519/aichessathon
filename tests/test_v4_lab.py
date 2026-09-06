@@ -4,8 +4,8 @@ import unittest
 
 import chess
 
-from challengers.numba_v1 import engine as v3_engine
-from challengers.numba_v1 import search as v3_search
+from challengers.v3_frozen import engine as v3_engine
+from challengers.v3_frozen import search as v3_search
 from challengers.v4_lab import engine, search
 
 
