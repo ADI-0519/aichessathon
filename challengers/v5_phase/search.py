@@ -1473,7 +1473,12 @@ def search_position(
 
 def warmup() -> None:
     """Compile all board, evaluation, and search signatures before the clock."""
-    engine.warmup()
+    # Compiling the real root search also compiles its move generation, make/
+    # unmake, null-move, quiescence, NNUE, and evaluation callees.  Calling
+    # engine.warmup() here additionally compiles public perft and convenience
+    # wrappers that the submitted agent never invokes.  That redundant work is
+    # harmless on a fast workstation but can consume the 90-second init margin
+    # on slower validation machines.
     memory = SearchMemory.create(10)
     position = engine.position_from_board(chess.Board())
     search_position(position, memory, node_limit=256, max_depth=2)

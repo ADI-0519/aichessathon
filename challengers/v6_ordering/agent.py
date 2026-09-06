@@ -16,11 +16,11 @@ for _variable in (
 ):
     os.environ[_variable] = "1"
 
-import chess
-import numpy as np
+import chess  # noqa: E402 - thread limits must precede native-library imports
+import numpy as np  # noqa: E402
 
-import engine
-import search
+import engine  # noqa: E402
+import search  # noqa: E402
 
 _memory = search.SearchMemory.create()
 _game_board: chess.Board | None = None
