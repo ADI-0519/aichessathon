@@ -88,6 +88,7 @@ class BuildSuiteTests(unittest.TestCase):
         manifest_path = suite.with_suffix(".manifest.json")
         manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
         positions = load_epd(suite, split_seed=manifest["splits"]["seed"])
+        canonical_payload = suite.read_text(encoding="utf-8").encode()
 
         self.assertEqual(len(positions), 500)
         self.assertEqual(
@@ -95,8 +96,9 @@ class BuildSuiteTests(unittest.TestCase):
             manifest["splits"]["counts"],
         )
         self.assertEqual(
-            hashlib.sha256(suite.read_bytes()).hexdigest(), manifest["output"]["sha256"]
+            hashlib.sha256(canonical_payload).hexdigest(), manifest["output"]["sha256"]
         )
+        self.assertEqual(len(canonical_payload), manifest["output"]["bytes"])
         self.assertEqual(suite_digest(positions), manifest["output"]["suite_digest"])
         self.assertTrue((suite.parent / "STOCKFISH_BOOKS_LICENSE.txt").is_file())
 

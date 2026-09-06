@@ -464,6 +464,10 @@ harness/package.py   builds submission.zip with agent.py at the root
 tools/search_diagnostics.py  fixed-node, root-score, and PV investigation
 tools/search_ablations.py    isolated V4 search-profile comparison
 tools/search_memory_replay.py  rated-game TT/history reconstruction
+tools/sample_evaluation_positions.py  deterministic PGN/EPD/FEN data sampler
+tools/label_positions.py     resumable fixed-node teacher labelling
+tools/fit_hce.py             validation-selected residual HCE fitting
+docs/EVALUATION_TUNING.md    end-to-end evaluation-data runbook and gates
 docs/IDEAS.md        where the strength actually comes from
 ```
 
