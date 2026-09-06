@@ -35,11 +35,20 @@ if ! command -v uv >/dev/null 2>&1; then
   exit 1
 fi
 
-if [[ ! -x "$TRAIN_PY" ]]; then
-  uv --system-certs venv "$TRAIN_ENV" --python 3.12
+# uv renamed --system-certs to --native-tls; support whichever this uv has so the
+# script runs on every machine on the team.
+UV_TLS=""
+if uv venv --help 2>&1 | grep -q -- "--native-tls"; then
+  UV_TLS="--native-tls"
+elif uv venv --help 2>&1 | grep -q -- "--system-certs"; then
+  UV_TLS="--system-certs"
 fi
 
-uv --system-certs pip install \
+if [[ ! -x "$TRAIN_PY" ]]; then
+  uv ${UV_TLS} venv "$TRAIN_ENV" --python 3.12
+fi
+
+uv ${UV_TLS} pip install \
   --python "$TRAIN_PY" \
   --torch-backend cu128 \
   "chess==1.11.2" \

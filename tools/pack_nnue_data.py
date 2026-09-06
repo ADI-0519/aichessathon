@@ -10,7 +10,9 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
+import os
 from collections.abc import Iterable, Sequence
+from concurrent.futures import ProcessPoolExecutor
 from pathlib import Path
 from typing import Any
 
@@ -103,38 +105,58 @@ def _rows(table: Any) -> Iterable[tuple[str, int | None, int | None, str | None]
     return zip(*columns, strict=True)
 
 
+def pack_group(source: str, group_index: int, min_ply: int) -> tuple[np.ndarray, int]:
+    """Encode one Parquet row group, returning its records and rows scanned.
+
+    Runs in a worker process, so it opens its own Parquet handle: PyArrow file
+    objects hold native state and are not shareable across a process boundary.
+    """
+    import pyarrow.parquet as pq
+
+    table = pq.ParquetFile(source).read_row_group(
+        group_index, columns=["fen", "cp", "mate", "move"]
+    )
+    packed = np.zeros(table.num_rows, dtype=PACKED_DTYPE)
+    scanned = accepted = 0
+    for fen, cp, mate, move in _rows(table):
+        scanned += 1
+        record = encode_record(fen, cp, mate, move, min_ply=min_ply)
+        if record is None:
+            continue
+        packed[accepted] = record
+        accepted += 1
+    return packed[:accepted].copy(), scanned
+
+
 def pack_groups(
-    parquet: Any,
+    source: Path,
     groups: Sequence[int],
     output: Path,
     *,
     target: int,
     min_ply: int,
+    workers: int,
 ) -> tuple[int, dict[str, int]]:
-    """Encode selected row groups into ``output`` and return counts."""
+    """Encode selected row groups into ``output`` and return counts.
+
+    Groups are encoded concurrently but consumed in order, so the result is the
+    same prefix of records the equivalent serial scan would produce, whatever
+    order the workers finish in.  Groups past the target are never collected.
+    """
     output.parent.mkdir(parents=True, exist_ok=True)
     staging = output.with_suffix(output.suffix + ".staging.npy")
     records = np.lib.format.open_memmap(
         staging, mode="w+", dtype=PACKED_DTYPE, shape=(target,)
     )
-    scanned = accepted = rejected = 0
+    scanned = accepted = 0
     try:
-        for group_index in groups:
-            table = parquet.read_row_group(
-                group_index, columns=["fen", "cp", "mate", "move"]
-            )
-            for fen, cp, mate, move in _rows(table):
-                scanned += 1
-                record = encode_record(
-                    fen, cp, mate, move, min_ply=min_ply
-                )
-                if record is None:
-                    rejected += 1
-                    continue
-                records[accepted] = record
-                accepted += 1
-                if accepted >= target:
-                    break
+        for group_index, (packed, group_scanned) in _encoded_groups(
+            source, groups, min_ply=min_ply, workers=workers
+        ):
+            scanned += group_scanned
+            room = min(len(packed), target - accepted)
+            records[accepted : accepted + room] = packed[:room]
+            accepted += room
             print(
                 f"group {group_index}: {accepted:,}/{target:,} accepted "
                 f"from {scanned:,} rows",
@@ -150,7 +172,43 @@ def pack_groups(
     finally:
         del records
         staging.unlink(missing_ok=True)
-    return accepted, {"scanned": scanned, "accepted": accepted, "rejected": rejected}
+    return accepted, {
+        "scanned": scanned,
+        "accepted": accepted,
+        "rejected": scanned - accepted,
+    }
+
+
+def _encoded_groups(
+    source: Path,
+    groups: Sequence[int],
+    *,
+    min_ply: int,
+    workers: int,
+) -> Iterable[tuple[int, tuple[np.ndarray, int]]]:
+    """Yield ``(group_index, (records, scanned))`` in the order of ``groups``."""
+    if workers <= 1 or len(groups) <= 1:
+        for group_index in groups:
+            yield group_index, pack_group(source.as_posix(), group_index, min_ply)
+        return
+    with ProcessPoolExecutor(max_workers=min(workers, len(groups))) as pool:
+        futures = [
+            pool.submit(pack_group, source.as_posix(), group_index, min_ply)
+            for group_index in groups
+        ]
+        try:
+            for group_index, future in zip(groups, futures, strict=True):
+                yield group_index, future.result()
+        finally:
+            # The consumer stops as soon as the target is met; drop the rest so
+            # the pool shuts down instead of finishing groups nobody will read.
+            for future in futures:
+                future.cancel()
+
+
+def default_workers() -> int:
+    """Leave one core for the parent so the machine stays usable while packing."""
+    return max(1, (os.cpu_count() or 2) - 1)
 
 
 def _sha256(path: Path) -> str:
@@ -171,6 +229,7 @@ def pack_dataset(
     validation_target: int,
     validation_groups: int,
     min_ply: int,
+    workers: int,
 ) -> None:
     """Pack training and row-group-disjoint validation datasets."""
     try:
@@ -191,22 +250,25 @@ def pack_dataset(
     held_out_groups = list(range(split_at, group_count))
 
     print(
-        f"{source.name}: {parquet.metadata.num_rows:,} rows in {group_count} groups",
+        f"{source.name}: {parquet.metadata.num_rows:,} rows in {group_count} groups, "
+        f"{workers} worker(s)",
         flush=True,
     )
     train_count, train_stats = pack_groups(
-        parquet,
+        source,
         train_groups,
         train_output,
         target=train_target,
         min_ply=min_ply,
+        workers=workers,
     )
     validation_count, validation_stats = pack_groups(
-        parquet,
+        source,
         held_out_groups,
         validation_output,
         target=validation_target,
         min_ply=min_ply,
+        workers=workers,
     )
     manifest = {
         "schema_version": 1,
@@ -223,6 +285,7 @@ def pack_dataset(
         "train_stats": train_stats,
         "validation_stats": validation_stats,
         "min_ply": min_ply,
+        "workers": workers,
         "cp_clamp": CP_CLAMP,
         "filters": [
             "valid_standard_fen",
@@ -250,6 +313,12 @@ def main() -> None:
     parser.add_argument("--validation-target", type=positive_int, default=500_000)
     parser.add_argument("--validation-groups", type=positive_int, default=1)
     parser.add_argument("--min-ply", type=nonnegative_int, default=12)
+    parser.add_argument(
+        "--workers",
+        type=positive_int,
+        default=default_workers(),
+        help="row groups to encode concurrently (1 disables the pool)",
+    )
     args = parser.parse_args()
     if not args.source.is_file():
         parser.error(f"source Parquet file not found: {args.source}")
@@ -262,6 +331,7 @@ def main() -> None:
         validation_target=args.validation_target,
         validation_groups=args.validation_groups,
         min_ply=args.min_ply,
+        workers=args.workers,
     )
 
 
