@@ -27,31 +27,46 @@ FIXED_FENS = (
 )
 
 
-def positions(extra: int = 6, seed: int = 20260904) -> list[str]:
-    """The fixed suite, plus ``extra`` random positions drawn from ``seed``.
+EXTRA_PLIES = (12, 16, 18, 22, 24, 28, 30, 34, 36, 40, 42, 46)
 
-    Rated games start from curated positions the platform does not publish, so a
-    suite that is only openings measures the wrong thing. The random positions are
-    the cheap stand-in; raising ``extra`` is how the sample size goes up.
-    """
-    result = [chess.STARTING_FEN]
-    for line in OPENING_LINES:
-        board = chess.Board()
-        for uci in line:
-            board.push_uci(uci)
-        result.append(board.fen())
-    result.extend(FIXED_FENS)
+
+def positions(
+    count: int | None = None, seed: int = 20260904, curated: bool = True
+) -> list[str]:
+    # curated=False drops the shared openings for a disjoint set
+    result: list[str] = []
+    if curated:
+        result.append(chess.STARTING_FEN)
+        for line in OPENING_LINES:
+            board = chess.Board()
+            for uci in line:
+                board.push_uci(uci)
+            result.append(board.fen())
+        result.extend(FIXED_FENS)
 
     rng = random.Random(seed)
-    while len(result) < len(OPENING_LINES) + len(FIXED_FENS) + 1 + extra:
+    for target_plies in (14, 20, 26, 32, 38, 44):
         board = chess.Board()
-        for _ in range(rng.choice((12, 16, 20, 24, 28, 32, 36, 40, 44))):
+        for _ in range(target_plies):
             if board.is_game_over(claim_draw=True):
                 break
             board.push(rng.choice(list(board.legal_moves)))
         if not board.is_game_over(claim_draw=True):
             result.append(board.fen())
-    return result
+    if count is None:
+        return result
+
+    index = 0
+    while len(result) < count:
+        board = chess.Board()
+        for _ in range(EXTRA_PLIES[index % len(EXTRA_PLIES)]):
+            if board.is_game_over(claim_draw=True):
+                break
+            board.push(rng.choice(list(board.legal_moves)))
+        index += 1
+        if not board.is_game_over(claim_draw=True):
+            result.append(board.fen())
+    return result[:count]
 
 
 def elo(score: float) -> float:
@@ -92,13 +107,9 @@ def main() -> None:
     parser.add_argument("--increment-ms", type=int, default=50)
     parser.add_argument("--offset", type=int, default=0)
     parser.add_argument("--limit", type=int)
-    parser.add_argument(
-        "--extra-positions",
-        type=int,
-        default=6,
-        help="random positions added to the fixed suite; each is played twice",
-    )
+    parser.add_argument("--positions", type=int)
     parser.add_argument("--seed", type=int, default=20260904)
+    parser.add_argument("--no-curated", action="store_true")
     parser.add_argument(
         "--pgn-dir",
         type=Path,
@@ -108,14 +119,16 @@ def main() -> None:
 
     if arguments.offset < 0:
         parser.error("--offset must be non-negative")
+    if arguments.positions is not None and arguments.positions <= 0:
+        parser.error("--positions must be positive")
+
     if arguments.pgn_dir is not None:
         arguments.pgn_dir.mkdir(parents=True, exist_ok=True)
-
     candidate = arguments.candidate.resolve()
     opponent = arguments.opponent.resolve()
-    if arguments.pgn_dir is not None:
-        arguments.pgn_dir.mkdir(parents=True, exist_ok=True)
-    suite = positions(arguments.extra_positions, arguments.seed)[arguments.offset :]
+    suite = positions(arguments.positions, arguments.seed, not arguments.no_curated)[
+        arguments.offset :
+    ]
     suite = suite[: arguments.limit]
     if not suite:
         parser.error("--offset selects no positions")
@@ -149,10 +162,6 @@ def main() -> None:
                 losses += 1
                 results.append(0.0)
                 marker = "-"
-            if arguments.pgn_dir is not None:
-                colour = "w" if candidate_is_white else "b"
-                destination = arguments.pgn_dir / f"game{game_number:03d}{colour}.pgn"
-                destination.write_text(outcome.pgn + "\n", encoding="utf-8")
             if outcome.termination in FAILED_TERMINATIONS:
                 failures[outcome.termination] = failures.get(outcome.termination, 0) + 1
             if arguments.pgn_dir is not None:

@@ -1,5 +1,3 @@
-"""Safe public boundary for the production V3 compiled Numba agent."""
-
 from __future__ import annotations
 
 import time

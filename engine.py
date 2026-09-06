@@ -128,6 +128,25 @@ for _square in range(64):
         PAWN_ATTACKS[_color, _square] = np.uint64(_mask)
 
 
+def _build_king_rays() -> NDArray[np.uint64]:
+    rays = np.zeros(64, dtype=np.uint64)
+    directions = ((1, 0), (-1, 0), (0, 1), (0, -1), (1, 1), (1, -1), (-1, 1), (-1, -1))
+    for square in range(64):
+        mask = 0
+        for file_delta, rank_delta in directions:
+            target_file = chess.square_file(square) + file_delta
+            target_rank = chess.square_rank(square) + rank_delta
+            while 0 <= target_file < 8 and 0 <= target_rank < 8:
+                mask |= 1 << chess.square(target_file, target_rank)
+                target_file += file_delta
+                target_rank += rank_delta
+        rays[square] = np.uint64(mask)
+    return rays
+
+
+KING_RAYS = _build_king_rays()
+
+
 def _build_zobrist_values(count: int) -> NDArray[np.uint64]:
     """Build deterministic, non-zero SplitMix64 keys without global RNG state."""
     mask = (1 << 64) - 1
@@ -845,6 +864,62 @@ def unmake_move(
 
 
 @njit(cache=False)
+def make_null_move(
+    pieces: NDArray[np.uint64],
+    state: NDArray[np.int64],
+    key: NDArray[np.uint64],
+    undo: NDArray[np.int64],
+    undo_key: NDArray[np.uint64],
+) -> None:
+    undo_key[0] = key[0]
+    undo[UNDO_EP_SQUARE] = state[STATE_EP_SQUARE]
+    # ep component must come out while square and pawns are in agreement
+    key[0] = key[0] ^ _ep_hash_component(pieces, state) ^ ZOBRIST_SIDE
+    state[STATE_EP_SQUARE] = -1
+    state[STATE_SIDE] = BLACK if int(state[STATE_SIDE]) == WHITE else WHITE
+
+
+@njit(cache=False)
+def unmake_null_move(
+    state: NDArray[np.int64],
+    key: NDArray[np.uint64],
+    undo: NDArray[np.int64],
+    undo_key: NDArray[np.uint64],
+) -> None:
+    state[STATE_SIDE] = BLACK if int(state[STATE_SIDE]) == WHITE else WHITE
+    state[STATE_EP_SQUARE] = undo[UNDO_EP_SQUARE]
+    key[0] = undo_key[0]
+
+
+@njit(cache=False, inline="always")
+def _king_legality_context(
+    pieces: NDArray[np.uint64], state: NDArray[np.int64]
+) -> tuple[int, np.uint64, bool]:
+    side = int(state[STATE_SIDE])
+    king = pieces[piece_index(side, KING)]
+    if king == 0:
+        return -1, np.uint64(0), True
+    king_square = lsb_square(king)
+    enemy = BLACK if side == WHITE else WHITE
+    return king_square, KING_RAYS[king_square], is_square_attacked(pieces, king_square, enemy)
+
+
+@njit(cache=False, inline="always")
+def _needs_legality_test(
+    move: int, king_square: int, king_rays: np.uint64, in_check: bool
+) -> bool:
+    # only vacating a line through the king can expose it, en passant vacates two
+    if in_check:
+        return True
+    from_square = move_from(move)
+    if from_square == king_square:
+        return True
+    if move_flags(move) & FLAG_EN_PASSANT:
+        return True
+    return bool(king_rays & bit(from_square) != np.uint64(0))
+
+
+@njit(cache=False)
 def generate_legal_moves(
     pieces: NDArray[np.uint64],
     state: NDArray[np.int64],
@@ -857,9 +932,14 @@ def generate_legal_moves(
     """Generate legal moves by making and checking every pseudo-legal move."""
     moving_side = int(state[STATE_SIDE])
     pseudo_count = generate_pseudo_legal_moves(pieces, state, pseudo_moves)
+    king_square, king_rays, in_check = _king_legality_context(pieces, state)
     legal_count = 0
     for index in range(pseudo_count):
         move = int(pseudo_moves[index])
+        if not _needs_legality_test(move, king_square, king_rays, in_check):
+            legal_moves[legal_count] = np.int32(move)
+            legal_count += 1
+            continue
         if not make_move(pieces, state, key, move, scratch_undo, scratch_undo_key):
             continue
         legal = not is_in_check(pieces, moving_side)
@@ -868,6 +948,46 @@ def generate_legal_moves(
             legal_moves[legal_count] = np.int32(move)
             legal_count += 1
     return legal_count
+
+
+@njit(cache=False)
+def generate_legal_captures(
+    pieces: NDArray[np.uint64],
+    state: NDArray[np.int64],
+    key: NDArray[np.uint64],
+    legal_moves: NDArray[np.int32],
+    pseudo_moves: NDArray[np.int32],
+    scratch_undo: NDArray[np.int64],
+    scratch_undo_key: NDArray[np.uint64],
+) -> int:
+    # -1 not 0 (keeps stalemate distinct from pos with no captures)
+    moving_side = int(state[STATE_SIDE])
+    pseudo_count = generate_pseudo_legal_moves(pieces, state, pseudo_moves)
+    king_square, king_rays, in_check = _king_legality_context(pieces, state)
+    legal_count = 0
+    saw_legal = False
+    for index in range(pseudo_count):
+        move = int(pseudo_moves[index])
+        tactical = move_flags(move) & (FLAG_CAPTURE | FLAG_PROMOTION) != 0
+        if saw_legal and not tactical:
+            continue
+        if not _needs_legality_test(move, king_square, king_rays, in_check):
+            saw_legal = True
+            if tactical:
+                legal_moves[legal_count] = np.int32(move)
+                legal_count += 1
+            continue
+        if not make_move(pieces, state, key, move, scratch_undo, scratch_undo_key):
+            continue
+        legal = not is_in_check(pieces, moving_side)
+        unmake_move(pieces, state, key, move, scratch_undo, scratch_undo_key)
+        if not legal:
+            continue
+        saw_legal = True
+        if tactical:
+            legal_moves[legal_count] = np.int32(move)
+            legal_count += 1
+    return legal_count if saw_legal else -1
 
 
 @njit(cache=False)
@@ -1004,6 +1124,25 @@ def legal_moves_uci(position: Position) -> set[str]:
     return {move_to_uci(int(move)) for move in legal_moves(position)}
 
 
+def legal_captures(position: Position) -> tuple[NDArray[np.int32], bool]:
+    legal_buffer = np.empty(MAX_MOVES, dtype=np.int32)
+    pseudo_buffer = np.empty(MAX_MOVES, dtype=np.int32)
+    undo = np.empty(UNDO_SIZE, dtype=np.int64)
+    undo_key = np.empty(1, dtype=np.uint64)
+    count = generate_legal_captures(
+        position.pieces,
+        position.state,
+        position.key,
+        legal_buffer,
+        pseudo_buffer,
+        undo,
+        undo_key,
+    )
+    if count < 0:
+        return legal_buffer[:0].copy(), False
+    return legal_buffer[:count].copy(), True
+
+
 def perft(position: Position, depth: int) -> int:
     if depth < 0:
         raise ValueError("depth must be non-negative")
@@ -1032,4 +1171,9 @@ def warmup() -> None:
     """Compile every current hot-path signature outside a future match clock."""
     position = position_from_board(chess.Board())
     legal_moves(position)
+    legal_captures(position)
     perft(position, 1)
+    undo = np.empty(UNDO_SIZE, dtype=np.int64)
+    undo_key = np.empty(1, dtype=np.uint64)
+    make_null_move(position.pieces, position.state, position.key, undo, undo_key)
+    unmake_null_move(position.state, position.key, undo, undo_key)
