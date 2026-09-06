@@ -34,4 +34,30 @@ ignore = ["N818"]
 
 [tool.mypy]
 strict = true
-files = ["agent.py", "engine.py", "search.py", "harness"]
+files = [
+    "agent.py",
+    "engine.py",
+    "search.py",
+    "harness",
+    "tools/build_suite.py",
+    "tools/backtest.py",
+    "tools/backtest_core.py",
+    "tools/cli.py",
+    "tools/search_ablations.py",
+    "tools/search_diagnostics.py",
+    "tools/search_memory_replay.py",
+    "tools/evaluation_dataset.py",
+    "tools/evaluation_features.py",
+    "tools/fit_hce.py",
+    "tools/label_positions.py",
+    "tools/sample_evaluation_positions.py",
+    "tools/nnue_features.py",
+    "tools/pack_nnue_data.py",
+    "tools/train_nnue.py",
+    "tools/materialize_nnue_blend.py",
+    "tools/verify_v5_nnue.py",
+]
+
+[[tool.mypy.overrides]]
+module = ["pyarrow", "pyarrow.*"]
+ignore_missing_imports = true

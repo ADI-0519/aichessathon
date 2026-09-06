@@ -1,0 +1,42 @@
+{
+  "schema_version": 1,
+  "description": "Positions that exposed distinct V3 search and evaluation failures in rated games.",
+  "positions": [
+    {
+      "id": "corundum-20-bxf4",
+      "label": "Corundum AI, White move 20",
+      "fen": "3r1r1k/pp2p1bp/1q1pB1p1/4p1P1/3pPn1P/1P1P1P2/P1PB4/R2Q1RK1 w - - 7 20",
+      "played_move": "e6g4",
+      "reference_move": "d2f4",
+      "baseline_move": "e6g4",
+      "diagnosis": "The one-ply evaluation favours Bxf4, but V3 search selects Bg4 through depth 9."
+    },
+    {
+      "id": "corundum-39-be1",
+      "label": "Corundum AI, White move 39",
+      "fen": "2R2rk1/p7/1p1pp1pb/1P2p3/PB2PnBq/3P1P2/8/3Q2K1 w - - 2 39",
+      "played_move": "d1c2",
+      "reference_move": "b4e1",
+      "baseline_move": "d1c2",
+      "diagnosis": "V3 continues to select Qc2 at three million nodes, losing a large positional advantage."
+    },
+    {
+      "id": "corundum-43-kg1",
+      "label": "Corundum AI, White move 43",
+      "fen": "8/p6k/1p1pp1pb/1P2p3/PB2PnBq/3P1P2/2Q5/5K2 w - - 3 43",
+      "played_move": "c2c7",
+      "reference_move": "f1g1",
+      "baseline_move": "c2c7",
+      "diagnosis": "The checking move Qc7 permits mate; V3 changes to Kg1 only at substantially greater depth."
+    },
+    {
+      "id": "negamaximus-37-rxb2",
+      "label": "Negamaximus, Black move 37",
+      "fen": "7k/6p1/8/p2R3p/Pp1p4/6P1/1P1r1P1P/6K1 b - - 2 37",
+      "played_move": "g7g6",
+      "reference_move": "d2b2",
+      "baseline_move": "g7g6",
+      "diagnosis": "V3 selects g6 through depth 12 instead of converting the rook ending with Rxb2."
+    }
+  ]
+}

@@ -1,6 +1,9 @@
 .venv/
+.venv-training/
 __pycache__/
 .mypy_cache/
 .ruff_cache/
 submission.zip
 *.pgn
+benchmarks/runs/
+benchmarks/suites/sources/

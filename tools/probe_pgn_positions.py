@@ -6,6 +6,7 @@ This is a development-only diagnostic and is never included in submission.zip.
 from __future__ import annotations
 
 import argparse
+import hashlib
 import importlib.util
 import sys
 import time
@@ -17,10 +18,16 @@ import chess.pgn
 
 
 def load_agent(path: Path, serial: int) -> ModuleType:
-    """Load an agent under a unique module name so globals cannot collide."""
-    module_path = path.resolve() / "agent.py"
-    name = f"probe_agent_{serial}"
-    spec = importlib.util.spec_from_file_location(name, module_path)
+    """Load an agent as an isolated package so relative imports stay local."""
+    root = path.resolve()
+    module_path = root / "agent.py"
+    token = hashlib.sha256(str(root).encode()).hexdigest()[:12]
+    name = f"probe_agent_{serial}_{token}"
+    spec = importlib.util.spec_from_file_location(
+        name,
+        module_path,
+        submodule_search_locations=[str(root)],
+    )
     if spec is None or spec.loader is None:
         raise RuntimeError(f"cannot import {module_path}")
     module = importlib.util.module_from_spec(spec)
