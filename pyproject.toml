@@ -51,4 +51,13 @@ files = [
     "tools/fit_hce.py",
     "tools/label_positions.py",
     "tools/sample_evaluation_positions.py",
+    "tools/nnue_features.py",
+    "tools/pack_nnue_data.py",
+    "tools/train_nnue.py",
+    "tools/materialize_nnue_blend.py",
+    "tools/verify_v5_nnue.py",
 ]
+
+[[tool.mypy.overrides]]
+module = ["pyarrow", "pyarrow.*"]
+ignore_missing_imports = true
