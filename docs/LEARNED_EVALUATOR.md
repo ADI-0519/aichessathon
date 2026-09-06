@@ -114,3 +114,15 @@ The selected 50% build must still pass archive verification, official-clock smok
 untouched validation sample, and the fixed Stockfish benchmark before it becomes the final locked
 build. An expedited ladder upload may precede the longer confirmations because the selected build
 has already completed both development gates cleanly; V4 remains the rollback artifact.
+
+## Endgame-taper experiment
+
+The submitted V5 artifact remains the fixed 50% blend. Its first ladder games exposed a separate
+failure mode in sparse queen, rook, and minor-piece endings: the learned evaluator could become
+more confident while deeper search followed strategically losing plans. The next isolated
+challenger therefore keeps the 50% full-material blend but tapers it to 15% as non-pawn material
+disappears. This preserves the measured middlegame contribution while giving V4's tapered
+handcrafted evaluation more control in the positions least represented by the network's inputs.
+
+This is only a hypothesis until it passes the critical-position probes and paired games. It must
+not replace the fixed V5 candidate during its held-out validation run.
