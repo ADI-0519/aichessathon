@@ -9,6 +9,7 @@ from pathlib import Path
 import chess
 
 from harness.referee import Outcome
+from harness.sandbox import Agent
 from tools import backtest
 from tools.backtest_core import (
     GameRecord,
@@ -29,6 +30,21 @@ from tools.backtest_core import (
 
 
 class BacktestCoreTests(unittest.TestCase):
+    def test_agent_stderr_is_bounded_and_persisted(self) -> None:
+        candidate = Agent([])
+        opponent = Agent([])
+        candidate.stderr_tail = "prefix" + "x" * backtest.AGENT_LOG_LIMIT
+        with tempfile.TemporaryDirectory() as temporary:
+            output = Path(temporary)
+            backtest.save_agent_logs(output, "00001-white", candidate, opponent)
+            saved = (
+                output / "logs" / "game-00001-white-candidate.stderr.log"
+            ).read_text(encoding="utf-8")
+            self.assertEqual(saved, "x" * backtest.AGENT_LOG_LIMIT)
+            self.assertFalse(
+                (output / "logs" / "game-00001-white-opponent.stderr.log").exists()
+            )
+
     def test_normalization_deduplicates_phantom_en_passant(self) -> None:
         plain = "8/8/8/8/8/8/4K3/7k w - - 0 1"
         phantom = "8/8/8/8/8/8/4K3/7k w - e3 0 1"

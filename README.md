@@ -52,6 +52,8 @@ The first controlled search-profile results are recorded in the
 
 The current architecture decision, research synthesis, experiment gates, and dated build schedule
 are in the [Post-Day-1 competitive engine plan](docs/POST_DAY1_DEEP_RESEARCH.md).
+The new from-scratch sparse-network track and the evidence behind it are in
+[Learned Evaluator Track](docs/LEARNED_EVALUATOR.md).
 
 ## Git Bash development runbook
 
@@ -348,6 +350,148 @@ legal moves, captures, attacks, state transitions, hashing, and undo restoration
 changing move generation, make/unmake, attack detection, or hashing. Always require zero crashes,
 illegal moves, flags, and void games before considering strength results.
 
+### Train the sparse evaluator
+
+Training uses a separate environment so the competition-compatible `.venv` remains untouched.
+The Parquet corpus and packed arrays are ignored and must never enter a submission.
+
+Run the complete resumable setup, verification, packing, and CUDA-training pipeline with one
+command from Git Bash:
+
+```bash
+bash scripts/train_nnue_v1.sh
+```
+
+Progress is written to `benchmarks/runs/nnue-v1/pipeline.log`. The expanded commands below are
+useful when diagnosing a failed stage or running a controlled variant.
+
+```bash
+TRAIN_PY="./.venv-training/Scripts/python.exe"
+
+uv venv .venv-training --python 3.12
+uv --system-certs pip install --python "$TRAIN_PY" \
+  "chess==1.11.2" "numpy==2.5.2" pyarrow
+uv --system-certs pip install --python "$TRAIN_PY" \
+  torch --index https://download.pytorch.org/whl/cu128
+
+"$TRAIN_PY" -c "import torch; print(torch.__version__, torch.cuda.is_available())"
+```
+
+Download the official CC0 Lichess Fishnet shard and verify its published digest:
+
+```bash
+mkdir -p benchmarks/suites/sources
+curl.exe -fL \
+  'https://huggingface.co/datasets/Lichess/fishnet-evals/resolve/main/standard_rated_2014_09.parquet?download=true' \
+  -o benchmarks/suites/sources/standard_rated_2014_09.parquet
+echo 'b2d0d3cc3ea2f2795e6fffa4d33f5c1ff6b26d8a0c1cbb5a74768f3228b9a5ef  benchmarks/suites/sources/standard_rated_2014_09.parquet' \
+  | sha256sum --check
+```
+
+Pack four million quiet training positions and a disjoint 500,000-position validation set:
+
+```bash
+"$TRAIN_PY" -m tools.pack_nnue_data \
+  --source benchmarks/suites/sources/standard_rated_2014_09.parquet \
+  --train-output benchmarks/runs/nnue-v1/train-4m.npy \
+  --validation-output benchmarks/runs/nnue-v1/validation-500k.npy \
+  --manifest benchmarks/runs/nnue-v1/data-manifest.json \
+  --train-target 4000000 \
+  --validation-target 500000 \
+  --validation-groups 1 \
+  --min-ply 12
+```
+
+Train and export our own weights:
+
+```bash
+"$TRAIN_PY" -m tools.train_nnue \
+  --train benchmarks/runs/nnue-v1/train-4m.npy \
+  --validation benchmarks/runs/nnue-v1/validation-500k.npy \
+  --output benchmarks/runs/nnue-v1/model.npz \
+  --manifest benchmarks/runs/nnue-v1/model-manifest.json \
+  --accumulator 128 \
+  --hidden 32 \
+  --epochs 8 \
+  --batch-size 8192 \
+  --device cuda
+```
+
+An exported model is research output, not a champion. It must next pass feature-parity tests,
+fixed-position evaluator checks, a nodes-per-second budget, paired games against exact V4,
+independent validation games, and official-clock/package smoke tests.
+
+Verify the V5 runtime against NumPy and PyTorch, exercise incremental updates (including castling,
+promotion, capture, and en passant), and measure compiled inference throughput:
+
+```bash
+"$PY" -m tools.verify_v5_nnue --candidate challengers/v5_nnue
+```
+
+V5 keeps the trained artifact at `weights/model.npz`; the standard packager and backtest
+fingerprint both include that directory. Never move the model to the candidate root. Create
+immutable local candidates for controlled blend experiments instead of editing a candidate during
+a resumable run:
+
+```bash
+for blend in 0 25 50 100; do
+  "$PY" -m tools.materialize_nnue_blend \
+    --source challengers/v5_nnue \
+    --blend "$blend" \
+    --output "benchmarks/runs/candidates/v5-nnue-${blend}-t1"
+done
+```
+
+The blend is the learned evaluator's percentage; `0` isolates integration overhead, `25` is the
+first conservative candidate, and `100` is pure neural evaluation. The materializer refuses to
+overwrite an existing directory. Give reruns a new candidate/output name so their fingerprints
+stay trustworthy.
+
+Run a quick two-position technical smoke against the frozen V4 archive before a longer backtest:
+
+```bash
+mkdir -p benchmarks/runs/v4-exact
+unzip -q -o submission_v4.zip -d benchmarks/runs/v4-exact
+
+"$PY" -m tools.paired_arena \
+  --candidate benchmarks/runs/candidates/v5-nnue-25-t1 \
+  --opponent benchmarks/runs/v4-exact \
+  --base-ms 10000 \
+  --increment-ms 100 \
+  --limit 2 \
+  --pgn-dir benchmarks/runs/v5-nnue-25-t1-smoke
+```
+
+Use `tools.backtest` and the pinned development/validation splits for promotion evidence; a tiny
+smoke score is only a correctness signal.
+
+Run the first blend screen sequentially so competing searches do not steal CPU from one another:
+
+```bash
+export MKL_NUM_THREADS=1
+export NUMBA_NUM_THREADS=1
+export NUMEXPR_NUM_THREADS=1
+export OMP_NUM_THREADS=1
+export OPENBLAS_NUM_THREADS=1
+export VECLIB_MAXIMUM_THREADS=1
+
+for blend in 25 50 100; do
+  "$PY" -m tools.backtest \
+    --candidate "benchmarks/runs/candidates/v5-nnue-${blend}-t1" \
+    --opponent benchmarks/runs/v4-exact \
+    --suite benchmarks/suites/openings_8moves_v3_500.epd \
+    --split development \
+    --limit 20 \
+    --base-ms 10000 \
+    --increment-ms 100 \
+    --output "benchmarks/runs/v5-nnue-${blend}-t1-vs-v4-development-20"
+done
+```
+
+Each `--limit 20` run is 20 opening pairs (40 games). Re-running the same command resumes from its
+append-only journal. Stop immediately and investigate if the candidate records any technical
+failure; compare paired scores and confidence intervals only after all three runs finish.
+
 ### Build and verify a versioned submission
 
 Package the current working tree with the harness:
@@ -467,7 +611,11 @@ tools/search_memory_replay.py  rated-game TT/history reconstruction
 tools/sample_evaluation_positions.py  deterministic PGN/EPD/FEN data sampler
 tools/label_positions.py     resumable fixed-node teacher labelling
 tools/fit_hce.py             validation-selected residual HCE fitting
+tools/nnue_features.py       colour-symmetric sparse piece-square encoding
+tools/pack_nnue_data.py      Parquet filtering and row-group-disjoint packing
+tools/train_nnue.py          from-scratch sparse-network training and export
 docs/EVALUATION_TUNING.md    end-to-end evaluation-data runbook and gates
+docs/LEARNED_EVALUATOR.md    external-repo audit and learned-evaluator plan
 docs/IDEAS.md        where the strength actually comes from
 ```
 

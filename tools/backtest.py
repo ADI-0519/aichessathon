@@ -47,6 +47,27 @@ from tools.paired_arena import positions as builtin_fens
 from tools.stockfish_arena import StockfishAgent
 
 AgentFactory = Callable[[], Agent]
+AGENT_LOG_LIMIT = 8 * 1024
+
+
+def save_agent_logs(
+    output: Path,
+    game_id: str,
+    candidate_agent: Agent,
+    opponent_agent: Agent,
+) -> None:
+    """Persist bounded stderr tails so a startup crash remains diagnosable."""
+    for name, agent in (
+        ("candidate", candidate_agent),
+        ("opponent", opponent_agent),
+    ):
+        if not agent.stderr_tail:
+            continue
+        tail = agent.stderr_tail[-AGENT_LOG_LIMIT:]
+        path = output / "logs" / f"game-{game_id}-{name}.stderr.log"
+        path.parent.mkdir(parents=True, exist_ok=True)
+        atomic_write_text(path, tail)
+        print(f"{name} stderr saved to {path}")
 
 
 def load_suite(source: str, split_seed: str) -> tuple[list[SuitePosition], str]:
@@ -326,6 +347,12 @@ def run(arguments: argparse.Namespace) -> int:
                     arguments.increment_ms,
                     ply_cap=arguments.ply_cap,
                     start_fen=position.fen,
+                )
+                save_agent_logs(
+                    output,
+                    game_id,
+                    candidate_agent,
+                    opponent_agent,
                 )
                 elapsed = time.monotonic() - started
                 result = candidate_result(outcome, candidate_is_white)
