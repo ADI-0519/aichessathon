@@ -33,8 +33,10 @@ uv run python -m harness.play --black baselines/minimax --pgn game.pgn
 uv run python -m harness.arena --opponent ../my-old-version --games 200
 ```
 
-Anything your agent writes to stdout or stderr shows up under the result, so `print` debugging
-works. The platform discards it during rated games and shows it in your validation log.
+Anything your agent prints shows up under the result, so `print` debugging works. The platform
+keeps it too. Every rated game leaves a log on your dashboard next to the PGN, holding your
+output plus your init time, your time on each move, and the clock you had left. Only your team
+can read it.
 
 ## The ladder
 
@@ -60,7 +62,7 @@ evaluation worth searching with.
 agent.py             your submission
 baselines/           random, greedy, minimax, numba; each is a directory with an agent.py
 harness/runner.py    the process the platform runs your agent in
-harness/referee.py   the clock, legality, draw and adjudication rules
+harness/referee.py   the clock, legality, draw and cap rules
 harness/rules.py     the event constants the harness enforces
 harness/sandbox.py   the one process, spoken to as the platform speaks to a container
 harness/play.py      one game between two agent directories

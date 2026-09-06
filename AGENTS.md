@@ -23,15 +23,19 @@ and they change, so fetch them before you rely on a number.
 - The process starts once per game and stays alive between your moves. Module state survives to
   your next move in the same game, never to the next game.
 - Import time has a 90 second budget before the clock starts. Load weights there.
-- 120 s + 0.5 s per move, per side, on wall time. One core, 2 GB, no network, no GPU.
-- Illegal move, malformed output, crash, out of memory, or flag fall loses that game. A move
-  reply over 4 KB counts as illegal. 300 plies without a result goes to material adjudication.
+- 120 s + 0.5 s per move, per side, on wall time. One core of an AMD EPYC 9V74 at 2.60 GHz, 2 GB,
+  no network, no GPU.
+- Illegal move, malformed output, crash, or out of memory loses that game. A move reply over
+  4 KB counts as illegal. A flag fall loses too, unless the other side has no way to mate, and
+  then the game is a draw. Draws follow FIDE rules. A game still running at 600 plies is a
+  draw, and the opening position counts toward the 600.
 - Everything in the zip together stays under 50 MB unzipped.
 - Ten uploads per team per day, and the latest one that passed validation is the one that plays.
 - Rated games start from curated opening positions, not the standard start. The set is not
   published.
-- The process keeps its core while the opponent thinks, so pondering on their time is allowed.
-  Two of your games can run at once, in separate containers.
+- Your process is suspended while the opponent thinks, so nothing you leave running between your
+  own moves gets any CPU. Do your searching inside `get_move`. Two of your games can run at once,
+  in separate containers.
 
 ## Things that break agents here
 
