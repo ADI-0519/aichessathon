@@ -50,7 +50,94 @@ When a UCI engine binary is available, `tools/analyze_pgn_stockfish.py` is the s
 should replace this one. Nothing from it ships in the submission; it is a development diagnostic,
 which the rules permit.
 
-## 1. Time thrown away — largest, cheapest, already measured
+## 0b. The baseline, measured over all eleven rated games
+
+Our side in each game was identified by reproduction -- give `champions/python_v2` the same
+position and the same time the player actually spent, and see whose moves it reproduces. The
+method validates 2/2 against the games whose colour is known independently (rounds 4 and 11), with
+margins like 100% vs 30% in round 6. It also independently reproduces the team's own description
+of the standings after round 5: one win, four losses.
+
+**The record is 5 wins, 5 losses, 1 draw**, and it improved sharply after the trial-recovery
+upload: rounds 1-5 were 1-4, rounds 6-11 were 4 wins, 1 loss and a draw.
+
+Audited at 500,000 referee nodes, our moves only, first four plies skipped:
+
+| | Moves | Average loss | Inaccuracies | Mistakes | Blunders |
+|---|---:|---:|---:|---:|---:|
+| **All our moves** | 465 | **15.3 cp** | 19 | 21 | **2** |
+| In games we won | 221 | **10.3 cp** | | | 1 |
+| In games we lost | 214 | **21.2 cp** | | | 1 |
+
+### What this changes
+
+**We are not a blundering engine.** Two blunders in 465 moves. The premise this document opened
+with -- that games are decided by the worst move -- is not what the data says about *our* games.
+Whatever else is worth doing, "stop blundering" is already close to solved.
+
+**We lose to a factor of two in average move quality**, not to catastrophes: 10.3 cp per move in
+wins against 21.2 cp in losses, with 21 mistakes in the 100-300 cp band against 2 blunders above
+it. That is steady leakage, and it is what fitting the evaluation weights addresses. It is not what
+a targeted king-safety or mobility term addresses.
+
+**There is no phase to target.** Of the twelve worst decisions, eight are middlegame positions with
+queens on, one is an opening, three are endgames -- roughly proportional to where moves get played.
+No localised weakness to bolt a term onto.
+
+**Round 4 was an outlier, not a representative sample.** At 67.7 cp average over its scored moves
+it is between three and six times our normal standard, in won and lost games alike. The roadmap in
+[HYPERCOMPETITIVE_ROADMAP.md](HYPERCOMPETITIVE_ROADMAP.md) and
+[ROUND4_RECOVERY_PLAN.md](ROUND4_RECOVERY_PLAN.md) was built on that one game.
+
+**Two attributions in [TRIAL_RECOVERY_REPORT.md](TRIAL_RECOVERY_REPORT.md) are wrong.** It assigns
+rounds 1 and 3 by clock timing; reproduction puts round 3 at 87% white against 32% black, so its
+round-3 forensics analysed the opponent's moves as ours. The round-4 analysis stands.
+
+### The honest limit on these numbers
+
+The referee is our own compiled engine. It cannot see a mistake it would not understand at any
+depth, so the absolute figures are optimistic. The comparison between won and lost games is the
+part to trust, because the same referee judges both.
+
+## 1. The round-11 draw: blind to a draw one move away
+
+Round 11 was drawn by threefold repetition from a position worth **+1.08 to us** at 3,000,000
+nodes, with material dead level. `Re8-g8` was available at +1.18 at three separate points. We
+shuffled a bishop instead.
+
+The cause is a single condition in `champions/python_v2`, the build that played it:
+
+```python
+if ply >= 4 and board.halfmove_clock >= 8 and board.is_repetition(3):
+    return 0
+```
+
+`ply >= 4` hides any repetition within four plies of the root. The engine statically evaluated
+that position at **+1.38 for us**, played `Be7`, and the referee claimed the threefold
+immediately. It was not indifferent to being better and it was not blind to the advantage: it
+could not see that its own move ended the game.
+
+Two hypotheses were wrong before the measurement settled it, and both would have produced bad
+fixes:
+
+- **Missing contempt.** Plausible -- a repetition scores a flat 0 and there is no contempt term
+  anywhere. But the engine scored itself +1.38, so contempt would have changed nothing here. Worse,
+  in positions the engine misjudges, contempt pushes it away from draws it should take.
+- **Evaluation blindness.** Also wrong. It saw the advantage clearly.
+
+**The compiled engine at the root does not have this bug.** `engine.is_repetition_draw` separates
+game history (three occurrences required) from repeats inside the current search line via
+`root_history_count`, with no ply floor. Replayed through the agent boundary with the real history,
+it deviates at every repetition point in that game -- `Kc8` at move 35, `Rg8` at 36 and 38 -- and
+`Rg8` is the move the deep search independently rates best. Round 11 would have been played on.
+
+This is the strongest single argument for getting the compiled engine uploaded: it fixes a bug that
+demonstrably cost half a point in the most recent rated game.
+
+If the `ply >= N` shortcut appears anywhere else in a draw-detection path, it deserves the same
+scrutiny. It is a natural-looking optimisation and it is wrong in exactly the case that matters.
+
+## 2. Time thrown away — largest, cheapest, already measured
 
 The challenger inherits the clock bug that was just removed from the Python agent. Measured on
 three positions:
@@ -88,7 +175,7 @@ it with a soft deadline that stops *new* iterations and a hard deadline that cut
 one — safe precisely because 1a keeps the partial result. This pattern is already implemented and
 game-tested in the root `agent.py`; port it.
 
-## 2. Search selectivity — where a pruning rule bets wrong
+## 3. Search selectivity — where a pruning rule bets wrong
 
 Every pruning rule is a bet that a move cannot matter. Audit them in this order.
 
@@ -115,17 +202,51 @@ Adding null-move and futility pruning to `agent.py` raised reported depth from 5
 no measurable strength gain, because a heavily pruned depth 8 searches less than a full depth 8.
 Judge every pruning change by games and by the blunder audit, never by the depth number.
 
-## 3. Reliability — a crash is the worst blunder available
+## 4. Reliability — a crash is the worst blunder available
 
 An illegal move, a crash, an out-of-memory, a flag or an init failure loses the whole game
 immediately. No amount of playing strength compensates.
 
-**3a. The 27-second import.** The challenger JIT-compiles for 27 s on every process start, and the
-process starts once per game. No `njit` uses `cache=True`, and a disk cache would not survive
-between containers anyway. That is 30% of the 90 s import budget consumed on a fast development
-machine; the platform gives one core in a container that is probably slower. Measure it under
-constrained CPU before this ships, because exceeding the budget is an automatic loss, not a slow
-move.
+**4a. The import budget, measured.** Timed on this 16-core machine, same code, same session:
+
+| Run | Import | Headroom vs 90 s |
+|---|---:|---:|
+| challenger, early | 27.2 s | 62.8 s |
+| root, all cores | 51.5 s | 38.5 s |
+| root, pinned to ONE core | 48.4 s | 41.6 s |
+| challenger, later | 66.5 s | 23.5 s |
+| root, later | 67.2 s | 22.8 s |
+
+**27 s to 67 s for the same code.** Core count is not the threat: pinning to a single core cost
+nothing, because numba's compilation is serial, so the platform giving one core is fine. Machine
+state is the threat, and the worst case leaves 23 s of margin on fast hardware.
+
+Where it goes, from instrumenting all 1,816 compilations:
+
+| Function | Compile time |
+|---|---:|
+| `search._search_root` | 39.1 s |
+| `search._negamax` | 30.5 s (nested inside the above) |
+| `engine.generate_legal_moves` | 18.5 s |
+| `search._quiescence` | 14.4 s |
+
+`_search_root` largely duplicates `_negamax`, and 22 functions are `inline="always"`, so LLVM is
+optimising enormous inlined bodies. Folding the root into negamax as a flagged special case is the
+one change that would meaningfully cut this, and it is a refactor of the search that currently
+wins, so it needs its own careful pass.
+
+**`cache=True` is not an option; it is actively dangerous.** Tested: the cold import writes 41
+cache entries correctly, and the *warm* import then dies with
+`LLVM ERROR: Symbol not found: .numba.unresolved$_ZN6search11_quiescence...`. Numba's cache cannot
+round-trip the mutually recursive search (`_negamax` and `_quiescence` call each other). On the
+platform that is an init failure and an automatic loss on every game after the first. The existing
+`cache=False` on all 43 functions should stay, and may well be deliberate.
+
+**What to do about it.** Upload anyway. `AGENTS.md` says the latest submission *that passed
+validation* is the one that plays, so a validation failure costs an upload slot and not a single
+game. That makes the platform's own validation the cheapest and most accurate test of this budget
+available. The residual risk is validation passing on a fast container while a rated game later
+lands on a slow one.
 
 **3b. Keep the python-chess safety net.** Root move validation against python-chess plus a
 deterministic legal fallback is what turns a compiled-engine bug into a bad move instead of a
@@ -137,7 +258,7 @@ including the paths that are rare in play and therefore untested: en passant tha
 king, underpromotion, double check, castling through attacked squares, and the fifty-move and
 repetition boundaries.
 
-## 4. Evaluation — positional blunders
+## 5. Evaluation — positional blunders
 
 Neither engine's evaluation weights have ever been fitted. Material values, piece-square tables,
 pawn structure and king shield are all hand-guessed constants, and there is no mobility term and no
@@ -152,7 +273,7 @@ worthless.
 This is genuinely valuable, and it is genuinely fourth. Sections 1 and 2 are hours of work against
 measured defects; this is days of work against a modelled one.
 
-## 5. Draws are a scoreboard question too
+## 6. Draws are a scoreboard question too
 
 Across 162 games of local testing, every non-decisive game ended in threefold repetition: 120
 checkmates, 42 repetitions, no stalemates, fifty-move draws or adjudications. 26% of games are
