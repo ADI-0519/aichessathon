@@ -27,6 +27,26 @@ class NumbaSearchTests(unittest.TestCase):
         starting = engine.position_from_board(chess.Board())
         self.assertEqual(search.evaluate(starting.pieces, starting.state), 10)
 
+    def test_evaluation_agrees_with_itself_under_a_colour_swap(self) -> None:
+        rng = random.Random(20260906)
+        for _ in range(40):
+            board = chess.Board()
+            for _ in range(rng.randrange(4, 60)):
+                if board.is_game_over(claim_draw=True):
+                    break
+                board.push(rng.choice(list(board.legal_moves)))
+            position = engine.position_from_board(board)
+            mirrored = engine.position_from_board(board.mirror())
+            with self.subTest(fen=board.fen()):
+                # the taper floors, so mirrored position can land centipawn apart
+                self.assertLessEqual(
+                    abs(
+                        int(search.evaluate(position.pieces, position.state))
+                        - int(search.evaluate(mirrored.pieces, mirrored.state))
+                    ),
+                    1,
+                )
+
     def test_static_exchange_evaluation_handles_special_and_defended_captures(self) -> None:
         cases = (
             ("r3k3/8/8/8/8/8/p7/R3K3 w - - 0 1", "a1a2", -400),
