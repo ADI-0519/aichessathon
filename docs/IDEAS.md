@@ -55,39 +55,58 @@ learn from. Whatever you train on, the model has to be one you trained.
 
 ## Time management
 
-120 seconds plus 0.5 per move. A flag is a loss, and it is the most common self-inflicted one.
+120 seconds plus 0.5 per move. A flag is a loss unless the other side cannot mate, and it is
+the most common self-inflicted one.
 
 - Budget per move from the clock you were handed, not from a constant. Something like
-  `time_left_ms / max(20, expected_moves_left)` is enough to start.
+  `time_left_ms / max(20, expected_moves_left)` is enough to start. The increment lands after the
+  move, so you can spend the one you are about to earn.
 - Check the clock inside your search, not only between moves, and return the best move you have
   when the budget is gone. Iterative deepening makes that easy.
 - Leave a margin. The referee measures wall time, and the watchdog does not forgive.
+- Your machine is not the match machine. One core of an EPYC 9V74 at 2.60 GHz is slower than a
+  laptop core, so depth you reach here is depth you may not reach in a rated game. Your
+  validation log prints your real init time and your slowest move. Upload once and scale the
+  budgets you tuned locally by what it tells you.
 
 ## Things the position alone does not tell you
 
 The process stays alive between your moves, so you can keep state. Two things are worth keeping:
 
 - The positions you have been asked about. The referee claims threefold repetition automatically,
-  so if you are winning and shuffling, you can draw a won game without ever being told.
+  so if you are winning and shuffling you can draw a won game without being told. Count from the
+  first fen, not from move one. That fen is where the game starts, and its halfmove clock is
+  where the fifty move count begins.
 - Your own search results. A transposition table that survives across moves is a real gain.
 
-An opening book is worth less here than it looks. Rated games start from curated positions
-rather than the standard start, so a book keyed on move one is often already out of book. Test
-with `make play FEN=...` from positions you have not prepared, and spend the effort on the search
-instead.
+An opening book is worth less here than it looks. Rated games start from curated positions, so a
+book keyed on move one is already out of book. The eight in `harness/rules.py` are a sample, not
+the set, so anything you tune on them is tuned on eight positions. Test with `make play FEN=...`
+from positions you have not prepared, and spend the effort on the search.
+
+The endgame is the other side of this. `chess.polyglot` and `chess.syzygy` are in the base image,
+and 3 and 4 man syzygy fits inside the 50 MB cap while 5 man is far too big. Four man tables end
+king and pawn races correctly. A shallow search does not.
 
 ## Measuring a change
 
-Two games tell you nothing. Alternate colours, fix the opponent, and play enough games that the
-score means something: a change worth 3% needs hundreds of games to see, and `make arena` at a
-fast time control is how you get them. Keep the previous version around as an opponent, because
-"better than my last one" is the only comparison that matters.
+Two games tell you nothing. `make arena` alternates colours, fixes the opening, seeds the
+opponent and prints the 95% interval, so you can see when a result is real instead of guessing.
+A change worth 3% needs hundreds of games before that interval shrinks past it. Run several
+shells at once to get them, but score the final pass in one, since games sharing a machine stop
+measuring time management. The interval assumes games are independent, and eight openings means
+they stop being independent past sixteen, so read it as optimistic in a long run. Keep the previous version as an opponent. "Better than my last one"
+is the only comparison that matters.
 
 ## What loses games for free
 
 - Flagging. See above.
 - Crashing on an edge case: no legal moves, a promotion, an en passant capture. Play a few hundred
   games against a random baseline and the rare paths show up.
-- Blowing the 60 second import budget loading weights.
-- Writing anywhere but `/tmp`. Everything else is read-only.
+- Blowing the 90 second import budget loading weights.
+- Writing anywhere but `/tmp`. Everything else is read-only, and `/tmp` is wiped between games,
+  so nothing you write survives. numba's `cache=True` never hits.
 - More threads than cores. `torch.set_num_threads(1)`.
+- Splitting your agent across files and uploading only `agent.py`. `make zip` plays out of the
+  zip it built, the cheapest place to find that out.
+

@@ -1,7 +1,10 @@
 import math
+import os
 import random
 
 import chess
+
+RNG = random.Random(os.environ.get("HARNESS_SEED", "69"))
 
 PIECE_VALUE = {
     chess.PAWN: 100.0,
@@ -50,4 +53,4 @@ def get_move(fen: str, time_left_ms: int) -> str:
             best = [move]
         elif score == best_score:
             best.append(move)
-    return random.choice(best).uci()
+    return RNG.choice(best).uci()
