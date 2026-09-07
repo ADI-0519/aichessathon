@@ -1,12 +1,24 @@
 from __future__ import annotations
 
+import os
 import time
 
-import chess
-import numpy as np
+# numpy and numba read these when first imported, so they must be set first
+for _pool in (
+    "MKL_NUM_THREADS",
+    "NUMBA_NUM_THREADS",
+    "NUMEXPR_NUM_THREADS",
+    "OMP_NUM_THREADS",
+    "OPENBLAS_NUM_THREADS",
+    "VECLIB_MAXIMUM_THREADS",
+):
+    os.environ[_pool] = "1"
 
-import engine
-import search
+import chess  # noqa: E402
+import numpy as np  # noqa: E402
+
+import engine  # noqa: E402
+import search  # noqa: E402
 
 _memory = search.SearchMemory.create()
 _game_board: chess.Board | None = None

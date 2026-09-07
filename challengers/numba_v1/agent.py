@@ -6,10 +6,22 @@ root submission until the challenger clears the champion promotion gates.
 
 from __future__ import annotations
 
+import os
 import time
 
-import chess
-import numpy as np
+# must be set first because numpy and numba read these when first imported
+for _pool in (
+    "MKL_NUM_THREADS",
+    "NUMBA_NUM_THREADS",
+    "NUMEXPR_NUM_THREADS",
+    "OMP_NUM_THREADS",
+    "OPENBLAS_NUM_THREADS",
+    "VECLIB_MAXIMUM_THREADS",
+):
+    os.environ[_pool] = "1"
+
+import chess  # noqa: E402
+import numpy as np  # noqa: E402
 
 try:
     from . import engine, search
