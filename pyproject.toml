@@ -54,6 +54,11 @@ files = [
     "tools/nnue_features.py",
     "tools/pack_nnue_data.py",
     "tools/train_nnue.py",
+    "tools/halfkp_features.py",
+    "tools/train_halfkp.py",
+    "tools/lift_halfkp.py",
+    "tools/verify_halfkp.py",
+    "tools/prune_halfkp.py",
     "tools/materialize_nnue_blend.py",
     "tools/verify_v5_nnue.py",
 ]
