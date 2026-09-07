@@ -141,19 +141,30 @@ def main() -> None:
     if arguments.no_curated:
         shared.append("--no-curated")
 
+    # Each shard writes straight into its own log rather than into a pipe the
+    # parent drains at exit.  A long run is then inspectable while it is still
+    # going, and a run that is killed keeps the games it already played.
     running = []
+    handles = []
     for offset, limit in _shard_bounds(arguments.positions, arguments.shards):
         command = [sys.executable, "-m", arguments.module, *shared]
         command += ["--offset", str(offset), "--limit", str(limit)]
-        running.append(
-            (offset, subprocess.Popen(command, stdout=subprocess.PIPE, text=True))
+        handle = (arguments.log_dir / f"shard-{offset:03d}.log").open(
+            "w", encoding="utf-8"
         )
+        handles.append(handle)
+        running.append((offset, subprocess.Popen(command, stdout=handle, text=True)))
     print(f"{len(running)} shards over {arguments.positions} positions", flush=True)
 
-    for offset, process in running:
-        stdout, _ = process.communicate()
-        (arguments.log_dir / f"shard-{offset:03d}.log").write_text(stdout)
-        print(f"shard at position {offset} exited {process.returncode}", flush=True)
+    try:
+        for offset, process in running:
+            process.wait()
+            print(
+                f"shard at position {offset} exited {process.returncode}", flush=True
+            )
+    finally:
+        for handle in handles:
+            handle.close()
 
     _aggregate(arguments.log_dir, label)
 
