@@ -52,6 +52,25 @@ This launches a clean interpreter for the baseline, no-LMR, no-qsearch-pruning, 
 extension, and persistent-memory trials. A clean process is required because Numba freezes the
 profile flags when it compiles the recursive search.
 
+For V7, generate an isolated lab rather than modifying the frozen challenger:
+
+```bash
+./.venv/Scripts/python.exe -m tools.materialize_search_lab \
+  --output benchmarks/runs/candidates/v7_search_lab
+
+./.venv/Scripts/python.exe -m tools.search_ablations \
+  --engine-root benchmarks/runs/candidates/v7_search_lab \
+  --suite benchmarks/suites/v5_priority_losses.json \
+  --trials baseline,hce-only,nnue-only,no-lmr,no-null,no-lmr-no-null \
+  --nodes 25000,100000,300000,1000000 \
+  --root-depth 5 \
+  --output benchmarks/diagnostics/v7-priority-mechanisms.json
+```
+
+The generated baseline has the same evaluator and search path as frozen V7. The other profiles
+change exactly one axis except `no-lmr-no-null`, which is an explicit interaction check. These
+positions diagnose mechanisms; they do not estimate Elo.
+
 For a realistic memory comparison, replay the actual rated-game histories. The tool searches each
 earlier position on V3's turns using one persistent TT/history object, follows the historical moves,
 and compares fresh and replayed memory at every critical position:
