@@ -1,11 +1,3 @@
-"""Incremental CPU inference for the team's learned chess evaluator.
-
-The network was trained by this team from Stockfish-labelled positions.  Its
-input is a colour-symmetric 12 x 64 piece-square representation.  Search keeps
-the two 128-value accumulators incrementally, so a leaf evaluation only runs
-the small 256 -> 32 -> 1 dense head.
-"""
-
 from __future__ import annotations
 
 from pathlib import Path
@@ -16,12 +8,26 @@ from numpy.typing import NDArray
 
 import engine
 
-FEATURE_COUNT = 768
+BASE_FEATURE_COUNT = 12 * 64
+KING_BUCKET_COUNT = 16
+FEATURE_COUNT = KING_BUCKET_COUNT * BASE_FEATURE_COUNT
 ACCUMULATOR_SIZE = 128
 HIDDEN_SIZE = 32
-FORMAT_VERSION = 1
+FORMAT_VERSION = 2
 INPUT_SCALE = 2_048
 WEIGHT_SCALE = 2_048
+
+# row carries its bucket after the values (STALE if king left it)
+BUCKET_SLOT = ACCUMULATOR_SIZE
+ACCUMULATOR_ROW = ACCUMULATOR_SIZE + 1
+STALE = -1
+
+
+def _king_bucket(square: int) -> int:
+    return ((square >> 3) >> 1) * 4 + ((square & 7) >> 1)
+
+
+KING_BUCKETS = np.array([_king_bucket(square) for square in range(64)], dtype=np.int32)
 
 
 def _load_model() -> tuple[
@@ -101,8 +107,6 @@ def _load_model() -> tuple[
     OUTPUT_BIAS,
 ) = _load_model()
 
-# Integer inference is both faster and exactly reproducible.  The float arrays
-# remain available for audit and parity testing against the training graph.
 FEATURE_WEIGHTS_Q = np.rint(FEATURE_WEIGHTS * INPUT_SCALE).astype(np.int16)
 ACCUMULATOR_BIAS_Q = np.rint(ACCUMULATOR_BIAS * INPUT_SCALE).astype(np.int32)
 HIDDEN_WEIGHTS_Q = np.rint(HIDDEN_WEIGHTS * WEIGHT_SCALE).astype(np.int16)
@@ -112,42 +116,72 @@ OUTPUT_BIAS_Q = int(np.rint(OUTPUT_BIAS * INPUT_SCALE * WEIGHT_SCALE))
 
 
 @njit(cache=False, inline="always")
-def _oriented_feature(piece: int, square: int) -> int:
+def _oriented_base(piece: int, square: int) -> int:
     swapped_piece = (piece + engine.PIECE_KIND_COUNT) % engine.PIECE_BITBOARD_COUNT
     return swapped_piece * 64 + (square ^ 56)
 
 
-def _oriented_feature_reference(piece: int, square: int) -> int:
+def _oriented_base_reference(piece: int, square: int) -> int:
     swapped_piece = (piece + engine.PIECE_KIND_COUNT) % engine.PIECE_BITBOARD_COUNT
     return swapped_piece * 64 + (square ^ 56)
 
 
 @njit(cache=False, inline="always")
+def white_bucket_of(pieces: NDArray[np.uint64]) -> int:
+    square = engine.lsb_square(pieces[engine.piece_index(engine.WHITE, engine.KING)])
+    return int(KING_BUCKETS[square])
+
+
+@njit(cache=False, inline="always")
+def black_bucket_of(pieces: NDArray[np.uint64]) -> int:
+    square = engine.lsb_square(pieces[engine.piece_index(engine.BLACK, engine.KING)])
+    return int(KING_BUCKETS[square ^ 56])
+
+
+@njit(cache=False, inline="always")
 def _apply_feature(
-    accumulators: NDArray[np.int32], piece: int, square: int, sign: int
+    accumulators: NDArray[np.int32],
+    piece: int,
+    square: int,
+    sign: int,
+    white_bucket: int,
+    black_bucket: int,
 ) -> None:
-    white_feature = piece * 64 + square
-    black_feature = _oriented_feature(piece, square)
+    white_feature = white_bucket * BASE_FEATURE_COUNT + piece * 64 + square
+    black_feature = black_bucket * BASE_FEATURE_COUNT + _oriented_base(piece, square)
     for column in range(ACCUMULATOR_SIZE):
         accumulators[0, column] += sign * FEATURE_WEIGHTS_Q[white_feature, column]
         accumulators[1, column] += sign * FEATURE_WEIGHTS_Q[black_feature, column]
 
 
 @njit(cache=False)
-def rebuild(
-    pieces: NDArray[np.uint64], accumulators: NDArray[np.int32]
+def rebuild_perspective(
+    pieces: NDArray[np.uint64],
+    accumulators: NDArray[np.int32],
+    perspective: int,
+    bucket: int,
 ) -> None:
-    """Rebuild white- and black-perspective accumulators from a position."""
-    for perspective in range(2):
-        for column in range(ACCUMULATOR_SIZE):
-            accumulators[perspective, column] = ACCUMULATOR_BIAS_Q[column]
-
+    for column in range(ACCUMULATOR_SIZE):
+        accumulators[perspective, column] = ACCUMULATOR_BIAS_Q[column]
+    offset = bucket * BASE_FEATURE_COUNT
     for piece in range(engine.PIECE_BITBOARD_COUNT):
         occupied = pieces[piece]
         while occupied:
             square = engine.lsb_square(occupied)
             occupied ^= engine.bit(square)
-            _apply_feature(accumulators, piece, square, 1)
+            if perspective == 0:
+                feature = offset + piece * 64 + square
+            else:
+                feature = offset + _oriented_base(piece, square)
+            for column in range(ACCUMULATOR_SIZE):
+                accumulators[perspective, column] += FEATURE_WEIGHTS_Q[feature, column]
+    accumulators[perspective, BUCKET_SLOT] = bucket
+
+
+@njit(cache=False)
+def rebuild(pieces: NDArray[np.uint64], accumulators: NDArray[np.int32]) -> None:
+    rebuild_perspective(pieces, accumulators, 0, white_bucket_of(pieces))
+    rebuild_perspective(pieces, accumulators, 1, black_bucket_of(pieces))
 
 
 @njit(cache=False)
@@ -158,10 +192,12 @@ def update_for_move(
     parent: NDArray[np.int32],
     child: NDArray[np.int32],
 ) -> None:
-    """Derive a child accumulator from the board immediately before ``move``."""
     for perspective in range(2):
-        for column in range(ACCUMULATOR_SIZE):
+        for column in range(ACCUMULATOR_ROW):
             child[perspective, column] = parent[perspective, column]
+
+    white_bucket = int(parent[0, BUCKET_SLOT])
+    black_bucket = int(parent[1, BUCKET_SLOT])
 
     side = int(state[engine.STATE_SIDE])
     enemy = engine.BLACK if side == engine.WHITE else engine.WHITE
@@ -174,12 +210,12 @@ def update_for_move(
         side * engine.PIECE_KIND_COUNT,
         (side + 1) * engine.PIECE_KIND_COUNT,
     )
-    _apply_feature(child, moving_piece, from_square, -1)
+    _apply_feature(child, moving_piece, from_square, -1, white_bucket, black_bucket)
 
     placed_piece = moving_piece
     if flags & engine.FLAG_PROMOTION:
         placed_piece = engine.piece_index(side, engine.move_promotion(move))
-    _apply_feature(child, placed_piece, to_square, 1)
+    _apply_feature(child, placed_piece, to_square, 1, white_bucket, black_bucket)
 
     captured_square = to_square
     if flags & engine.FLAG_EN_PASSANT:
@@ -191,7 +227,9 @@ def update_for_move(
         (enemy + 1) * engine.PIECE_KIND_COUNT,
     )
     if captured_piece != engine.NO_PIECE:
-        _apply_feature(child, captured_piece, captured_square, -1)
+        _apply_feature(
+            child, captured_piece, captured_square, -1, white_bucket, black_bucket
+        )
 
     if flags & engine.FLAG_CASTLING:
         rook_piece = engine.piece_index(side, engine.ROOK)
@@ -203,8 +241,17 @@ def update_for_move(
             rook_from, rook_to = engine.H8, engine.F8
         else:
             rook_from, rook_to = engine.A8, engine.D8
-        _apply_feature(child, rook_piece, rook_from, -1)
-        _apply_feature(child, rook_piece, rook_to, 1)
+        _apply_feature(child, rook_piece, rook_from, -1, white_bucket, black_bucket)
+        _apply_feature(child, rook_piece, rook_to, 1, white_bucket, black_bucket)
+
+    # king leaving its region invalidates perspective's whole row
+    if moving_piece == engine.piece_index(side, engine.KING):
+        if side == engine.WHITE:
+            if int(KING_BUCKETS[to_square]) != white_bucket:
+                child[0, BUCKET_SLOT] = STALE
+        else:
+            if int(KING_BUCKETS[to_square ^ 56]) != black_bucket:
+                child[1, BUCKET_SLOT] = STALE
 
 
 @njit(cache=False, inline="always")
@@ -215,8 +262,18 @@ def _round_divide(value: int, divisor: int) -> int:
 
 
 @njit(cache=False)
-def evaluate(accumulators: NDArray[np.int32], side: int) -> int:
-    """Evaluate from the side-to-move perspective in centipawns."""
+def refresh(pieces: NDArray[np.uint64], accumulators: NDArray[np.int32]) -> None:
+    if accumulators[0, BUCKET_SLOT] == STALE:
+        rebuild_perspective(pieces, accumulators, 0, white_bucket_of(pieces))
+    if accumulators[1, BUCKET_SLOT] == STALE:
+        rebuild_perspective(pieces, accumulators, 1, black_bucket_of(pieces))
+
+
+@njit(cache=False)
+def evaluate(
+    pieces: NDArray[np.uint64], accumulators: NDArray[np.int32], side: int
+) -> int:
+    refresh(pieces, accumulators)
     own = side
     opponent = engine.BLACK if side == engine.WHITE else engine.WHITE
     output = OUTPUT_BIAS_Q
@@ -224,35 +281,22 @@ def evaluate(accumulators: NDArray[np.int32], side: int) -> int:
         value = int(HIDDEN_BIAS_Q[unit])
         for column in range(ACCUMULATOR_SIZE):
             own_value = min(INPUT_SCALE, max(0, int(accumulators[own, column])))
-            opponent_value = min(
-                INPUT_SCALE, max(0, int(accumulators[opponent, column]))
-            )
+            opponent_value = min(INPUT_SCALE, max(0, int(accumulators[opponent, column])))
             value += int(HIDDEN_WEIGHTS_Q[unit, column]) * own_value
             value += (
-                int(HIDDEN_WEIGHTS_Q[unit, ACCUMULATOR_SIZE + column])
-                * opponent_value
+                int(HIDDEN_WEIGHTS_Q[unit, ACCUMULATOR_SIZE + column]) * opponent_value
             )
-        hidden = min(
-            INPUT_SCALE, max(0, _round_divide(value, WEIGHT_SCALE))
-        )
+        hidden = min(INPUT_SCALE, max(0, _round_divide(value, WEIGHT_SCALE)))
         output += int(OUTPUT_WEIGHTS_Q[0, unit]) * hidden
     scaled_output = output * int(CP_SCALE)
     return _round_divide(scaled_output, INPUT_SCALE * WEIGHT_SCALE)
 
 
-@njit(cache=False)
-def benchmark_evaluations(
-    accumulators: NDArray[np.int32], iterations: int
-) -> int:
-    """Run the dense head in compiled code and return a live checksum."""
-    checksum = 0
-    for index in range(iterations):
-        checksum += evaluate(accumulators, index & 1)
-    return checksum
-
-
 def evaluate_reference(pieces: NDArray[np.uint64], side: int) -> float:
-    """Readable NumPy reference used only by development parity tests."""
+    white_square = int(np.log2(int(pieces[engine.piece_index(engine.WHITE, engine.KING)])))
+    black_square = int(np.log2(int(pieces[engine.piece_index(engine.BLACK, engine.KING)])))
+    white_offset = int(KING_BUCKETS[white_square]) * BASE_FEATURE_COUNT
+    black_offset = int(KING_BUCKETS[black_square ^ 56]) * BASE_FEATURE_COUNT
     accumulators = np.repeat(ACCUMULATOR_BIAS[None, :], 2, axis=0)
     for piece in range(engine.PIECE_BITBOARD_COUNT):
         occupied = int(pieces[piece])
@@ -260,9 +304,9 @@ def evaluate_reference(pieces: NDArray[np.uint64], side: int) -> float:
             least_bit = occupied & -occupied
             square = least_bit.bit_length() - 1
             occupied ^= least_bit
-            accumulators[0] += FEATURE_WEIGHTS[piece * 64 + square]
+            accumulators[0] += FEATURE_WEIGHTS[white_offset + piece * 64 + square]
             accumulators[1] += FEATURE_WEIGHTS[
-                _oriented_feature_reference(piece, square)
+                black_offset + _oriented_base_reference(piece, square)
             ]
     own = side
     opponent = engine.BLACK if side == engine.WHITE else engine.WHITE
@@ -271,9 +315,21 @@ def evaluate_reference(pieces: NDArray[np.uint64], side: int) -> float:
     return float((OUTPUT_WEIGHTS @ hidden)[0] + OUTPUT_BIAS) * CP_SCALE
 
 
+@njit(cache=False)
+def benchmark_evaluations(
+    pieces: NDArray[np.uint64], accumulators: NDArray[np.int32], iterations: int
+) -> int:
+    checksum = 0
+    for index in range(iterations):
+        checksum += evaluate(pieces, accumulators, index & 1)
+    return checksum
+
+
 def warmup() -> None:
-    """Compile every inference path during the platform's init allowance."""
     pieces = np.zeros(engine.PIECE_BITBOARD_COUNT, dtype=np.uint64)
-    accumulators = np.empty((2, ACCUMULATOR_SIZE), dtype=np.int32)
+    pieces[engine.piece_index(engine.WHITE, engine.KING)] = np.uint64(1)
+    pieces[engine.piece_index(engine.BLACK, engine.KING)] = np.uint64(1) << np.uint64(63)
+    accumulators = np.empty((2, ACCUMULATOR_ROW), dtype=np.int32)
     rebuild(pieces, accumulators)
-    evaluate(accumulators, engine.WHITE)
+    refresh(pieces, accumulators)
+    evaluate(pieces, accumulators, engine.WHITE)

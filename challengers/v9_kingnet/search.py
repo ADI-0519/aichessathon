@@ -256,7 +256,7 @@ def evaluate(
     """Blend V4's static evaluator with the team's learned evaluator."""
     if NNUE_BLEND <= 0:
         return handcrafted_evaluate(pieces, state)
-    learned = nnue.evaluate(accumulators, int(state[engine.STATE_SIDE]))
+    learned = nnue.evaluate(pieces, accumulators, int(state[engine.STATE_SIDE]))
     if NNUE_BLEND >= 100:
         return learned
     handcrafted = handcrafted_evaluate(pieces, state)
@@ -855,7 +855,7 @@ def _negamax(
         and evaluate(pieces, state, accumulator_stack[ply]) >= beta
     ):
         for perspective in range(2):
-            for column in range(nnue.ACCUMULATOR_SIZE):
+            for column in range(nnue.ACCUMULATOR_ROW):
                 accumulator_stack[ply + 1, perspective, column] = accumulator_stack[
                     ply, perspective, column
                 ]
@@ -1321,7 +1321,7 @@ def search_position(
     undo_stack = np.empty((MAX_PLY, engine.UNDO_SIZE), dtype=np.int64)
     undo_key_stack = np.empty((MAX_PLY, 1), dtype=np.uint64)
     accumulator_stack = np.empty(
-        (MAX_PLY, 2, nnue.ACCUMULATOR_SIZE), dtype=np.int32
+        (MAX_PLY, 2, nnue.ACCUMULATOR_ROW), dtype=np.int32
     )
     nnue.rebuild(working.pieces, accumulator_stack[0])
     score_stack = np.empty((MAX_PLY, engine.MAX_MOVES), dtype=np.int32)
