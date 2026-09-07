@@ -492,6 +492,119 @@ Each `--limit 20` run is 20 opening pairs (40 games). Re-running the same comman
 append-only journal. Stop immediately and investigate if the candidate records any technical
 failure; compare paired scores and confidence intervals only after all three runs finish.
 
+### Train and gate the V6 king-conditioned evaluator
+
+V6 is an isolated evaluator experiment built on the exact V5 search and 50% blend. It conditions
+each piece-square feature on the friendly king square, starts from an exact lift of the proven V5
+network, and keeps the V5 checkpoint if training does not improve held-out loss. The existing
+four-million-position V5 arrays are reused; do not repack them.
+
+Train on a CUDA machine with the repository's training environment. This writes an approximately
+25 MiB integer-only model and a provenance manifest:
+
+```bash
+TRAIN_PY="./.venv-training/Scripts/python.exe"
+
+"$TRAIN_PY" -m tools.train_halfkp \
+  --train benchmarks/runs/nnue-v1/train-4m.npy \
+  --validation benchmarks/runs/nnue-v1/validation-500k.npy \
+  --initial-model challengers/v5_nnue/weights/model.npz \
+  --output benchmarks/runs/v6-halfkp-full/model.npz \
+  --manifest benchmarks/runs/v6-halfkp-full/manifest.json \
+  --accumulator 256 \
+  --hidden 32 \
+  --epochs 6 \
+  --batch-size 8192 \
+  --learning-rate 0.0001 \
+  --freeze-dense-epochs 2 \
+  --device cuda
+```
+
+For Colab, select a GPU runtime and keep its CUDA-enabled PyTorch installation. Install only the
+missing data dependencies; installing this project or its CPU PyTorch pin would disable the GPU.
+Copy the two packed arrays to the clone, run the command above with `python`, and save both the
+model and manifest to Drive before ending the runtime.
+
+Inspect the manifest first. If its `best_epoch` is greater than zero, copy the selected artifact
+into the isolated candidate, then verify the trained runtime before playing any games:
+
+```bash
+PY="./.venv/Scripts/python.exe"
+
+cp benchmarks/runs/v6-halfkp-full/model.npz \
+  challengers/v6_halfkp/weights/model.npz
+
+"$PY" -m tools.verify_halfkp \
+  --candidate challengers/v6_halfkp \
+  --random-plies 500 \
+  --benchmark-iterations 100000
+```
+
+If the selected epoch predates dense-head unfreezing, its added channels may be disconnected. The
+exact pruner checks that every removed outgoing connection is zero and refuses an approximate
+transformation:
+
+```bash
+"$PY" -m tools.prune_halfkp \
+  --source benchmarks/runs/v6-halfkp-full/model.npz \
+  --output benchmarks/runs/v6-halfkp-pruned-128/model.npz \
+  --manifest benchmarks/runs/v6-halfkp-pruned-128/manifest.json \
+  --accumulator 128
+```
+
+Maximum feature and incremental errors must be exactly zero. Next run a two-pair technical smoke,
+then 20 development pairs against frozen V5. Only a technically clean candidate with encouraging
+development evidence advances to a larger match; offline validation loss alone never promotes it.
+
+```bash
+"$PY" -m tools.backtest \
+  --candidate challengers/v6_halfkp \
+  --opponent challengers/v5_nnue \
+  --suite benchmarks/suites/openings_8moves_v3_500.epd \
+  --split development \
+  --limit 2 \
+  --base-ms 10000 \
+  --increment-ms 100 \
+  --output benchmarks/runs/v6-halfkp-vs-v5-smoke
+
+"$PY" -m tools.backtest \
+  --candidate challengers/v6_halfkp \
+  --opponent challengers/v5_nnue \
+  --suite benchmarks/suites/openings_8moves_v3_500.epd \
+  --split development \
+  --limit 20 \
+  --base-ms 10000 \
+  --increment-ms 100 \
+  --output benchmarks/runs/v6-halfkp-vs-v5-development-20
+```
+
+The generated V6 weight is ignored by Git while it is an untrained scaffold. Remove that one
+ignore rule and commit the model only after the trained artifact passes the gates. Detailed design
+and verification notes live in `challengers/v6_halfkp/README.md`.
+
+### Test the stable-timeout and continuous-clock challengers
+
+Keep search changes isolated from clock changes. The continuous-clock candidate is compared with
+the stable-timeout candidate, not with V5, because both already contain the completed-iteration
+repair:
+
+```bash
+"$PY" -m tools.backtest \
+  --candidate challengers/v7_continuous_time \
+  --opponent challengers/v6_stable_timeout \
+  --suite benchmarks/suites/openings_8moves_v3_500.epd \
+  --split development \
+  --limit 20 \
+  --base-ms 10000 \
+  --increment-ms 100 \
+  --output benchmarks/runs/v7-continuous-time-vs-v6-stable-development-20
+```
+
+The relevant rated-loss regressions are
+`benchmarks/suites/v5_round46_47_losses.json` and
+`benchmarks/suites/v5_round48_loss.json`. Fixed-node diagnostics explain whether a changed move is
+caused by search rather than by the clock policy; paired games remain the promotion authority.
+
 ### Build and verify a versioned submission
 
 Package the current working tree with the harness:

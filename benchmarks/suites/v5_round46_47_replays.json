@@ -1,0 +1,32 @@
+{
+  "schema_version": 1,
+  "description": "Rated-game histories used to reproduce V5 memory state before the first major errors in rounds 46 and 47.",
+  "games": [
+    {
+      "id": "round46-elbow-grease",
+      "initial_fen": "r1bqk2r/ppp2ppp/2np1n2/2b1p3/P1B1P3/2PP1N2/1P3PPP/RNBQK2R b KQkq - 0 6",
+      "engine_color": "white",
+      "targets": [
+        {"case_id": "round46-20-be2", "fullmove": 20}
+      ],
+      "moves": [
+        "c5b6", "b2b4", "a7a6", "e1g1", "e8g8", "b1d2", "c6e7",
+        "a4a5", "b6a7", "f1e1", "e7g6", "d3d4", "e5d4", "c3d4",
+        "c7c6", "d1b3", "d6d5", "c4d3", "d5e4", "d2e4", "c8e6",
+        "b3c3", "g6h4", "e4g5", "h4f3", "g5f3", "e6g4", "c1e3"
+      ]
+    },
+    {
+      "id": "round47-keep-kann-and-caro-on",
+      "initial_fen": "r1bqk2r/ppp1bppp/2n5/3np3/P1B5/3P1N2/1PP2PPP/RNBQ1RK1 b kq - 1 7",
+      "engine_color": "black",
+      "targets": [
+        {"case_id": "round47-11-nd4", "fullmove": 11}
+      ],
+      "moves": [
+        "e8g8", "f1e1", "c8g4", "h2h3", "g4f3", "d1f3", "d5b6",
+        "c4b3", "d8d7"
+      ]
+    }
+  ]
+}

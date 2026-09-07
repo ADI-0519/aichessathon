@@ -190,3 +190,186 @@ completed in 35.0 seconds and the first move incurred no deferred compilation. N
 506 positions, focused unit tests, lint, and configured strict type checking all still pass. The
 phase hypothesis therefore needs a fresh timed match; the initialization failure is not a loss to
 V5 and must not be included in its chess score.
+
+## V6 king-conditioned track
+
+The two remaining validation failures stayed wrong at one million nodes: V5 still missed `h6` in
+the connected-pawn ending and still chose the wrong rook instead of `Rac1`. Search depth alone is
+therefore not the general fix. The next high-upside evaluator conditions every oriented
+piece-square on the friendly king square. Both kings remain in the sparse piece set, yielding
+49,152 possible features and preserving king-to-king geometry.
+
+The implementation starts from an exact lift of V5 into every king bucket. Its 256-wide
+accumulator reserves the first 128 channels for V5. The new feature channels start with small
+random values but their outgoing dense columns start at zero, so epoch zero is exactly V5 while
+the extra capacity can still receive gradients once the dense head is unfrozen. Training retains
+the V5 checkpoint if validation probability loss never improves. SparseAdam updates the large
+embedding while AdamW updates only the small dense portion.
+
+The runtime export contains int16/int32 weights rather than redundant float arrays. The untrained
+256-wide scaffold is 25,202,450 bytes. Across 507 deterministic and random positions, Python and
+Numba features matched exactly, incremental updates matched full rebuilds exactly, and the maximum
+fixed-point/reference difference was 0.66 cp. The verifier covers castling, en passant, promotion,
+ordinary captures, king moves, and king captures.
+
+On the pinned 200,000-node position, exact V5 searched 201,309 nodes/second and the lifted V6
+runtime searched 166,340 nodes/second, retaining 82.6% of throughput. Both completed depth seven
+with `Qxc2` and a +19 cp score, confirming fixed-node equivalence before training. Import completed
+in 33.8 seconds locally and the first move incurred no deferred compilation. These results clear
+the implementation gate, not the strength gate: only the team-trained export and timed games can
+promote the candidate.
+
+### First full V6 training result
+
+The first full run trained on 4,000,000 positions and evaluated on the disjoint 456,556-position
+validation set using an RTX 3060. Relative to the exact V5 lift, the selected epoch two reduced
+validation probability MSE from 0.00819139 to 0.00791476, a 3.38% improvement. Validation MAE fell
+from 176.87 to 173.46 cp and RMSE from 347.81 to 343.03 cp. Epochs three through six continued to
+improve centipawn MAE and RMSE but gradually worsened probability MSE, while training loss kept
+falling. The protected checkpoint therefore correctly exported epoch two rather than the final
+epoch. The selected integer model has SHA-256
+`170c72639f2da8581bb5e8002f8e712fc3e414538d2a79810d4d2877fa0d686a`.
+
+The trained artifact passed the 507-position runtime verifier with zero feature or incremental
+errors and a maximum fixed-point/reference difference of 0.64 cp. At 100,000 nodes, V5 and V6 both
+found the deeper `Kg8` and `Ra5` corrections. Neither found `h6` or `Rac1`; V6 also selected the
+played `Rfc8` error where V5 selected `dxc4`. The targeted regression pack therefore does not show
+a net tactical/strategic cure, despite the broad offline improvement.
+
+A one-pair technical smoke against exact V5 finished with one V6 win and one draw, no crashes,
+flags, or illegal moves. That result clears the technical gate but is far too small for a strength
+claim. The next authority is the pinned 20-pair development match against V5. More epochs, more
+data, or hard-position fine-tuning must wait for that result; otherwise training changes and model
+strength would be confounded.
+
+Because epoch two was selected while the dense head was still frozen, all outgoing connections
+from accumulator channels 129-256 are exactly zero. Those channels cannot affect the selected
+model even though their sparse feature values are non-zero. `tools.prune_halfkp` verified that
+condition and produced an exact 128-wide graph with hash
+`47697ccf3bae83e9ad8ad5389cb831c2ba87d8af0abfd6f06bf384322bacb4f7`, reducing the model from
+25,202,450 to 12,602,642 bytes. This is lossless structural pruning, not approximate magnitude
+pruning. Runtime and fixed-node throughput were measured only after the active 256-wide arena
+completed, avoiding clock contention.
+
+### V6 development result and rejection
+
+The 256-wide trained V6 completed 20 development pairs against exact V5 at 10 seconds plus 100 ms.
+It scored 7 wins, 14 draws, and 19 losses: 35.0%, approximately -108 Elo, with no technical
+failures. By colour it scored 30.0% as White and 40.0% as Black. The pentanomial distribution was
+three 0-point pairs, eight 0.5-point pairs, seven split pairs, two 1.5-point pairs, and no 2-point
+pairs. Equivalently, V6 lost 11 non-split opening pairs and won two; a two-sided sign test on those
+13 pairs is approximately 0.022. The build is rejected even though the backtest's deliberately
+conservative 95% score interval includes 50%.
+
+All 40 games ended normally: 26 checkmates, ten threefold repetitions, three insufficient-material
+draws, and one fifty-move draw. The failure is chess strength, not initialization, legality, or
+clock reliability. V6 differed from V5 on the first move in only seven of 20 openings, so the loss
+cannot be explained solely by unlucky initial choices. In the three double-loss pairs, offline
+Stockfish analysis found repeated medium and large positional errors rather than one common crash
+motif; examples include `Bd3`, `...Be6`, `Ne4`, `...Qc7`, `g5`, and early `...Rc8`.
+
+The corrected 128-wide exact-pruned candidate passes the same 507-position verifier with zero
+feature and incremental errors, the same live checksum, and the same 0.64 cp fixed-point bound.
+Dense evaluation rises from roughly 477,000 to 1,011,000 calls/second. Across the five 100,000-node
+regression probes it reduced aggregate search time from 2.783 to 2.266 seconds, an approximately
+22.8% throughput gain over 256-wide V6, while producing identical nodes, scores, and moves. It is
+still about 14.7% slower than V5 on those probes. This candidate remains unproven and must be
+tested independently; it does not erase the 256-wide rejection.
+
+The 128-wide full-agent smoke completed two development pairs with zero technical failures. It
+scored three draws and one loss (37.5%), reproducing the same pair scores as 256-wide V6 on those
+two openings. This is sufficient for runtime safety but provides no strength evidence. The next
+bounded test is positions three through ten, which completes a ten-pair screen without spending
+another hour on a candidate derived from a clearly rejected parent.
+
+That ten-pair screen is now complete. Across the smoke and positions three through ten, the
+128-wide candidate scored five wins, ten draws, and five losses: exactly 50.0%, with zero technical
+or opponent failures. It scored 60.0% as White and 40.0% as Black. The pair distribution was four
+0.5-point pairs, three split pairs, two 1.5-point pairs, and one 2-point pair, with no double-loss
+pairs. The conservative pair-level 95% score interval remains very wide at 23.7%-76.3% (about
+-204 to +204 Elo), so parity is not established.
+
+The 256-wide candidate scored 37.5% on these same first ten openings. The pruned build improved
+five pair scores, worsened one, and left four unchanged, gaining 2.5 game points in total. Most
+games began with the same candidate move, so the difference is consistent with the 128-wide
+runtime reaching different later search frontiers rather than a changed evaluator: pruning is
+mathematically exact. This rescues the compact candidate from immediate rejection, but it does not
+override the full 256-wide 20-pair loss or fix the new round-46 regression. Positions 11-20 are the
+next strength gate if spare compute is available; the isolated stable-timeout experiment remains
+the higher-priority local test.
+
+### Rated rounds 43-47
+
+V5 won rounds 43-45 and lost rounds 46-47, but the three wins were not clean strength evidence.
+At 100,000 Stockfish 18 nodes per move, round 44 included an approximately 114 cp `fxe5` error
+before an opponent blunder reversed the game. Round 43 was converted after the opponent's major
+errors, while the 104-move round 45 win repeatedly leaked evaluation in a winning position. The
+common signal remains unstable positional play rather than a legality, clock, or initialization
+failure.
+
+The first major round-46 error is `20.Be3` instead of `20.Be2`, an approximately 109 cp loss that
+allows `...Bxf3` and damages the king shelter. Fresh V5 searches still choose `Be3` at 25,000,
+100,000, 300,000, and one million nodes. A faithful fixed-node game replay also chooses `Be3`, and
+the trained 128-wide HalfKP candidate chooses it through 300,000 nodes. This is an evaluator or
+search-selectivity blind spot; more time and the rejected HalfKP model do not fix it.
+
+Round 47 has a different cause. The rated `11...Qd7` instead of `11...Nd4` loses approximately
+150 cp. An exact wall-clock replay reproduced every V5 move through `...Qd7` using the PGN clocks:
+the target search stopped after about 829,000 nodes with depth eight complete. Isolating state at
+that position showed that full persistent TT plus quiet history returned `Qd7`, while TT-only and
+history-only runs both returned `Nd4`; a fresh run returned `Nbd7`. Capping the persistent search
+at its last completed depth also returned `Nd4` after about 301,000 nodes. V5 currently promotes a
+root move that raised alpha in an incomplete deeper iteration when the timer fires. Persistent
+ordering can therefore turn a sound completed result into an unstable partial result.
+
+The next search challenger should change only this timeout policy: preserve the move from the last
+fully completed iteration and discard partial-depth candidates. It should retain the TT and quiet
+history initially, because neither table alone reproduced the blunder. The round-46 and round-47
+positions are checked in as `benchmarks/suites/v5_round46_47_losses.json`, with their exact game
+histories in `benchmarks/suites/v5_round46_47_replays.json`. This surgical challenger takes
+priority over further HalfKP training.
+
+`challengers/v6_stable_timeout` implements exactly that change. Its agent, board implementation,
+NNUE runtime, and model artifact hash-identically match V5; only the two interrupted-root branches
+in `search_position` differ. In an exact rated-clock replay it reproduced V5's first four round-47
+moves (`O-O`, `Bg4`, `Bxf3`, and `Nb6`) and then returned `Nd4` rather than `Qd7`, retaining the
+same 3,669 ms budget, completed depth eight, -37 cp internal score, and persistent game state.
+Ruff, standalone strict mypy, compilation, and the replay all pass. This establishes mechanism and
+correctness, not Elo; paired games against frozen V5 are still required.
+
+The two-pair technical smoke against exact V5 completed normally with two wins, one draw, and one
+loss (62.5%). There were no candidate or opponent failures; three games ended by checkmate and one
+by threefold repetition. The first pair remained identical through White's `Qc2`, after which the
+stable challenger selected `...Bd6` while V5 selected `...Be7`; the challenger eventually won as
+Black. In the second pair both games remained identical through `...Ndf6`, after which stable
+timeout selected `O-O` while V5 selected `Ngf3`; that pair split one win each. This clears the
+technical smoke gate but four games carry essentially no Elo confidence.
+
+The remaining 18 development pairs also completed with no technical failures: 12 wins, 14 draws,
+and ten losses (52.8%, about +19 Elo). Combined with the smoke, stable timeout scored 14 wins, 15
+draws, and 11 losses over 20 pairs: 53.75%, about +26 Elo. The combined pentanomial distribution
+was one 0-point pair, four 0.5-point pairs, seven split pairs, seven 1.5-point pairs, and one 2-point
+pair. The pair-level 95% score interval is still broad (roughly 33%-73%), so this is evidence of
+non-regression rather than proof of an Elo gain. Together with the exact round-47 repair and zero
+failures, it promotes stable timeout to the development baseline; it does not yet justify a rated
+upload by itself.
+
+### Rated round 48 and continuous time management
+
+Round 48 exposes a separate failure. V5 entered move 49 with approximately 41.5 seconds and an
+equal ending, but the discontinuous clock policy allocated only 1.24 seconds. It completed depth
+ten and played `49...Kg8`; independent Stockfish 18 analysis at 100,000 nodes identifies
+`49...Kh7`, and the played move loses by force. The stable-timeout build also chooses `Kg8` when
+capped at completed depth ten, so discarding incomplete iterations cannot repair this case.
+
+The unchanged search chooses `Kh7` at depth 12 when allowed one million nodes. A wall-clock probe
+at the budget assigned by the new policy reached depth 12 after about 931,000 nodes and also chose
+`Kh7`. The position is preserved in `benchmarks/suites/v5_round48_loss.json`.
+
+`challengers/v7_continuous_time` changes only time allocation on top of stable timeout. It removes
+the 60-second and 10-second cliffs, reserves a bounded amount of clock, estimates fewer remaining
+decisions later in the game, and credits only part of the increment. At the round-48 position it
+allocates 3.35 seconds instead of V5's 1.24 seconds. Simulations through 150 decisions retain a
+positive reserve at both the official 120+0.5 control and the 10+0.1 development control. This is
+a targeted attempt to convert the large unused clocks seen in recent rated losses into completed
+search depth; paired testing against exact stable timeout is still required before promotion.
