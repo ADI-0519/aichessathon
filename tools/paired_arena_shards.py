@@ -78,7 +78,7 @@ def main() -> None:
     parser = argparse.ArgumentParser(
         description="run one paired arena as disjoint shards and aggregate the result"
     )
-    parser.add_argument("--candidate", type=Path, default=Path("."))
+    parser.add_argument("--candidate", type=Path, default=Path("current"))
     parser.add_argument("--opponent", type=Path)
     parser.add_argument("--base-ms", type=int, default=10_000)
     parser.add_argument("--increment-ms", type=int, default=100)
