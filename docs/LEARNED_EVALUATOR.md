@@ -372,4 +372,56 @@ decisions later in the game, and credits only part of the increment. At the roun
 allocates 3.35 seconds instead of V5's 1.24 seconds. Simulations through 150 decisions retain a
 positive reserve at both the official 120+0.5 control and the 10+0.1 development control. This is
 a targeted attempt to convert the large unused clocks seen in recent rated losses into completed
-search depth; paired testing against exact stable timeout is still required before promotion.
+search depth.
+
+V7 completed 20 development pairs against exact stable timeout with 20 wins, 12 draws, and eight
+losses: 65.0%, approximately +108 Elo, with no failures on either side. It scored 60.0% as White
+and 70.0% as Black. The pentanomial distribution was four 0.5-point pairs, five split pairs, six
+1.5-point pairs, and five 2-point pairs, with no double-loss pairs. The conservative pair-level
+95% interval remains broad at approximately 43.3%-81.9% (-47 to +262 Elo), but this clears the
+directional development gate decisively enough to advance V7 unchanged to the independent
+validation split.
+
+### Rated rounds 49-50
+
+Round 49 was a win for AIY, not a loss, but it was opponent-assisted. V5's `17.Qb3` lost about 90
+cp and `18.Qc4` another 50 cp before Invictus returned roughly 187 cp with `...Rb5`. The eventual
+attack and mating conversion were sound, but the result should not be counted as evidence of clean
+positional play.
+
+Round 50 was a loss and contained three useful Black regressions. After White's `35.Rg4` error,
+V5 had an advantage of roughly three pawns but immediately returned most of it with `35...Rff7`
+instead of `35...Qd7`, a roughly 239 cp error. It later played `44...Qc4` instead of `44...b4`,
+losing about 161 cp, and `81...Qh1` instead of `81...Qd6+`, changing equality into a clear
+disadvantage. Black retained approximately 54, 45, and 26 seconds around these decisions while
+V5 spent only about 1.6, 1.4, and 0.9 seconds. The positions are preserved in
+`benchmarks/suites/v5_round50_loss.json`.
+
+Fresh fixed-node search separates their mechanisms. The `...b4` correction appears at one million
+nodes and `...Qd6+` appears by 100,000 nodes, so additional completed depth and stable timeout can
+plausibly repair them. The `...Qd7` correction does not appear at one million nodes; it is the next
+evaluation/selectivity investigation and must not be assumed fixed by V7.
+
+At five million nodes the unchanged 50% blend eventually reaches depth 12 and selects `...Qd7`,
+but requires about 22.4 seconds on the development machine. The handcrafted evaluator selects it
+at depth nine and one million nodes in about 3.9 seconds. The learned blend is therefore delaying
+rather than permanently preventing the correction, but ordinary V7 allocation cannot be expected
+to bridge that full gap.
+
+### V8 strategic-residual experiment
+
+The original 20,000 Stockfish-labelled positions were reproducibly rebased onto the exact V5-50
+static evaluator without changing teacher scores, split assignments, or feature vectors. The V5
+fingerprint is recorded in the generated manifest. A fresh ridge fit selected ridge 10 and reduced
+validation residual RMSE from 267.6 to 204.0 cp and MAE from 182.5 to 149.2 cp. The compiled
+24-channel evaluator matched the Python feature model exactly on all 20,000 positions with zero
+centipawn difference. It includes mobility, king pressure, hanging pieces, safe space, rook
+activity, blocked passers, outposts, and king-file exposure.
+
+That strong static result did not survive search. At one million nodes V8 failed all three round-50
+reference moves and changed several choices in new directions. In the pre-declared two-pair smoke
+against exact stable timeout it lost the first paired opening with both colours and then lost the
+first game of the second pair. The fourth game was stopped because even a win would cap the smoke
+at 25%. All three completed games ended normally with no technical failure. The full-strength V8
+residual is rejected and must not be merged into V7. The rebasing and parity tools remain useful
+for future scaled or feature-ablated experiments, but offline RMSE is not promotion evidence.

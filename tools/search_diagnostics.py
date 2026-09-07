@@ -106,11 +106,18 @@ def load_engine_modules(root: Path) -> tuple[Any, Any]:
     # correct after the aliases are restored.
     previous_engine = sys.modules.get("engine")
     previous_nnue = sys.modules.get("nnue")
+    previous_residual = sys.modules.get("residual")
     sys.modules["engine"] = engine_module
     try:
         if nnue_path.is_file():
             nnue_module = _module_from_path(f"_diagnostic_nnue_{token}", nnue_path)
             sys.modules["nnue"] = nnue_module
+        residual_path = resolved / "residual.py"
+        if residual_path.is_file():
+            residual_module = _module_from_path(
+                f"_diagnostic_residual_{token}", residual_path
+            )
+            sys.modules["residual"] = residual_module
         search_module = _module_from_path(f"_diagnostic_search_{token}", search_path)
     finally:
         if previous_engine is None:
@@ -121,6 +128,10 @@ def load_engine_modules(root: Path) -> tuple[Any, Any]:
             sys.modules.pop("nnue", None)
         else:
             sys.modules["nnue"] = previous_nnue
+        if previous_residual is None:
+            sys.modules.pop("residual", None)
+        else:
+            sys.modules["residual"] = previous_residual
     return cast(Any, engine_module), cast(Any, search_module)
 
 

@@ -724,6 +724,8 @@ tools/search_memory_replay.py  rated-game TT/history reconstruction
 tools/sample_evaluation_positions.py  deterministic PGN/EPD/FEN data sampler
 tools/label_positions.py     resumable fixed-node teacher labelling
 tools/fit_hce.py             validation-selected residual HCE fitting
+tools/relabel_evaluation_baseline.py  rebase teacher labels onto an exact runtime evaluator
+tools/verify_residual.py     Python/Numba parity for a compiled residual evaluator
 tools/nnue_features.py       colour-symmetric sparse piece-square encoding
 tools/pack_nnue_data.py      Parquet filtering and row-group-disjoint packing
 tools/train_nnue.py          from-scratch sparse-network training and export

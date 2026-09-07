@@ -82,6 +82,31 @@ class HceFitTests(unittest.TestCase):
             with self.assertRaisesRegex(ValueError, "validation"):
                 fit_labels(labels_path, min_train_count=1)
 
+    def test_write_fit_records_a_custom_target_name(self) -> None:
+        labels = [
+            synthetic_label(0, "development", -1, -10),
+            synthetic_label(1, "development", 1, 10),
+            synthetic_label(2, "validation", 2, 20),
+        ]
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            labels_path = root / "labels.jsonl"
+            output_path = root / "fit.json"
+            write_labels(labels_path, labels)
+            result = fit_labels(labels_path, ridge_candidates=(0.0,), min_train_count=1)
+            write_fit(
+                output_path,
+                labels_path,
+                result,
+                target_name="teacher_score_cp_minus_runtime_baseline_cp",
+            )
+            artifact = json.loads(output_path.read_text(encoding="utf-8"))
+
+        self.assertEqual(
+            artifact["target"],
+            "teacher_score_cp_minus_runtime_baseline_cp",
+        )
+
 
 if __name__ == "__main__":
     unittest.main()
