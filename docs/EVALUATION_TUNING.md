@@ -161,6 +161,25 @@ residual RMSE to beat the zero-correction baseline, implement the identical
 features in Numba, and add Python-versus-Numba feature parity tests across
 random positions.
 
+When the frozen runtime baseline is V5 rather than V3, preserve the expensive
+teacher labels and replace only their baseline score before fitting:
+
+```bash
+./.venv/Scripts/python.exe -m tools.relabel_evaluation_baseline \
+  --labels benchmarks/runs/evaluation-data/evaluation_v5_pilot_20k.jsonl \
+  --engine-root challengers/v5_nnue \
+  --output benchmarks/runs/evaluation-data/evaluation_v5_pilot_20k.v5-baseline.jsonl
+
+./.venv/Scripts/python.exe -m tools.fit_hce \
+  --labels benchmarks/runs/evaluation-data/evaluation_v5_pilot_20k.v5-baseline.jsonl \
+  --output benchmarks/runs/evaluation-data/evaluation_v5_pilot_20k.v5-residual.hce.json \
+  --target-name teacher_score_cp_minus_v5_50_static_score_cp
+```
+
+The relabel manifest fingerprints the exact runtime source and proves that
+teacher scores and feature vectors were retained. A compiled candidate can be
+checked against the Python model with `tools.verify_residual` before any game.
+
 ## Promotion sequence
 
 1. Freeze the fitted artifact and generated Numba constants.
