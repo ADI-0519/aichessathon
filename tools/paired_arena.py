@@ -49,7 +49,7 @@ def positions() -> list[str]:
 
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--candidate", type=Path, default=Path("."))
+    parser.add_argument("--candidate", type=Path, default=Path("current"))
     parser.add_argument("--opponent", type=Path, required=True)
     parser.add_argument("--base-ms", type=int, default=1_000)
     parser.add_argument("--increment-ms", type=int, default=50)

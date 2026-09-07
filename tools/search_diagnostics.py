@@ -25,6 +25,7 @@ import numpy as np
 from tools.cli import nonnegative_int, positive_int
 
 REPOSITORY = Path(__file__).resolve().parents[1]
+DEFAULT_ENGINE_ROOT = REPOSITORY / "current"
 DEFAULT_SUITE = REPOSITORY / "benchmarks" / "suites" / "v3_critical_positions.json"
 
 
@@ -534,7 +535,7 @@ def main() -> None:
     source.add_argument("--fen")
     parser.add_argument("--reference-move", help="Optional UCI target used with --fen")
     parser.add_argument("--suite", type=Path, default=DEFAULT_SUITE)
-    parser.add_argument("--engine-root", type=Path, default=REPOSITORY)
+    parser.add_argument("--engine-root", type=Path, default=DEFAULT_ENGINE_ROOT)
     parser.add_argument(
         "--profile",
         default="baseline",

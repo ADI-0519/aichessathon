@@ -1,39 +1,44 @@
-# AI Chessathon starter
+# AIY Chessathon engine
 
-Fork this to build an agent for [AI Chessathon](https://aichessathon.com). It gives you a working
-submission, baselines to beat, and a local harness that speaks the same protocol and enforces the
-same clock as the platform, so you can see whether a change actually helped before you upload it.
+This repository contains AIY's competition engine, frozen challengers, training and diagnostic
+tools, and a local harness for [AI Chessathon](https://aichessathon.com). The canonical deployable
+engine is `current/`; repository-root Python files are development infrastructure and are never the
+submission agent.
 
 ```bash
 git clone https://github.com/advitrocks9/aichessathon-starter
 cd aichessathon-starter
 uv sync
-./.venv/Scripts/python.exe -m harness.play --white . --black baselines/greedy
+./.venv/Scripts/python.exe -m harness.play --white current --black baselines/greedy
 ```
 
-That plays your agent against a baseline over a full 120 s + 0.5 s game and prints the result.
+That plays the current champion against a baseline over a full 120 s + 0.5 s game and prints the
+result.
 When you like it, build and inspect `submission.zip` before uploading it. The complete Git Bash
 workflow is below. `make play`, `make arena`, `make gate`, and `make zip` remain convenient
 shortcuts when `make` is available, but none of the commands in this guide require it.
 
-## Writing an agent
+## Current engine
 
-The production agent is split across three readable source files, all placed at the submission
-zip root. `agent.py` exposes the one required function:
+V7 is a Numba-compiled alpha-beta engine with incremental NNUE, handcrafted evaluation, persistent
+search memory, conservative selective search, completed-iteration timeout safety, and continuous
+clock allocation. Packaging places the readable `current/` sources and weights at the submission
+zip root. `agent.py` exposes the required function:
 
 ```python
 def get_move(fen: str, time_left_ms: int) -> str:
     return "e2e4"
 ```
 
-The fork ships a legal random-mover, so the loop works before you write anything. Replace the body.
+Do not edit `current/` during an experiment. Copy the champion into a new challenger, change one
+hypothesis, and compare that immutable candidate against `current/`.
 
 ```bash
 PY="./.venv/Scripts/python.exe"
 
-"$PY" -m harness.play --white . --black baselines/minimax
-"$PY" -m harness.play --white . --black baselines/minimax --fen "<fen>"
-"$PY" -m harness.arena --agent . --opponent baselines/minimax --games 20
+"$PY" -m harness.play --white current --black baselines/minimax
+"$PY" -m harness.play --white current --black baselines/minimax --fen "<fen>"
+"$PY" -m harness.arena --agent current --opponent baselines/minimax --games 20
 ```
 
 Anything your agent prints shows up under the result, so `print` debugging works. The platform
@@ -50,10 +55,11 @@ critical-position suite, use the [search diagnostics](docs/SEARCH_DIAGNOSTICS.md
 The first controlled search-profile results are recorded in the
 [V4 search ablation report](docs/V4_SEARCH_ABLATIONS.md).
 
-The current architecture decision, research synthesis, experiment gates, and dated build schedule
-are in the [Post-Day-1 competitive engine plan](docs/POST_DAY1_DEEP_RESEARCH.md).
-The new from-scratch sparse-network track and the evidence behind it are in
-[Learned Evaluator Track](docs/LEARNED_EVALUATOR.md).
+Start with [Current engine state](CURRENT_STATE.md) for the deployable build and immediate next
+step. [Experiment ledger](docs/EXPERIMENT_LEDGER.md) records what has already been promoted,
+rejected, or left inconclusive. The evidence and strategic reset are expanded in
+[Learned Evaluator Track](docs/LEARNED_EVALUATOR.md) and
+[Engine Strategy Reset](docs/ENGINE_STRATEGY_RESET.md).
 
 ## Git Bash development runbook
 
@@ -69,9 +75,8 @@ git status --short
 
 The engine arguments used by the tools are directories, not zip files:
 
-- `.` is the agent in the current working tree;
-- `challengers/<name>` is an experimental engine;
-- `champions/<name>` is a frozen previous champion;
+- `current` is the canonical deployable champion;
+- `challengers/<name>` is an experimental engine or frozen promoted predecessor;
 - `baselines/<name>` is a deliberately simple reference opponent;
 - an archived submission must be extracted before it can play locally.
 
@@ -85,7 +90,7 @@ Play one game and save its PGN:
 ```bash
 "$PY" -m harness.play \
   --white challengers/v4_dev_safe \
-  --black . \
+  --black current \
   --base-ms 10000 \
   --increment-ms 100 \
   --pgn benchmarks/runs/v4-dev-safe-one-game.pgn
@@ -96,7 +101,7 @@ Play every selected position once with each colour:
 ```bash
 "$PY" -m tools.paired_arena \
   --candidate challengers/v4_dev_safe \
-  --opponent . \
+  --opponent current \
   --base-ms 10000 \
   --increment-ms 100 \
   --limit 15 \
@@ -109,8 +114,8 @@ strength claim.
 
 ### Test a branch without switching branches
 
-There is no need to disturb a dirty working tree just to test another branch. Materialize the
-three submission files from its exact commit into an ignored snapshot directory:
+There is no need to disturb a dirty working tree just to test another branch. Materialize its
+canonical submission directory from the exact commit into an ignored snapshot directory:
 
 ```bash
 BRANCH="dev"
@@ -118,7 +123,7 @@ COMMIT="$(git rev-parse "$BRANCH")"
 SNAPSHOT="benchmarks/runs/snapshots/${BRANCH}-$(git rev-parse --short "$BRANCH")"
 
 mkdir -p "$SNAPSHOT"
-git archive "$COMMIT" agent.py engine.py search.py | tar -x -C "$SNAPSHOT"
+git archive "$COMMIT" current | tar -x -C "$SNAPSHOT" --strip-components=1
 printf 'snapshot: %s\ncommit:   %s\n' "$SNAPSHOT" "$COMMIT"
 ```
 
@@ -149,7 +154,7 @@ RUN="v4-dev-vs-v3-development-50"
 
 "$PY" -m tools.backtest \
   --candidate "$CANDIDATE" \
-  --opponent . \
+  --opponent current \
   --suite benchmarks/suites/openings_8moves_v3_500.epd \
   --split development \
   --limit 50 \
@@ -168,7 +173,7 @@ Confirm a promising change on the validation split rather than repeatedly tuning
 ```bash
 "$PY" -m tools.backtest \
   --candidate "$CANDIDATE" \
-  --opponent . \
+  --opponent current \
   --suite benchmarks/suites/openings_8moves_v3_500.epd \
   --split validation \
   --limit 30 \
@@ -189,7 +194,7 @@ RUN="v4-dev-vs-v3-shard"
 for OFFSET in 0 10 20; do
   PYTHONUNBUFFERED=1 "$PY" -m tools.backtest \
     --candidate "$CANDIDATE" \
-    --opponent . \
+    --opponent current \
     --suite benchmarks/suites/openings_8moves_v3_500.epd \
     --split development \
     --offset "$OFFSET" \
@@ -306,7 +311,7 @@ Probe multiple agents at the positions before selected full moves:
 
 ```bash
 "$PY" -m tools.probe_pgn_positions \
-  --agent . \
+  --agent current \
   --agent "$CANDIDATE" \
   --color black \
   --fullmoves 9,11,22,28,32 \
@@ -319,7 +324,7 @@ test persistent transposition-table/history effects with the checked-in faithful
 
 ```bash
 "$PY" -m tools.search_memory_replay \
-  --engine-root . \
+  --engine-root current \
   --warm-nodes 25000 \
   --target-nodes 300000 \
   --output benchmarks/diagnostics/v3-persistent-replay.json
@@ -653,25 +658,24 @@ caused by search rather than by the clock policy; paired games remain the promot
 
 ### Build and verify a versioned submission
 
-Package the current working tree with the harness:
+Package the canonical champion with the harness:
 
 ```bash
-VERSION="v4"
-"$PY" -m harness.package --out "submission_${VERSION}.zip"
+VERSION="v7-current"
+"$PY" -m harness.package --root current --out "submission_${VERSION}.zip"
 ```
 
-To package committed source from another branch without switching to it, archive the exact three
-files directly from its commit:
+To package committed source from another branch without switching to it, materialize that commit's
+canonical directory and pass the snapshot to the same packager:
 
 ```bash
-VERSION="v4"
 BRANCH="dev"
 COMMIT="$(git rev-parse "$BRANCH")"
+VERSION="${BRANCH}-$(git rev-parse --short "$COMMIT")"
+SNAPSHOT="$(mktemp -d ./benchmarks/runs/package-${VERSION}-XXXXXX)"
 
-git archive --format=zip \
-  --output="submission_${VERSION}.zip" \
-  "$COMMIT" \
-  agent.py engine.py search.py
+git archive "$COMMIT" current | tar -x -C "$SNAPSHOT" --strip-components=1
+"$PY" -m harness.package --root "$SNAPSHOT" --out "submission_${VERSION}.zip"
 ```
 
 Inspect and test the exact archive, rather than trusting the source directory that produced it:
@@ -694,9 +698,9 @@ unzip -q "submission_${VERSION}.zip" -d "$CHECK_DIR"
   --increment-ms 100
 ```
 
-The archive must put `agent.py` directly at its root. For the current three-file engine, the member
-list should be exactly `agent.py`, `engine.py`, and `search.py`. After every check passes, preserve
-the versioned rollback and update the generic upload file byte-for-byte:
+The archive must put `agent.py` directly at its root and include the engine sources plus
+`weights/model.npz`; it must not contain a parent `current/` directory. After every check passes,
+preserve the versioned rollback and update the generic upload file byte-for-byte:
 
 ```bash
 cp "submission_${VERSION}.zip" submission.zip
@@ -708,14 +712,16 @@ upload. Record the source commit and SHA-256 with every promoted version.
 
 ### Commit and push deliberately
 
-`submission.zip` is intentionally ignored; versioned archives such as `submission_v4.zip` may be
+`submission.zip` is intentionally ignored; versioned archives such as
+`submission_v7-current.zip` may be
 committed when the team wants them retained:
 
 ```bash
 git status --short
-git add README.md submission_v4.zip
+git add README.md CURRENT_STATE.md docs/EXPERIMENT_LEDGER.md
+git add "submission_${VERSION}.zip"  # only when deliberately retaining this exact rollback
 git diff --cached --stat
-git commit -m "Document engine workflow and retain V4 submission"
+git commit -m "Make current the canonical champion and record experiments"
 git push origin "$(git branch --show-current)"
 ```
 
@@ -743,7 +749,7 @@ evaluation worth searching with.
 | greedy vs minimax | 6 | 120 s + 0.5 s | 0.0% (+0 =0 -6) |
 | numba vs minimax | 6 | 10 s + 0.5 s | 66.7% (+2 =4 -0) |
 
-- `baselines/random` plays a uniformly random legal move. It is what `agent.py` starts as.
+- `baselines/random` plays a uniformly random legal move and is only a protocol/reliability check.
 - `baselines/greedy` searches one ply on material.
 - `baselines/minimax` searches two plies on material and mobility, with no time management.
 - `baselines/numba` is `minimax` with the evaluation jitted. It is barely stronger, which is
@@ -753,9 +759,13 @@ evaluation worth searching with.
 ## What's here
 
 ```
-agent.py             public get_move boundary
-engine.py            compiled board, move generation, make/unmake, and hashing
-search.py            compiled evaluation and search
+current/agent.py     canonical public get_move boundary
+current/engine.py    compiled board, move generation, make/unmake, and hashing
+current/search.py    compiled evaluation and search
+current/nnue.py      incremental inference for the team-trained evaluator
+current/time_manager.py  continuous move-aware clock allocation
+current/weights/     model artifacts included by the packager
+challengers/         experimental engines and frozen promoted predecessors
 baselines/           random, greedy, minimax, numba; each is a directory with an agent.py
 harness/runner.py    the process the platform runs your agent in
 harness/referee.py   the clock, legality, draw and adjudication rules
@@ -776,8 +786,10 @@ tools/nnue_features.py       colour-symmetric sparse piece-square encoding
 tools/pack_nnue_data.py      Parquet filtering and row-group-disjoint packing
 tools/train_nnue.py          from-scratch sparse-network training and export
 docs/EVALUATION_TUNING.md    end-to-end evaluation-data runbook and gates
-docs/LEARNED_EVALUATOR.md    external-repo audit and learned-evaluator plan
-docs/IDEAS.md        where the strength actually comes from
+docs/LEARNED_EVALUATOR.md    chronological learned-evaluator experiment log
+docs/EXPERIMENT_LEDGER.md    compact promoted/rejected/inconclusive decision record
+CURRENT_STATE.md             authoritative champion, evidence, and next task
+docs/IDEAS.md                early engine-development notes
 ```
 
 Local games start from the normal position unless you pass `--fen`. Rated games start from

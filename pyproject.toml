@@ -34,10 +34,9 @@ ignore = ["N818"]
 
 [tool.mypy]
 strict = true
+mypy_path = "current"
 files = [
-    "agent.py",
-    "engine.py",
-    "search.py",
+    "current/agent.py",
     "harness",
     "tools/build_suite.py",
     "tools/backtest.py",

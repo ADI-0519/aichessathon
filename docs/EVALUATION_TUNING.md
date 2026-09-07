@@ -1,5 +1,8 @@
 # Residual evaluation tuning
 
+> Historical V3/V4 pipeline. The resulting residual approaches are recorded in
+> `docs/EXPERIMENT_LEDGER.md`; the full V8 residual was rejected and is not the current engine.
+
 ## Objective
 
 V3 already evaluates material, piece-square placement, bishop pairs, pawn

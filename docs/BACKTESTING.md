@@ -48,17 +48,17 @@ The repository includes a pinned 500-position suite at
 selects positions by a seeded SHA-256 rank, so source reordering cannot change the chosen set, and
 writes a provenance manifest next to the generated EPD.
 
-## Local champion example
+## Canonical champion example
 
 ```bash
 ./.venv/Scripts/python.exe -m tools.backtest \
-  --candidate . \
-  --opponent champions/python_v2 \
+  --candidate current \
+  --opponent challengers/v6_stable_timeout \
   --suite benchmarks/suites/openings_8moves_v3_500.epd \
   --split validation \
   --base-ms 10000 \
   --increment-ms 100 \
-  --output benchmarks/runs/v3-vs-python-v2-validation-8moves
+  --output benchmarks/runs/v7-vs-v6-validation-8moves
 ```
 
 ## Stockfish example
@@ -67,14 +67,14 @@ Stockfish is an offline opponent only and is never included in the submission.
 
 ```bash
 ./.venv/Scripts/python.exe -m tools.backtest \
-  --candidate . \
+  --candidate current \
   --stockfish "/c/Users/adirj/AppData/Local/Microsoft/WinGet/Packages/Stockfish.Stockfish_Microsoft.Winget.Source_8wekyb3d8bbwe/stockfish/stockfish-windows-x86-64-avx2.exe" \
   --stockfish-nodes 2000 \
   --suite benchmarks/suites/openings_8moves_v3_500.epd \
   --split validation \
   --base-ms 10000 \
   --increment-ms 100 \
-  --output benchmarks/runs/v3-vs-sf2k-validation-8moves
+  --output benchmarks/runs/v7-vs-sf2k-validation-8moves
 ```
 
 Run the exact same command after an interruption to resume. If any hashed source changed, choose a

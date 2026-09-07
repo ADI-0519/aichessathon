@@ -1,5 +1,8 @@
 # Hypercompetitive AI Chessathon engine roadmap
 
+> Historical planning snapshot from 4 September. The pure-Python champion and dated schedule have
+> been superseded. See `CURRENT_STATE.md` and `docs/EXPERIMENT_LEDGER.md` before acting on it.
+
 Research snapshot: 4 September 2026  
 Objective: submit a reliable trial build immediately, then maximize strength before the
 11 September 11:00 London lock.

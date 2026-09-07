@@ -12,12 +12,11 @@ import time
 from dataclasses import dataclass
 
 import chess
+import engine
 import nnue
 import numpy as np
 from numba import njit
 from numpy.typing import NDArray
-
-import engine
 
 INFINITY = 32_000
 MATE_SCORE = 30_000

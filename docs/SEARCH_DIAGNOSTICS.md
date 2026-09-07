@@ -71,13 +71,23 @@ The generated baseline has the same evaluator and search path as frozen V7. The 
 change exactly one axis except `no-lmr-no-null`, which is an explicit interaction check. These
 positions diagnose mechanisms; they do not estimate Elo.
 
+### Completed V7 result
+
+The checked-in matrix is complete. Unchanged V7 reaches the round-47 `...Nd4`, round-48 `...Kh7`,
+and round-50 `...b4` and `...Qd6+` references as node limits rise. No LMR/null configuration finds
+round-46 `Be2`, and none provides a systematic fix for round-50 `...Qd7`; globally disabling those
+pruners also reduces completed depth. HCE-only finds `...Qd7` materially earlier than the blended
+evaluator, identifying evaluator disagreement and throughput—not a blanket pruning rollback—as
+the next investigation. See `CURRENT_STATE.md` and `docs/EXPERIMENT_LEDGER.md` for the current
+decision.
+
 For a realistic memory comparison, replay the actual rated-game histories. The tool searches each
 earlier position on V3's turns using one persistent TT/history object, follows the historical moves,
 and compares fresh and replayed memory at every critical position:
 
 ```bash
 ./.venv/Scripts/python.exe -m tools.search_memory_replay \
-  --engine-root . \
+  --engine-root current \
   --warm-nodes 25000 \
   --target-nodes 300000 \
   --output benchmarks/diagnostics/v3-persistent-replay.json

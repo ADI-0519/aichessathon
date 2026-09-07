@@ -26,7 +26,7 @@ and they change, so fetch them before you rely on a number.
 - 120 s + 0.5 s per move, per side, on wall time. One core of an AMD EPYC 9V74 at 2.60 GHz, 2 GB,
   no network, no GPU.
 - Illegal move, malformed output, crash, out of memory, or flag fall loses that game. A move
-  reply over 4 KB counts as illegal. 300 plies without a result goes to material adjudication.
+  reply over 4 KB counts as illegal. A game still running at 600 plies is drawn.
 - Everything in the zip together stays under 50 MB unzipped.
 - Ten uploads per team per day, and the latest one that passed validation is the one that plays.
 - Rated games start from curated opening positions, not the standard start. The set is not

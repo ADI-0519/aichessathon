@@ -416,7 +416,7 @@ def run(arguments: argparse.Namespace) -> int:
 
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--candidate", type=Path, default=Path("."))
+    parser.add_argument("--candidate", type=Path, default=Path("current"))
     opponent_group = parser.add_mutually_exclusive_group(required=True)
     opponent_group.add_argument("--opponent", type=Path, help="local agent directory")
     opponent_group.add_argument("--stockfish", type=Path, help="development-only UCI executable")

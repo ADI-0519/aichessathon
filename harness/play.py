@@ -10,7 +10,7 @@ from harness.sandbox import local
 
 def main() -> None:
     parser = argparse.ArgumentParser(description="Play one game between two agent directories.")
-    parser.add_argument("--white", type=Path, default=Path("."))
+    parser.add_argument("--white", type=Path, default=Path("current"))
     parser.add_argument("--black", type=Path, default=Path("baselines/greedy"))
     parser.add_argument("--base-ms", type=int, default=BASE_MS)
     parser.add_argument("--increment-ms", type=int, default=INCREMENT_MS)
