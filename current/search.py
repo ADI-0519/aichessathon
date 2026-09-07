@@ -12,6 +12,7 @@ import time
 from dataclasses import dataclass
 
 import chess
+import nnue
 import numpy as np
 from numba import njit
 from numpy.typing import NDArray
@@ -27,6 +28,10 @@ MAX_HISTORY = 512
 STOP_POLL_MASK = 255
 SEE_MAX_EXCHANGES = 32
 DELTA_MARGIN = 120
+
+# Percentage of the static evaluation supplied by the learned model.  Keep this
+# as a source constant so every packaged challenger is reproducible.
+NNUE_BLEND = 50
 
 TT_EMPTY = 0
 TT_EXACT = 1
@@ -162,7 +167,9 @@ class SearchResult:
 
 
 @njit(cache=False)
-def evaluate(pieces: NDArray[np.uint64], state: NDArray[np.int64]) -> int:
+def handcrafted_evaluate(
+    pieces: NDArray[np.uint64], state: NDArray[np.int64]
+) -> int:
     """Tapered handcrafted evaluation from the side-to-move perspective."""
     middlegame = 0
     endgame = 0
@@ -238,6 +245,22 @@ def evaluate(pieces: NDArray[np.uint64], state: NDArray[np.int64]) -> int:
     score = (middlegame * phase + endgame * (MAX_PHASE - phase)) // MAX_PHASE
     score += 10 if int(state[engine.STATE_SIDE]) == engine.WHITE else -10
     return score if int(state[engine.STATE_SIDE]) == engine.WHITE else -score
+
+
+@njit(cache=False, inline="always")
+def evaluate(
+    pieces: NDArray[np.uint64],
+    state: NDArray[np.int64],
+    accumulators: NDArray[np.int32],
+) -> int:
+    """Blend V4's static evaluator with the team's learned evaluator."""
+    if NNUE_BLEND <= 0:
+        return handcrafted_evaluate(pieces, state)
+    learned = nnue.evaluate(accumulators, int(state[engine.STATE_SIDE]))
+    if NNUE_BLEND >= 100:
+        return learned
+    handcrafted = handcrafted_evaluate(pieces, state)
+    return (NNUE_BLEND * learned + (100 - NNUE_BLEND) * handcrafted) // 100
 
 
 @njit(cache=False, inline="always")
@@ -571,6 +594,7 @@ def _quiescence(
     pseudo_stack: NDArray[np.int32],
     undo_stack: NDArray[np.int64],
     undo_key_stack: NDArray[np.uint64],
+    accumulator_stack: NDArray[np.int32],
     score_stack: NDArray[np.int32],
     see_gain_stack: NDArray[np.int32],
     killers: NDArray[np.int32],
@@ -582,21 +606,34 @@ def _quiescence(
     if _visit_node(stats, stop, node_limit, True):
         return 0, True
     if ply >= MAX_PLY - 1 or history_count >= len(history):
-        return evaluate(pieces, state), False
+        return evaluate(pieces, state, accumulator_stack[ply]), False
 
     side = int(state[engine.STATE_SIDE])
     in_check = engine.is_in_check(pieces, side)
-    count = engine.generate_legal_moves(
-        pieces,
-        state,
-        key,
-        legal_stack[ply],
-        pseudo_stack[ply],
-        undo_stack[ply],
-        undo_key_stack[ply],
-    )
-    if count == 0:
-        return (-MATE_SCORE + ply if in_check else 0), False
+    if in_check:
+        count = engine.generate_legal_moves(
+            pieces,
+            state,
+            key,
+            legal_stack[ply],
+            pseudo_stack[ply],
+            undo_stack[ply],
+            undo_key_stack[ply],
+        )
+        if count == 0:
+            return -MATE_SCORE + ply, False
+    else:
+        count = engine.generate_legal_captures(
+            pieces,
+            state,
+            key,
+            legal_stack[ply],
+            pseudo_stack[ply],
+            undo_stack[ply],
+            undo_key_stack[ply],
+        )
+        if count < 0:
+            return 0, False
     if engine.has_rule_draw(
         pieces, state, key[0], history, history_count, root_history_count
     ):
@@ -606,7 +643,7 @@ def _quiescence(
     if in_check:
         best = -INFINITY
     else:
-        stand_pat = evaluate(pieces, state)
+        stand_pat = evaluate(pieces, state, accumulator_stack[ply])
         if stand_pat >= beta:
             return stand_pat, False
         if stand_pat > alpha:
@@ -629,11 +666,16 @@ def _quiescence(
     for index in range(count):
         move = int(legal_stack[ply, index])
         flags = engine.move_flags(move)
-        if not in_check and flags & (engine.FLAG_CAPTURE | engine.FLAG_PROMOTION) == 0:
-            continue
         material_gain = 0
         if not in_check:
             material_gain = _immediate_material_gain(pieces, state, move)
+        nnue.update_for_move(
+            pieces,
+            state,
+            move,
+            accumulator_stack[ply],
+            accumulator_stack[ply + 1],
+        )
         engine.make_move(
             pieces, state, key, move, undo_stack[ply], undo_key_stack[ply]
         )
@@ -667,6 +709,7 @@ def _quiescence(
             pseudo_stack,
             undo_stack,
             undo_key_stack,
+            accumulator_stack,
             score_stack,
             see_gain_stack,
             killers,
@@ -691,6 +734,14 @@ def _quiescence(
     return best, False
 
 
+@njit(cache=False, inline="always")
+def _has_non_pawn_material(pieces: NDArray[np.uint64], side: int) -> bool:
+    occupied = np.uint64(0)
+    for kind in range(engine.KNIGHT, engine.QUEEN + 1):
+        occupied |= pieces[engine.piece_index(side, kind)]
+    return bool(occupied != np.uint64(0))
+
+
 @njit(cache=False)
 def _negamax(
     pieces: NDArray[np.uint64],
@@ -700,6 +751,7 @@ def _negamax(
     alpha: int,
     beta: int,
     ply: int,
+    allow_null: bool,
     history: NDArray[np.uint64],
     history_count: int,
     root_history_count: int,
@@ -707,6 +759,7 @@ def _negamax(
     pseudo_stack: NDArray[np.int32],
     undo_stack: NDArray[np.int64],
     undo_key_stack: NDArray[np.uint64],
+    accumulator_stack: NDArray[np.int32],
     score_stack: NDArray[np.int32],
     see_gain_stack: NDArray[np.int32],
     killers: NDArray[np.int32],
@@ -733,6 +786,7 @@ def _negamax(
             pseudo_stack,
             undo_stack,
             undo_key_stack,
+            accumulator_stack,
             score_stack,
             see_gain_stack,
             killers,
@@ -744,7 +798,7 @@ def _negamax(
     if _visit_node(stats, stop, node_limit, False):
         return 0, True
     if ply >= MAX_PLY - 1 or history_count >= len(history):
-        return evaluate(pieces, state), False
+        return evaluate(pieces, state, accumulator_stack[ply]), False
 
     side = int(state[engine.STATE_SIDE])
     in_check = engine.is_in_check(pieces, side)
@@ -790,6 +844,59 @@ def _negamax(
                 stats[STAT_TT_CUTOFFS] += 1
                 return tt_score, False
 
+    # null-move pruning, R=2; the material test is the zugzwang guard
+    if (
+        allow_null
+        and depth >= 3
+        and not in_check
+        and beta - alpha == 1
+        and abs(beta) < MATE_BOUND
+        and _has_non_pawn_material(pieces, side)
+        and evaluate(pieces, state, accumulator_stack[ply]) >= beta
+    ):
+        for perspective in range(2):
+            for column in range(nnue.ACCUMULATOR_SIZE):
+                accumulator_stack[ply + 1, perspective, column] = accumulator_stack[
+                    ply, perspective, column
+                ]
+        engine.make_null_move(
+            pieces, state, key, undo_stack[ply], undo_key_stack[ply]
+        )
+        null_score, aborted = _negamax(
+            pieces,
+            state,
+            key,
+            depth - 3,
+            -beta,
+            -beta + 1,
+            ply + 1,
+            False,
+            history,
+            history_count,
+            root_history_count,
+            legal_stack,
+            pseudo_stack,
+            undo_stack,
+            undo_key_stack,
+            accumulator_stack,
+            score_stack,
+            see_gain_stack,
+            killers,
+            quiet_history,
+            tt_keys,
+            tt_data,
+            generation,
+            stop,
+            node_limit,
+            stats,
+        )
+        engine.unmake_null_move(state, key, undo_stack[ply], undo_key_stack[ply])
+        if aborted:
+            return 0, True
+        if -null_score >= beta:
+            # mate found behind a free move isn't a mate we can claim
+            return beta if -null_score >= MATE_BOUND else -null_score, False
+
     _order_moves(
         pieces,
         state,
@@ -809,6 +916,13 @@ def _negamax(
         move = int(legal_stack[ply, index])
         flags = engine.move_flags(move)
         quiet = flags & (engine.FLAG_CAPTURE | engine.FLAG_PROMOTION) == 0
+        nnue.update_for_move(
+            pieces,
+            state,
+            move,
+            accumulator_stack[ply],
+            accumulator_stack[ply + 1],
+        )
         engine.make_move(
             pieces, state, key, move, undo_stack[ply], undo_key_stack[ply]
         )
@@ -833,6 +947,7 @@ def _negamax(
                 -beta,
                 -alpha,
                 ply + 1,
+                True,
                 history,
                 history_count + 1,
                 root_history_count,
@@ -840,6 +955,7 @@ def _negamax(
                 pseudo_stack,
                 undo_stack,
                 undo_key_stack,
+                accumulator_stack,
                 score_stack,
                 see_gain_stack,
                 killers,
@@ -860,6 +976,7 @@ def _negamax(
                 -alpha - 1,
                 -alpha,
                 ply + 1,
+                True,
                 history,
                 history_count + 1,
                 root_history_count,
@@ -867,6 +984,7 @@ def _negamax(
                 pseudo_stack,
                 undo_stack,
                 undo_key_stack,
+                accumulator_stack,
                 score_stack,
                 see_gain_stack,
                 killers,
@@ -888,6 +1006,7 @@ def _negamax(
                     -alpha - 1,
                     -alpha,
                     ply + 1,
+                    True,
                     history,
                     history_count + 1,
                     root_history_count,
@@ -895,6 +1014,7 @@ def _negamax(
                     pseudo_stack,
                     undo_stack,
                     undo_key_stack,
+                    accumulator_stack,
                     score_stack,
                     see_gain_stack,
                     killers,
@@ -915,6 +1035,7 @@ def _negamax(
                     -beta,
                     -alpha,
                     ply + 1,
+                    True,
                     history,
                     history_count + 1,
                     root_history_count,
@@ -922,6 +1043,7 @@ def _negamax(
                     pseudo_stack,
                     undo_stack,
                     undo_key_stack,
+                    accumulator_stack,
                     score_stack,
                     see_gain_stack,
                     killers,
@@ -988,6 +1110,7 @@ def _search_root(
     pseudo_stack: NDArray[np.int32],
     undo_stack: NDArray[np.int64],
     undo_key_stack: NDArray[np.uint64],
+    accumulator_stack: NDArray[np.int32],
     score_stack: NDArray[np.int32],
     see_gain_stack: NDArray[np.int32],
     killers: NDArray[np.int32],
@@ -998,9 +1121,9 @@ def _search_root(
     stop: NDArray[np.uint8],
     node_limit: int,
     stats: NDArray[np.int64],
-) -> tuple[int, int, bool]:
+) -> tuple[int, int, bool, int]:
     if _visit_node(stats, stop, node_limit, False):
-        return 0, preferred_move, True
+        return 0, preferred_move, True, 0
     side = int(state[engine.STATE_SIDE])
     count = engine.generate_legal_moves(
         pieces,
@@ -1013,7 +1136,7 @@ def _search_root(
     )
     if count == 0:
         score = -MATE_SCORE if engine.is_in_check(pieces, side) else 0
-        return score, 0, False
+        return score, 0, False, 0
 
     tt_index = int(key[0] & np.uint64(len(tt_keys) - 1))
     tt_move = preferred_move
@@ -1035,8 +1158,16 @@ def _search_root(
 
     best = -INFINITY
     best_move = preferred_move if preferred_move != 0 else int(legal_stack[0, 0])
+    improved_move = 0
     for index in range(count):
         move = int(legal_stack[0, index])
+        nnue.update_for_move(
+            pieces,
+            state,
+            move,
+            accumulator_stack[0],
+            accumulator_stack[1],
+        )
         engine.make_move(pieces, state, key, move, undo_stack[0], undo_key_stack[0])
         history[history_count] = key[0]
         if index == 0:
@@ -1048,6 +1179,7 @@ def _search_root(
                 -beta,
                 -alpha,
                 1,
+                True,
                 history,
                 history_count + 1,
                 root_history_count,
@@ -1055,6 +1187,7 @@ def _search_root(
                 pseudo_stack,
                 undo_stack,
                 undo_key_stack,
+                accumulator_stack,
                 score_stack,
                 see_gain_stack,
                 killers,
@@ -1075,6 +1208,7 @@ def _search_root(
                 -alpha - 1,
                 -alpha,
                 1,
+                True,
                 history,
                 history_count + 1,
                 root_history_count,
@@ -1082,6 +1216,7 @@ def _search_root(
                 pseudo_stack,
                 undo_stack,
                 undo_key_stack,
+                accumulator_stack,
                 score_stack,
                 see_gain_stack,
                 killers,
@@ -1102,6 +1237,7 @@ def _search_root(
                     -beta,
                     -alpha,
                     1,
+                    True,
                     history,
                     history_count + 1,
                     root_history_count,
@@ -1109,6 +1245,7 @@ def _search_root(
                     pseudo_stack,
                     undo_stack,
                     undo_key_stack,
+                    accumulator_stack,
                     score_stack,
                     see_gain_stack,
                     killers,
@@ -1122,16 +1259,19 @@ def _search_root(
                 )
         engine.unmake_move(pieces, state, key, move, undo_stack[0], undo_key_stack[0])
         if aborted:
-            return 0, best_move, True
+            return 0, best_move, True, improved_move
         score = -child_score
         if score > best:
             best = score
             best_move = move
         if score > alpha:
             alpha = score
+            # only a raised alpha has full-window score behind it
+            if index > 0:
+                improved_move = move
         if alpha >= beta:
             break
-    return best, best_move, False
+    return best, best_move, False, 0
 
 
 def _history_buffer(
@@ -1159,7 +1299,6 @@ def search_position(
     max_depth: int = MAX_DEPTH,
     prior_history: NDArray[np.uint64] | None = None,
 ) -> SearchResult:
-    """Return the last fully completed iterative-deepening result."""
     if time_limit_s is None and node_limit <= 0:
         raise ValueError("a positive time or node limit is required")
     if time_limit_s is not None and time_limit_s <= 0:
@@ -1181,6 +1320,10 @@ def search_position(
     pseudo_stack = np.empty((MAX_PLY, engine.MAX_MOVES), dtype=np.int32)
     undo_stack = np.empty((MAX_PLY, engine.UNDO_SIZE), dtype=np.int64)
     undo_key_stack = np.empty((MAX_PLY, 1), dtype=np.uint64)
+    accumulator_stack = np.empty(
+        (MAX_PLY, 2, nnue.ACCUMULATOR_SIZE), dtype=np.int32
+    )
+    nnue.rebuild(working.pieces, accumulator_stack[0])
     score_stack = np.empty((MAX_PLY, engine.MAX_MOVES), dtype=np.int32)
     see_gain_stack = np.empty((MAX_PLY, SEE_MAX_EXCHANGES), dtype=np.int32)
     killers = np.zeros((MAX_PLY, 2), dtype=np.int32)
@@ -1199,22 +1342,15 @@ def search_position(
     best_score = 0
     completed_depth = 0
     stopped = False
-    previous_iteration_s = 0.0
     try:
         for depth in range(1, max_depth + 1):
-            elapsed = time.perf_counter() - started
-            if time_limit_s is not None:
-                remaining = time_limit_s - elapsed
-                if remaining <= 0 or (
-                    previous_iteration_s > 0 and previous_iteration_s * 1.8 >= remaining
-                ):
-                    stopped = True
-                    break
-            iteration_started = time.perf_counter()
+            if time_limit_s is not None and time.perf_counter() - started >= time_limit_s:
+                stopped = True
+                break
             window = 45
             alpha = -INFINITY if depth <= 2 else best_score - window
             beta = INFINITY if depth <= 2 else best_score + window
-            score, move, aborted = _search_root(
+            score, move, aborted, _partial_move = _search_root(
                 working.pieces,
                 working.state,
                 working.key,
@@ -1229,6 +1365,7 @@ def search_position(
                 pseudo_stack,
                 undo_stack,
                 undo_key_stack,
+                accumulator_stack,
                 score_stack,
                 see_gain_stack,
                 killers,
@@ -1241,10 +1378,13 @@ def search_position(
                 stats,
             )
             if aborted:
+                # A root move from an interrupted iteration has not been
+                # compared against every legal alternative.  Keep the result
+                # from the last fully completed depth instead.
                 stopped = True
                 break
             if score <= alpha or score >= beta:
-                score, move, aborted = _search_root(
+                score, move, aborted, _partial_move = _search_root(
                     working.pieces,
                     working.state,
                     working.key,
@@ -1259,6 +1399,7 @@ def search_position(
                     pseudo_stack,
                     undo_stack,
                     undo_key_stack,
+                    accumulator_stack,
                     score_stack,
                     see_gain_stack,
                     killers,
@@ -1276,7 +1417,6 @@ def search_position(
             best_move = move
             best_score = score
             completed_depth = depth
-            previous_iteration_s = time.perf_counter() - iteration_started
             if abs(score) >= MATE_BOUND:
                 break
     finally:
