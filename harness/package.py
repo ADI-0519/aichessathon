@@ -24,7 +24,7 @@ def members(root: Path, includes: tuple[str, ...]) -> Iterator[tuple[Path, str]]
         elif source.is_dir():
             for path in sorted(source.rglob("*")):
                 if path.is_file() and not SKIP & set(path.parts):
-                    yield path, str(path.relative_to(root))
+                    yield path, path.relative_to(root).as_posix()
 
 
 def build(root: Path, destination: Path, includes: tuple[str, ...]) -> list[str]:
@@ -32,6 +32,12 @@ def build(root: Path, destination: Path, includes: tuple[str, ...]) -> list[str]
     written = [name for _, name in entries]
     if "agent.py" not in written:
         raise SystemExit(f"{root / 'agent.py'} does not exist; the platform imports it by name")
+    unzipped = sum(source.stat().st_size for source, _ in entries)
+    if unzipped > MAX_UNZIPPED_BYTES:
+        raise SystemExit(
+            f"{unzipped:,} bytes unzipped is over the "
+            f"{MAX_UNZIPPED_BYTES // 1_000_000} MB limit; the platform will reject this upload"
+        )
     with zipfile.ZipFile(destination, "w", zipfile.ZIP_DEFLATED) as archive:
         for source, name in entries:
             archive.write(source, name)
@@ -40,23 +46,24 @@ def build(root: Path, destination: Path, includes: tuple[str, ...]) -> list[str]
 
 def main() -> None:
     parser = argparse.ArgumentParser(description="Build a submission zip.")
+    parser.add_argument(
+        "--root",
+        type=Path,
+        default=Path("current"),
+        help="agent source directory (default: current)",
+    )
     parser.add_argument("--out", type=Path, default=Path("submission.zip"))
     parser.add_argument("--include", action="append", default=[])
     arguments = parser.parse_args()
 
     includes = DEFAULT_INCLUDES + tuple(arguments.include)
-    root = Path.cwd()
+    root = arguments.root.resolve()
     written = build(root, arguments.out, includes)
     size = arguments.out.stat().st_size
     unzipped = sum((root / name).stat().st_size for name in written)
     print(f"{arguments.out} ({size:,} bytes, {unzipped:,} unzipped)")
     for name in written:
         print(f"  {name}")
-    if unzipped > MAX_UNZIPPED_BYTES:
-        print(
-            f"\nwarning: {unzipped:,} bytes unzipped is over the "
-            f"{MAX_UNZIPPED_BYTES // 1_000_000} MB limit. The platform will reject this upload"
-        )
 
 
 if __name__ == "__main__":

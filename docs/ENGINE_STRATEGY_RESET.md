@@ -30,6 +30,20 @@ This is the shortest credible route to a real improvement because it creates a c
 played error to mechanism. Our recent process often stopped at an offline metric or a small game
 score, which allowed attractive changes to survive without explaining the moves that cost games.
 
+### Status update: mechanism classification completed
+
+The six-profile experiment described above is complete and stored in
+`benchmarks/diagnostics/v7-priority-mechanisms.json`. Four of six reference moves are reachable by
+unchanged V7 at or below one million fresh-search nodes. Neither disabling LMR nor disabling
+null-move pruning repairs the two persistent misses, and disabling both substantially reduces
+completed depth.
+
+The round-46 `Be2` position remains wrong in every profile at one million nodes. In the round-50
+`...Qd7` position, HCE-only finds the reference at one million nodes while the 50% blend requires
+roughly five million. The immediate branch is therefore exact-output throughput profiling, then
+one isolated lazy-accumulator or quiescence-evaluation-cache candidate selected by the profile.
+The original sections below remain the dated rationale and experiment specification.
+
 ## What the evidence says now
 
 ### V7 is a reliability baseline, not a proven Elo breakthrough

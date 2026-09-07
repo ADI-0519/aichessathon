@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import unittest
 
-from challengers.v7_continuous_time.time_manager import (
+from current.time_manager import (
     estimated_moves_remaining,
     move_budget_ms,
 )

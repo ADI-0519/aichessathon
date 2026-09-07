@@ -56,7 +56,7 @@ def candidate_result(outcome: Outcome, candidate_is_white: bool) -> str:
 
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--candidate", type=Path, default=Path("."))
+    parser.add_argument("--candidate", type=Path, default=Path("current"))
     parser.add_argument("--engine", type=Path, required=True)
     parser.add_argument("--nodes", type=int, required=True)
     parser.add_argument("--base-ms", type=int, default=3_000)

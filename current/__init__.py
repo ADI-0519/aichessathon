@@ -1,1 +1,1 @@
-"""Isolated V5 learned-evaluation challenger."""
+"""Canonical deployable V7 engine source."""

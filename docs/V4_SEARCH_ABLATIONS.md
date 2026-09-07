@@ -1,5 +1,8 @@
 # V4 search ablation results
 
+> Historical completed experiment. V3 is no longer production, and none of these global profiles
+> was promoted. See `CURRENT_STATE.md` for the current V7 mechanism result and next step.
+
 Run on 5 September 2026 with the four rated-game critical positions, fresh processes, 25,000,
 100,000, and 300,000-node probes, and independently searched depth-5 root lines. The complete
 machine-readable report is `benchmarks/diagnostics/v4-search-ablations.json`.

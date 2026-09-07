@@ -1,76 +1,97 @@
-# CURRENT ENGINE STATE
-Updated: 7 Sep 2026
+# Current engine state
 
-## Deployable baseline
+Updated: 7 September 2026
 
-V7 continuous time
+## Deployable champion
 
-Source:
-challengers/v7_continuous_time/
+`current/` is the only canonical deployable source directory. The default play, arena, backtest,
+diagnostic, type-checking, and packaging commands all target it. Packaging copies the contents of
+that directory to the archive root, where the platform imports `agent.py`.
 
-Submission artifact:
-submission_v7.zip
+- Engine generation: V7 continuous time
+- Frozen source ancestor: `challengers/v7_continuous_time/`
+- Rollback artifact: `submission_v7.zip`
+- Fresh local artifact: `submission.zip` (gitignored and rebuilt with `make zip`)
+- Lineage: V5 NNUE -> V6 stable completed-depth timeout -> V7 continuous allocation
 
-V7 lineage:
-V5 NNUE
-→ V6 stable completed-depth timeout
-→ V7 continuous time allocation
+The current source differs from the frozen V7 directory only in non-functional import formatting
+and its package description. The model weights are byte-identical. Engine files no longer live at
+the repository root, and the repository root must not be packaged as an agent.
 
-## IMPORTANT
+## What V7 contains
 
-Repository root agent.py/engine.py/search.py are historical V3.
-DO NOT treat repository root as current engine.
-DO NOT package repository root.
+- Team-trained, incrementally updated 768-input NNUE blended 50:50 with the handcrafted evaluator.
+- Numba-compiled board and alpha-beta search with iterative deepening and principal-variation
+  search.
+- A fixed-size array transposition table, aspiration windows, quiescence search, SEE move scoring,
+  killer moves, quiet history, late-move reductions, and guarded null-move pruning.
+- Persistent per-game search memory and repetition history.
+- Last-completed-iteration timeout safety and continuous, move-aware clock allocation.
 
-## Current evidence
+It does not contain pondering, an opening book, Syzygy tablebases, a lazy NNUE accumulator,
+quiescence evaluation caching, or code/model assets copied from another engine.
 
-V7 vs V6 development:
-20W 12D 8L — 65.0%
+## Strength evidence
 
-V7 vs V6 validation:
-48.75%
+| Test | Result | Interpretation |
+|---|---:|---|
+| V5-50 vs exact V4, development, 20 pairs | 73.75% | Established the 50% learned blend as a strong V5 candidate. |
+| V5-50 vs exact V4, validation, 20 pairs | 81.25% | Positive result with no technical failures; the positions are no longer untouched. |
+| V6 stable timeout vs V5, development, 20 pairs | 53.75% | Non-regression plus an exact repair of the round-47 incomplete-iteration failure. |
+| V7 vs V6 stable timeout, development, 20 pairs | 65.0% | Strong directional development result with no failures. |
+| V7 vs V6 stable timeout, validation, 20 pairs | 48.75% | No independent evidence of a general Elo gain. |
+| V7 vs submitted V5, validation, 10 pairs | 50.0% | No measured regression or superiority. |
 
-Interpretation:
-No proven general Elo superiority.
-V7 retained because it contains two causally verified reliability/time fixes.
+V7 is therefore a reliability champion, not a proven large Elo improvement. Ladder losses from V5
+remain useful diagnostics because V7 changes timeout handling and allocation rather than the core
+evaluation/search blind spots.
 
-## Rejected
+## Completed experiments
 
-HalfKP-256:
-offline improved, 35% games → REJECT
+The full evidence ledger is in `docs/EXPERIMENT_LEDGER.md`. The most important decisions are:
 
-HalfKP-128:
-small-screen ~50% → NOT PROMOTED
+- V5's 50% NNUE blend was promoted; pure NNUE was rejected.
+- Countermove ordering plus quiet-history maluses scored 40.0% and was rejected.
+- The 256-wide HalfKP model scored 35.0% and was rejected; exact pruning recovered speed but its
+  ten-pair 50.0% screen did not establish a gain.
+- The linear V8 residual greatly improved offline error metrics but failed critical probes and its
+  smoke match, so it was rejected.
+- Global no-LMR and no-null configurations did not repair the two persistent critical misses in
+  the completed six-profile V7 mechanism matrix.
 
-Residual HCE:
-offline improved, failed critical probes and games → REJECT
+## What the mechanism matrix established
 
-Ordering:
-40% → REJECT
+The checked-in `benchmarks/diagnostics/v7-priority-mechanisms.json` compares baseline, HCE-only,
+NNUE-only, no-LMR, no-null, and no-LMR/no-null searches on six rated-error positions.
 
-## Current task
+- Four references are reachable by unchanged V7 with sufficient fresh-search nodes: round 47
+  `...Nd4`, round 48 `...Kh7`, and round 50 `...b4` and `...Qd6+`.
+- Round 46 `Be2` remains missed at one million nodes by every profile: a shared evaluation/search
+  blind spot, subject to deeper teacher confirmation.
+- Round 50 `...Qd7` appears much earlier with HCE-only than with the 50% blend; the NNUE delays the
+  correction, although unchanged V7 eventually finds it at five million nodes.
+- Disabling LMR or null-move pruning does not systematically repair either persistent miss and
+  usually buys less depth. A global pruning rollback is not justified.
 
-Build V7 diagnostic laboratory.
+## Next development decision
 
-Do not change deployable V7.
+Do not start another broad neural-network run or combine fashionable search features. The next
+candidate should target exact throughput while preserving scores and moves:
 
-Classify:
-- evaluation
-- NNUE
-- LMR
-- NMP
-- persistent state
-- depth
+1. Profile full-search time in NNUE accumulator updates, NNUE evaluation, handcrafted evaluation,
+   and quiescence.
+2. Implement exactly one independently written candidate: lazy accumulator updates if accumulator
+   work dominates, otherwise a correctness-keyed quiescence/static-evaluation cache.
+3. Require exact fixed-node equivalence, a repeatable speed gain, critical-position checks, then
+   paired development and untouched validation games against `current/`.
 
-## Current rules
+The reviewed top-20 Toby Coad repository supports these as hypotheses, especially lazy accumulator
+updates and quiescence evaluation caching. Its ranking is not causal evidence, and its code or
+network must not be copied into the submission.
 
-Canonical:
-https://aichessathon.com/docs
+## Competition contract
 
-120s + 0.5
-90s init
-1 CPU
-2 GB RAM
-600 plies → draw
-50 MB
-10 uploads/day
+The canonical source is <https://aichessathon.com/docs>. At this update: 120 s + 0.5 s, a 90 s
+initialization budget, one CPU core, 2 GB RAM, no GPU or network, a draw at 600 plies, 50 MB
+uncompressed, and ten uploads per day. The checked-in harness still carries an older 300-ply cap;
+sync that file from the official upstream rather than editing the platform mirror locally.

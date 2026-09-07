@@ -10,11 +10,10 @@ from __future__ import annotations
 
 from pathlib import Path
 
+import engine
 import numpy as np
 from numba import njit
 from numpy.typing import NDArray
-
-import engine
 
 FEATURE_COUNT = 768
 ACCUMULATOR_SIZE = 128

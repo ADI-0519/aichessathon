@@ -1,5 +1,9 @@
 # Learned Evaluator Track
 
+> Historical experiment log. It records the decisions in the order they were made, so early
+> "next" steps are superseded by later sections. V7 is now the canonical champion; use
+> `CURRENT_STATE.md` and `docs/EXPERIMENT_LEDGER.md` for the current decision.
+
 ## Decision
 
 Build a small sparse evaluator from scratch and test it as a V5 challenger. Do not ship code or

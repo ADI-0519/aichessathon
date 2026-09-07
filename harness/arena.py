@@ -11,7 +11,7 @@ FAST_INCREMENT_MS = 100
 
 def main() -> None:
     parser = argparse.ArgumentParser(description="Score an agent over several games.")
-    parser.add_argument("--agent", type=Path, default=Path("."))
+    parser.add_argument("--agent", type=Path, default=Path("current"))
     parser.add_argument("--opponent", type=Path, default=Path("baselines/greedy"))
     parser.add_argument("--games", type=int, default=20)
     parser.add_argument("--base-ms", type=int, default=FAST_BASE_MS)
