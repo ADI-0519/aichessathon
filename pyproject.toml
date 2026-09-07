@@ -1,7 +1,7 @@
 [project]
 name = "aichessathon-starter"
 version = "0.1.0"
-requires-python = ">=3.12"
+requires-python = "==3.12.*"
 dependencies = [
     "chess==1.11.2",
     "numpy==2.5.2",
@@ -32,17 +32,24 @@ target-version = "py312"
 select = ["E", "F", "I", "N", "UP", "B", "SIM", "RUF"]
 ignore = ["N818"]
 
+[tool.ruff.lint.per-file-ignores]
+"challengers/**" = ["I001"]
+
 [tool.mypy]
 strict = true
+mypy_path = "current"
 files = [
-    "agent.py",
-    "engine.py",
-    "search.py",
+    "current/agent.py",
     "harness",
     "tools/build_suite.py",
     "tools/backtest.py",
     "tools/backtest_core.py",
+    "tools/pentanomial_sprt.py",
+    "tools/numba_search_scaling.py",
     "tools/cli.py",
+    "tools/analyze_pgn_stockfish.py",
+    "tools/build_critical_suite_from_analysis.py",
+    "tools/materialize_search_lab.py",
     "tools/search_ablations.py",
     "tools/search_diagnostics.py",
     "tools/search_memory_replay.py",
@@ -54,6 +61,11 @@ files = [
     "tools/nnue_features.py",
     "tools/pack_nnue_data.py",
     "tools/train_nnue.py",
+    "tools/halfkp_features.py",
+    "tools/train_halfkp.py",
+    "tools/lift_halfkp.py",
+    "tools/verify_halfkp.py",
+    "tools/prune_halfkp.py",
     "tools/materialize_nnue_blend.py",
     "tools/verify_v5_nnue.py",
 ]

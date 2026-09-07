@@ -8,10 +8,14 @@ import chess
 
 from tools.backtest_core import positions_from_fens
 from tools.evaluation_dataset import make_label, write_labels, write_manifest
-from tools.label_positions import _validate_resume
+from tools.label_positions import _validate_resume, baseline_static_score
 
 
 class LabelPositionTests(unittest.TestCase):
+    def test_canonical_baseline_evaluates_a_position(self) -> None:
+        score = baseline_static_score(chess.Board())
+        self.assertIsInstance(score, int)
+
     def test_resume_requires_identical_inputs_and_intact_labels(self) -> None:
         position = positions_from_fens(
             (("initial", chess.STARTING_FEN),), split_seed="resume-test"

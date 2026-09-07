@@ -1,0 +1,15 @@
+{
+  "schema_version": 1,
+  "description": "First decisive V5 error in AI Chessathon rated round 48. Diagnostic regression only; the reference move comes from independent Stockfish 18 analysis at 100,000 nodes.",
+  "positions": [
+    {
+      "id": "round48-49-kh7",
+      "label": "Keresight, Black move 49",
+      "fen": "8/5pk1/1p4p1/2p1Q3/3p1K2/5P2/8/1r6 b - - 4 49",
+      "played_move": "g7g8",
+      "reference_move": "g7h7",
+      "baseline_move": "g7g8",
+      "diagnosis": "V5 spent only about 1.24 seconds despite having 41.5 seconds left, completed depth 10, and played Kg8 in an equal ending. The move loses by force; Kh7 holds. The same search reaches depth 12 and selects Kh7 when given V7's 3.35-second budget."
+    }
+  ]
+}

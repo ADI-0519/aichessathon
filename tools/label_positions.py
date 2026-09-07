@@ -9,9 +9,8 @@ from pathlib import Path
 
 import chess
 import chess.engine
+import numpy as np
 
-import engine as v3_engine
-import search as v3_search
 from tools.backtest_core import (
     fingerprint_agent,
     fingerprint_file,
@@ -28,12 +27,21 @@ from tools.evaluation_dataset import (
     write_labels,
     write_manifest,
 )
+from tools.search_diagnostics import REPOSITORY, load_engine_modules
+
+BASELINE_ROOT = REPOSITORY / "current"
+baseline_engine, baseline_search = load_engine_modules(BASELINE_ROOT)
 
 
-def v3_static_score(board: chess.Board) -> int:
-    """Evaluate from the side-to-move perspective with the frozen root V3."""
-    position = v3_engine.position_from_board(board)
-    return int(v3_search.evaluate(position.pieces, position.state))
+def baseline_static_score(board: chess.Board) -> int:
+    """Evaluate from the side-to-move perspective with the canonical champion."""
+    position = baseline_engine.position_from_board(board)
+    accumulators = np.empty(
+        (2, baseline_search.nnue.ACCUMULATOR_SIZE),
+        dtype=np.int32,
+    )
+    baseline_search.nnue.rebuild(position.pieces, accumulators)
+    return int(baseline_search.evaluate(position.pieces, position.state, accumulators))
 
 
 def _validate_resume(
@@ -63,7 +71,7 @@ def _validate_resume(
             raise ValueError(f"resume manifest has different {name}")
     baseline = manifest.get("baseline")
     if not isinstance(baseline, dict) or baseline.get("sha256") != baseline_sha256:
-        raise ValueError("resume manifest has a different V3 baseline")
+        raise ValueError("resume manifest has a different evaluation baseline")
     label_sha256 = str(fingerprint_file(labels_path)["sha256"])
     if manifest.get("label_sha256") != label_sha256:
         raise ValueError("resume label file does not match its manifest digest")
@@ -114,8 +122,8 @@ def main() -> None:
 
     suite_sha256 = suite_digest(suite)
     teacher_sha256 = str(fingerprint_file(engine_path)["sha256"])
-    baseline_fingerprint = fingerprint_agent(Path(__file__).resolve().parents[1])
-    baseline_fingerprint["path"] = "."
+    baseline_fingerprint = fingerprint_agent(BASELINE_ROOT)
+    baseline_fingerprint["path"] = "current"
     baseline_sha256 = str(baseline_fingerprint["sha256"])
     manifest_path = args.output.with_suffix(".manifest.json")
 
@@ -194,7 +202,7 @@ def main() -> None:
                 raise RuntimeError(f"teacher returned no score for {position.identifier}")
             pv = result.get("pv", [])
             best_move = pv[0] if pv else None
-            baseline_cp = v3_static_score(board)
+            baseline_cp = baseline_static_score(board)
             labels.append(
                 make_label(
                     position,
@@ -206,7 +214,8 @@ def main() -> None:
             )
             print(
                 f"label {index}/{len(selected)}: {position.identifier} "
-                f"teacher {score:+d}, V3 {baseline_cp:+d}, residual {score - baseline_cp:+d} cp"
+                f"teacher {score:+d}, baseline {baseline_cp:+d}, "
+                f"residual {score - baseline_cp:+d} cp"
             )
             if len(labels) % args.checkpoint_every == 0:
                 checkpoint()

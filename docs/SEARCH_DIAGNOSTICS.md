@@ -52,13 +52,42 @@ This launches a clean interpreter for the baseline, no-LMR, no-qsearch-pruning, 
 extension, and persistent-memory trials. A clean process is required because Numba freezes the
 profile flags when it compiles the recursive search.
 
+For V7, generate an isolated lab rather than modifying the frozen challenger:
+
+```bash
+./.venv/Scripts/python.exe -m tools.materialize_search_lab \
+  --output benchmarks/runs/candidates/v7_search_lab
+
+./.venv/Scripts/python.exe -m tools.search_ablations \
+  --engine-root benchmarks/runs/candidates/v7_search_lab \
+  --suite benchmarks/suites/v5_priority_losses.json \
+  --trials baseline,hce-only,nnue-only,no-lmr,no-null,no-lmr-no-null \
+  --nodes 25000,100000,300000,1000000 \
+  --root-depth 5 \
+  --output benchmarks/diagnostics/v7-priority-mechanisms.json
+```
+
+The generated baseline has the same evaluator and search path as frozen V7. The other profiles
+change exactly one axis except `no-lmr-no-null`, which is an explicit interaction check. These
+positions diagnose mechanisms; they do not estimate Elo.
+
+### Completed V7 result
+
+The checked-in matrix is complete. Unchanged V7 reaches the round-47 `...Nd4`, round-48 `...Kh7`,
+and round-50 `...b4` and `...Qd6+` references as node limits rise. No LMR/null configuration finds
+round-46 `Be2`, and none provides a systematic fix for round-50 `...Qd7`; globally disabling those
+pruners also reduces completed depth. HCE-only finds `...Qd7` materially earlier than the blended
+evaluator, identifying evaluator disagreement and throughput—not a blanket pruning rollback—as
+the next investigation. See `CURRENT_STATE.md` and `docs/EXPERIMENT_LEDGER.md` for the current
+decision.
+
 For a realistic memory comparison, replay the actual rated-game histories. The tool searches each
 earlier position on V3's turns using one persistent TT/history object, follows the historical moves,
 and compares fresh and replayed memory at every critical position:
 
 ```bash
 ./.venv/Scripts/python.exe -m tools.search_memory_replay \
-  --engine-root . \
+  --engine-root current \
   --warm-nodes 25000 \
   --target-nodes 300000 \
   --output benchmarks/diagnostics/v3-persistent-replay.json
@@ -87,6 +116,21 @@ An incomplete root line means its per-move `--root-node-limit` was exhausted. Th
 which allows every exact-depth line to finish.
 
 ## Development workflow
+
+Before an exact throughput experiment, capture repeated fresh-memory fixed-node measurements from
+the canonical engine. The tool rejects a node limit if the move, score, depth, node counts, or
+search statistics change between repeats:
+
+```bash
+./.venv/Scripts/python.exe -m tools.numba_search_scaling \
+  --engine-root current \
+  --nodes 100000,300000,1000000 \
+  --repeats 5 \
+  --output benchmarks/diagnostics/current-scaling-baseline.json
+```
+
+Use the same FEN, limits and repeat count for a challenger. Compare median NPS only after confirming
+fixed-node equivalence; individual elapsed times are noisy.
 
 1. Run the frozen V3 engine and save JSON output.
 2. Make one isolated search change in a challenger directory.

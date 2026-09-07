@@ -5,8 +5,8 @@ import unittest
 import chess
 import numpy as np
 
-from challengers.v3_frozen import engine as v3_engine
-from challengers.v3_frozen import search as v3_search
+from challengers.numba_v1 import engine as v3_engine
+from challengers.numba_v1 import search as v3_search
 from challengers.v4_lazy_order import engine, search
 
 

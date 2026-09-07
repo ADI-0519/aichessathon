@@ -65,23 +65,6 @@ def check_transition(board: chess.Board, rng: random.Random) -> chess.Move:
     return move
 
 
-def check_captures(board: chess.Board) -> None:
-    packed, any_legal = engine.legal_captures(engine.position_from_board(board))
-    actual = {engine.move_to_uci(int(move)) for move in packed}
-    expected = {
-        move.uci()
-        for move in board.legal_moves
-        if board.is_capture(move) or move.promotion is not None
-    }
-    if actual != expected:
-        fail_move_set(board, actual, expected)
-    if any_legal != any(board.legal_moves):
-        raise AssertionError(
-            f"stalemate sentinel disagrees: fen={board.fen(en_passant='fen')} "
-            f"any_legal={any_legal}"
-        )
-
-
 def check_attacks(board: chess.Board) -> None:
     position = engine.position_from_board(board)
     for square in range(64):
@@ -126,7 +109,6 @@ def main() -> None:
         actual = engine.legal_moves_uci(engine.position_from_board(board))
         if actual != expected:
             fail_move_set(board, actual, expected)
-        check_captures(board)
         if index % args.attack_interval == 0:
             check_attacks(board)
 

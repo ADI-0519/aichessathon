@@ -242,7 +242,7 @@ def _print_records(records: list[dict[str, object]]) -> None:
 
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--engine-root", type=Path, default=REPOSITORY)
+    parser.add_argument("--engine-root", type=Path, default=REPOSITORY / "current")
     parser.add_argument("--profile", default="baseline")
     parser.add_argument("--critical-suite", type=Path, default=DEFAULT_SUITE)
     parser.add_argument("--replay-suite", type=Path, default=DEFAULT_REPLAY_SUITE)

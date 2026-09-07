@@ -1,5 +1,9 @@
 # Post-Day-1 competitive engine plan
 
+> Historical decision memo from 5 September. Its architecture research remains useful, but its
+> priorities predate V5--V8 results. Current decisions live in `CURRENT_STATE.md` and
+> `docs/EXPERIMENT_LEDGER.md`.
+
 **Decision memo — 5 September 2026**
 
 This document supersedes the implementation priorities in the earlier roadmap. It is based on the

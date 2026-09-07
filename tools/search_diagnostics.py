@@ -10,6 +10,7 @@ from __future__ import annotations
 import argparse
 import hashlib
 import importlib.util
+import inspect
 import json
 import sys
 import time
@@ -24,6 +25,7 @@ import numpy as np
 from tools.cli import nonnegative_int, positive_int
 
 REPOSITORY = Path(__file__).resolve().parents[1]
+DEFAULT_ENGINE_ROOT = REPOSITORY / "current"
 DEFAULT_SUITE = REPOSITORY / "benchmarks" / "suites" / "v3_critical_positions.json"
 
 
@@ -90,6 +92,7 @@ def load_engine_modules(root: Path) -> tuple[Any, Any]:
     """Load one engine/search pair without mixing it with an already imported build."""
     resolved = root.resolve()
     engine_path = resolved / "engine.py"
+    nnue_path = resolved / "nnue.py"
     search_path = resolved / "search.py"
     for path in (engine_path, search_path):
         if not path.is_file():
@@ -98,18 +101,38 @@ def load_engine_modules(root: Path) -> tuple[Any, Any]:
     token = hashlib.sha256(str(resolved).encode()).hexdigest()[:12]
     engine_module = _module_from_path(f"_diagnostic_engine_{token}", engine_path)
 
-    # Both production search.py and an isolated challenger import a top-level
-    # module named "engine". Supply the matching module only while search loads;
-    # its global reference remains correct after the alias is restored.
+    # Production modules use top-level sibling imports because the submission
+    # directory is placed first on sys.path. Supply the matching isolated
+    # modules only while their dependants load; their global references remain
+    # correct after the aliases are restored.
     previous_engine = sys.modules.get("engine")
+    previous_nnue = sys.modules.get("nnue")
+    previous_residual = sys.modules.get("residual")
     sys.modules["engine"] = engine_module
     try:
+        if nnue_path.is_file():
+            nnue_module = _module_from_path(f"_diagnostic_nnue_{token}", nnue_path)
+            sys.modules["nnue"] = nnue_module
+        residual_path = resolved / "residual.py"
+        if residual_path.is_file():
+            residual_module = _module_from_path(
+                f"_diagnostic_residual_{token}", residual_path
+            )
+            sys.modules["residual"] = residual_module
         search_module = _module_from_path(f"_diagnostic_search_{token}", search_path)
     finally:
         if previous_engine is None:
             del sys.modules["engine"]
         else:
             sys.modules["engine"] = previous_engine
+        if previous_nnue is None:
+            sys.modules.pop("nnue", None)
+        else:
+            sys.modules["nnue"] = previous_nnue
+        if previous_residual is None:
+            sys.modules.pop("residual", None)
+        else:
+            sys.modules["residual"] = previous_residual
     return cast(Any, engine_module), cast(Any, search_module)
 
 
@@ -258,17 +281,6 @@ def _principal_variation(
     return tuple(variation)
 
 
-def _negamax_parameters(search_module: ModuleType) -> tuple[str, ...]:
-    """Parameter names of a module's _negamax, jitted or not.
-
-    v4 inserted an explicit no-double-null flag after ply; v3 has no such
-    parameter. This tool is pointed at both, so it adapts rather than assuming.
-    """
-    target = getattr(search_module._negamax, "py_func", search_module._negamax)
-    code = target.__code__
-    return code.co_varnames[: code.co_argcount]
-
-
 def analyze_root_moves(
     engine_module: Any,
     search_module: Any,
@@ -309,6 +321,17 @@ def analyze_root_moves(
             (search_module.MAX_PLY, engine_module.UNDO_SIZE), dtype=np.int64
         )
         undo_key_stack = np.empty((search_module.MAX_PLY, 1), dtype=np.uint64)
+        accumulator_stack = None
+        if hasattr(search_module, "nnue"):
+            accumulator_stack = np.empty(
+                (
+                    search_module.MAX_PLY,
+                    2,
+                    search_module.nnue.ACCUMULATOR_SIZE,
+                ),
+                dtype=np.int32,
+            )
+            search_module.nnue.rebuild(root.pieces, accumulator_stack[0])
         score_stack = np.empty_like(legal_stack)
         see_gain_stack = np.empty(
             (search_module.MAX_PLY, search_module.SEE_MAX_EXCHANGES), dtype=np.int32
@@ -318,7 +341,23 @@ def analyze_root_moves(
         stats = np.zeros(search_module.STAT_COUNT, dtype=np.int64)
         memory = search_module.SearchMemory.create(tt_bits)
         generation = memory.next_generation()
+        negamax_function = getattr(
+            search_module._negamax, "py_func", search_module._negamax
+        )
+        negamax_parameters = inspect.signature(negamax_function).parameters
+        move_stack = None
+        if "move_stack" in negamax_parameters:
+            move_stack = np.zeros(search_module.MAX_PLY, dtype=np.int32)
+            move_stack[0] = np.int32(root_move)
 
+        if accumulator_stack is not None:
+            search_module.nnue.update_for_move(
+                working.pieces,
+                working.state,
+                root_move,
+                accumulator_stack[0],
+                accumulator_stack[1],
+            )
         if not engine_module.make_move(
             working.pieces,
             working.state,
@@ -328,7 +367,16 @@ def analyze_root_moves(
             undo_key_stack[0],
         ):
             raise RuntimeError(f"generated root move became illegal: {root_move}")
-        static_score = -int(search_module.evaluate(working.pieces, working.state))
+        if accumulator_stack is None:
+            static_score = -int(search_module.evaluate(working.pieces, working.state))
+        else:
+            static_score = -int(
+                search_module.evaluate(
+                    working.pieces,
+                    working.state,
+                    accumulator_stack[1],
+                )
+            )
         history[history_count] = working.key[0]
         negamax_arguments = [
             working.pieces,
@@ -336,7 +384,7 @@ def analyze_root_moves(
             working.key,
             depth - 1,
         ]
-        if hasattr(search_module, "configure_experiment"):
+        if "extensions_used" in negamax_parameters:
             negamax_arguments.append(0)
         negamax_arguments.extend(
             [
@@ -345,7 +393,7 @@ def analyze_root_moves(
                 1,
             ]
         )
-        if "allow_null" in _negamax_parameters(search_module):
+        if "allow_null" in negamax_parameters:
             negamax_arguments.append(True)
         negamax_arguments.extend(
             [
@@ -356,10 +404,24 @@ def analyze_root_moves(
                 pseudo_stack,
                 undo_stack,
                 undo_key_stack,
+            ]
+        )
+        if accumulator_stack is not None:
+            negamax_arguments.append(accumulator_stack)
+        if move_stack is not None:
+            negamax_arguments.append(move_stack)
+        negamax_arguments.extend(
+            [
                 score_stack,
                 see_gain_stack,
                 killers,
                 memory.quiet_history,
+            ]
+        )
+        if "countermoves" in negamax_parameters:
+            negamax_arguments.append(memory.countermoves)
+        negamax_arguments.extend(
+            [
                 memory.tt_keys,
                 memory.tt_data,
                 generation,
@@ -466,12 +528,14 @@ def _print_case(
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     source = parser.add_mutually_exclusive_group(required=True)
-    source.add_argument("--case", help="Critical-position id from --suite")
+    source.add_argument(
+        "--case", help="Critical-position id from --suite, or comma-separated ids"
+    )
     source.add_argument("--all-cases", action="store_true")
     source.add_argument("--fen")
     parser.add_argument("--reference-move", help="Optional UCI target used with --fen")
     parser.add_argument("--suite", type=Path, default=DEFAULT_SUITE)
-    parser.add_argument("--engine-root", type=Path, default=REPOSITORY)
+    parser.add_argument("--engine-root", type=Path, default=DEFAULT_ENGINE_ROOT)
     parser.add_argument(
         "--profile",
         default="baseline",
@@ -510,9 +574,13 @@ def main() -> None:
     else:
         cases = load_critical_positions(args.suite)
         if args.case is not None:
-            cases = [case for case in cases if case.identifier == args.case]
-            if not cases:
-                parser.error(f"unknown case id: {args.case}")
+            requested = {identifier.strip() for identifier in args.case.split(",")}
+            requested.discard("")
+            selected = [case for case in cases if case.identifier in requested]
+            missing = requested - {case.identifier for case in selected}
+            if missing:
+                parser.error(f"unknown case id(s): {', '.join(sorted(missing))}")
+            cases = selected
 
     engine_module, search_module = load_engine_modules(args.engine_root)
     if hasattr(search_module, "configure_experiment"):

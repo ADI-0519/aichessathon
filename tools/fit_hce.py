@@ -192,10 +192,18 @@ def fit_labels(
     )
 
 
-def write_fit(path: Path, labels_path: Path, result: FitResult) -> None:
+def write_fit(
+    path: Path,
+    labels_path: Path,
+    result: FitResult,
+    *,
+    target_name: str = "teacher_score_cp_minus_v3_static_score_cp",
+) -> None:
+    if not target_name.strip():
+        raise ValueError("target name must not be empty")
     payload = {
         "schema_version": 2,
-        "target": "teacher_score_cp_minus_v3_static_score_cp",
+        "target": target_name,
         "labels_sha256": hashlib.sha256(labels_path.read_bytes()).hexdigest(),
         "feature_names": list(result.feature_names),
         "taper_denominator": MAX_PHASE,
@@ -235,6 +243,11 @@ def main() -> None:
     parser.add_argument("--min-train-count", type=positive_int, default=500)
     parser.add_argument("--allow-no-validation", action="store_true")
     parser.add_argument("--report-holdout", action="store_true")
+    parser.add_argument(
+        "--target-name",
+        default="teacher_score_cp_minus_v3_static_score_cp",
+        help="Provenance label for the residual target stored in the artifact.",
+    )
     args = parser.parse_args()
     if not args.labels.is_file():
         parser.error(f"label file not found: {args.labels}")
@@ -247,7 +260,7 @@ def main() -> None:
         require_validation=not args.allow_no_validation,
         include_holdout=args.report_holdout,
     )
-    write_fit(args.output, args.labels, result)
+    write_fit(args.output, args.labels, result, target_name=args.target_name)
     print(
         f"wrote {args.output} ({result.train_count} development, "
         f"{result.validation_count} validation, ridge {result.ridge:g})"

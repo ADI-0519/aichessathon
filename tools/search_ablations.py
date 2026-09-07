@@ -1,4 +1,4 @@
-"""Run V4 search ablations in isolated processes and compare critical positions."""
+"""Run named search ablations in isolated processes on critical positions."""
 
 from __future__ import annotations
 
@@ -34,6 +34,10 @@ TRIALS = {
         Trial("no-q-pruning", "no-q-pruning"),
         Trial("check-extension", "check-extension"),
         Trial("persistent", "baseline", "persistent"),
+        Trial("hce-only", "hce-only"),
+        Trial("nnue-only", "nnue-only"),
+        Trial("no-null", "no-null"),
+        Trial("no-lmr-no-null", "no-lmr-no-null"),
     )
 }
 
@@ -71,6 +75,7 @@ def run_trial(
     root_depth: int,
     tt_bits: int,
     pv_plies: int,
+    timeout_s: int = 3_600,
 ) -> dict[str, Any]:
     """Execute one profile in a clean interpreter and return its JSON report."""
     command = [
@@ -103,7 +108,7 @@ def run_trial(
         check=False,
         capture_output=True,
         text=True,
-        timeout=600,
+        timeout=timeout_s,
     )
     if completed.returncode != 0:
         detail = completed.stderr.strip() or completed.stdout.strip()
@@ -199,11 +204,17 @@ def main() -> None:
     parser.add_argument("--root-depth", type=int, default=5)
     parser.add_argument("--tt-bits", type=int, default=18)
     parser.add_argument("--pv-plies", type=int, default=12)
+    parser.add_argument(
+        "--trial-timeout-s",
+        type=int,
+        default=3_600,
+        help="Maximum wall time for each isolated profile process.",
+    )
     parser.add_argument("--output", type=Path, default=DEFAULT_OUTPUT)
     args = parser.parse_args()
 
-    if args.root_depth <= 0 or args.pv_plies <= 0:
-        parser.error("--root-depth and --pv-plies must be positive")
+    if args.root_depth <= 0 or args.pv_plies <= 0 or args.trial_timeout_s <= 0:
+        parser.error("--root-depth, --pv-plies, and --trial-timeout-s must be positive")
     if not 10 <= args.tt_bits <= 24:
         parser.error("--tt-bits must be between 10 and 24")
     load_critical_positions(args.suite)
@@ -219,6 +230,7 @@ def main() -> None:
             root_depth=args.root_depth,
             tt_bits=args.tt_bits,
             pv_plies=args.pv_plies,
+            timeout_s=args.trial_timeout_s,
         )
         reports.append(report)
         _print_summary(trial, report)
@@ -233,6 +245,7 @@ def main() -> None:
             "root_depth": args.root_depth,
             "tt_bits": args.tt_bits,
             "pv_plies": args.pv_plies,
+            "trial_timeout_s": args.trial_timeout_s,
         },
         "reports": reports,
     }

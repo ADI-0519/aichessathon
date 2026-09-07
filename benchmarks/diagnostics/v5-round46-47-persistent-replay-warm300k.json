@@ -1,0 +1,165 @@
+{
+  "configuration": {
+    "critical_suite": "C:\\Users\\adirj\\OneDrive\\Documents\\GitHub\\aichessathon\\benchmarks\\suites\\v5_round46_47_losses.json",
+    "max_depth": 32,
+    "profile": "baseline",
+    "replay_suite": "C:\\Users\\adirj\\OneDrive\\Documents\\GitHub\\aichessathon\\benchmarks\\suites\\v5_round46_47_replays.json",
+    "target_nodes": 1000000,
+    "tt_bits": 18,
+    "warm_nodes": 300000
+  },
+  "engine": {
+    "bytes": 533347,
+    "files": [
+      "__init__.py",
+      "agent.py",
+      "engine.py",
+      "nnue.py",
+      "search.py",
+      "weights\\model.npz"
+    ],
+    "kind": "local",
+    "path": "C:\\Users\\adirj\\OneDrive\\Documents\\GitHub\\aichessathon\\challengers\\v5_nnue",
+    "sha256": "f0d1adb21bdbe5f338f1f0b845d440eeb3dc170cc998ee9cf5afb059f5f4e87c"
+  },
+  "games": [
+    {
+      "engine_color": "white",
+      "identifier": "round46-elbow-grease",
+      "initial_fen": "r1bqk2r/ppp2ppp/2np1n2/2b1p3/P1B1P3/2PP1N2/1P3PPP/RNBQK2R b KQkq - 0 6",
+      "moves": [
+        "c5b6",
+        "b2b4",
+        "a7a6",
+        "e1g1",
+        "e8g8",
+        "b1d2",
+        "c6e7",
+        "a4a5",
+        "b6a7",
+        "f1e1",
+        "e7g6",
+        "d3d4",
+        "e5d4",
+        "c3d4",
+        "c7c6",
+        "d1b3",
+        "d6d5",
+        "c4d3",
+        "d5e4",
+        "d2e4",
+        "c8e6",
+        "b3c3",
+        "g6h4",
+        "e4g5",
+        "h4f3",
+        "g5f3",
+        "e6g4",
+        "c1e3"
+      ],
+      "targets": [
+        {
+          "case_id": "round46-20-be2",
+          "fullmove": 20
+        }
+      ]
+    },
+    {
+      "engine_color": "black",
+      "identifier": "round47-keep-kann-and-caro-on",
+      "initial_fen": "r1bqk2r/ppp1bppp/2n5/3np3/P1B5/3P1N2/1PP2PPP/RNBQ1RK1 b kq - 1 7",
+      "moves": [
+        "e8g8",
+        "f1e1",
+        "c8g4",
+        "h2h3",
+        "g4f3",
+        "d1f3",
+        "d5b6",
+        "c4b3",
+        "d8d7"
+      ],
+      "targets": [
+        {
+          "case_id": "round47-11-nd4",
+          "fullmove": 11
+        }
+      ]
+    }
+  ],
+  "git": {
+    "commit": "643ec2945cdd38ed67d31ec993e5b513ce7dae45",
+    "dirty": true
+  },
+  "records": [
+    {
+      "actual_move": "c1e3",
+      "case": "round46-20-be2",
+      "fen": "r2q1rk1/bp3ppp/p1p2n2/P7/1P1P2b1/2QB1N2/5PPP/R1B1R1K1 w - - 1 20",
+      "fresh": {
+        "depth": 8,
+        "lmr_reductions": 46886,
+        "lmr_researches": 40,
+        "move": "c1e3",
+        "nodes": 1000001,
+        "qnodes": 848397,
+        "qshare": 0.8483961516038484,
+        "score": -24,
+        "tt_cutoffs": 39293,
+        "tt_hits": 71493
+      },
+      "fullmove": 20,
+      "game": "round46-elbow-grease",
+      "prior_history_positions": 28,
+      "prior_searches": 13,
+      "reference_move": "d3e2",
+      "replayed": {
+        "depth": 8,
+        "lmr_reductions": 45298,
+        "lmr_researches": 49,
+        "move": "c1e3",
+        "nodes": 1000001,
+        "qnodes": 850743,
+        "qshare": 0.8507421492578507,
+        "score": -24,
+        "tt_cutoffs": 37636,
+        "tt_hits": 66876
+      }
+    },
+    {
+      "actual_move": "d8d7",
+      "case": "round47-11-nd4",
+      "fen": "r2q1rk1/ppp1bppp/1nn5/4p3/P7/1B1P1Q1P/1PP2PP1/RNB1R1K1 b - - 2 11",
+      "fresh": {
+        "depth": 8,
+        "lmr_reductions": 42472,
+        "lmr_researches": 186,
+        "move": "b6d7",
+        "nodes": 1000001,
+        "qnodes": 841422,
+        "qshare": 0.8414211585788414,
+        "score": -37,
+        "tt_cutoffs": 23172,
+        "tt_hits": 49211
+      },
+      "fullmove": 11,
+      "game": "round47-keep-kann-and-caro-on",
+      "prior_history_positions": 9,
+      "prior_searches": 4,
+      "reference_move": "c6d4",
+      "replayed": {
+        "depth": 8,
+        "lmr_reductions": 41447,
+        "lmr_researches": 280,
+        "move": "c6d4",
+        "nodes": 1000001,
+        "qnodes": 841410,
+        "qshare": 0.8414091585908414,
+        "score": -37,
+        "tt_cutoffs": 20224,
+        "tt_hits": 44254
+      }
+    }
+  ],
+  "schema_version": 1
+}

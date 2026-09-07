@@ -1177,3 +1177,4 @@ def warmup() -> None:
     undo_key = np.empty(1, dtype=np.uint64)
     make_null_move(position.pieces, position.state, position.key, undo, undo_key)
     unmake_null_move(position.state, position.key, undo, undo_key)
+
