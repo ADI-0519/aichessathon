@@ -2,8 +2,8 @@
 
 The network was trained by this team from Stockfish-labelled positions.  Its
 input is a colour-symmetric 12 x 64 piece-square representation.  Search keeps
-the two 128-value accumulators incrementally, so a leaf evaluation only runs
-the small 256 -> 32 -> 1 dense head.
+the two ACCUMULATOR_SIZE-value accumulators incrementally, so a leaf evaluation
+only runs the small dense head over their concatenation.
 """
 
 from __future__ import annotations
