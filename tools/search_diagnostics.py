@@ -383,7 +383,7 @@ def analyze_root_moves(
             working.key,
             depth - 1,
         ]
-        if hasattr(search_module, "configure_experiment"):
+        if "extensions_used" in negamax_parameters:
             negamax_arguments.append(0)
         negamax_arguments.extend(
             [

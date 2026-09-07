@@ -265,7 +265,8 @@ candidate with the frozen champion at the same Stockfish node limit and opening 
 
 ### Diagnose a rated PGN
 
-Use Stockfish to identify costly decisions. `--focus` is the colour played by our agent:
+Use Stockfish to identify costly decisions. For one game, `--focus` is the colour played by our
+agent:
 
 ```bash
 PGN="/c/Users/adirj/Downloads/aichessathon-round-28-team-i-love-fortnite.pgn"
@@ -276,6 +277,30 @@ PGN="/c/Users/adirj/Downloads/aichessathon-round-28-team-i-love-fortnite.pgn"
   --focus black \
   "$PGN"
 ```
+
+For the rated-game corpus, select AIY by its PGN player header and write mate-safe JSON. Each
+position is analysed once and reused as the following ply's before-position, so this requires
+roughly half as many engine calls as the text-only predecessor:
+
+```bash
+"$PY" -m tools.analyze_pgn_stockfish \
+  --engine "$SF" \
+  --nodes 100000 \
+  --player AIY \
+  --missing-player skip \
+  --format json \
+  --output benchmarks/runs/v5-rated-stockfish100k.json \
+  /c/Users/adirj/Downloads/aichessathon-round-*.pgn
+
+"$PY" -m tools.build_critical_suite_from_analysis \
+  --analysis benchmarks/runs/v5-rated-stockfish100k.json \
+  --output benchmarks/suites/v5_rated_critical.json \
+  --min-cp-loss 80 \
+  --limit 25
+```
+
+Mate scores stay in separate `mate` fields and are excluded from ACPL. The first move starts at
+120 seconds; the increment is added only before later moves by the same colour.
 
 Probe multiple agents at the positions before selected full moves:
 
@@ -335,6 +360,27 @@ Run the named V4 search profiles in isolated processes:
   --root-depth 5 \
   --output benchmarks/diagnostics/v4-search-ablations.json
 ```
+
+Materialize the development-only V7 lab, then classify whether rated errors come from evaluator
+choice, LMR, null-move pruning, or a shared blind spot:
+
+```bash
+"$PY" -m tools.materialize_search_lab \
+  --source challengers/v7_continuous_time \
+  --output benchmarks/runs/candidates/v7_search_lab
+
+"$PY" -m tools.search_ablations \
+  --engine-root benchmarks/runs/candidates/v7_search_lab \
+  --suite benchmarks/suites/v5_rated_critical.json \
+  --trials baseline,hce-only,nnue-only,no-lmr,no-null,no-lmr-no-null \
+  --nodes 25000,100000,300000,1000000 \
+  --root-depth 5 \
+  --trial-timeout-s 3600 \
+  --output benchmarks/diagnostics/v7-rated-mechanism-matrix.json
+```
+
+The lab is generated from frozen V7 and is never a submission candidate. Every profile runs in a
+fresh interpreter because Numba freezes these switches during compilation.
 
 ### Run correctness and quality gates
 
