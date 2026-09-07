@@ -1,14 +1,27 @@
-"""Safe public boundary for the production V3 compiled Numba agent."""
-
 from __future__ import annotations
 
+import os
 import time
 
-import chess
-import numpy as np
+# NumPy and Numba inspect these variables when they are first imported.  The
+# match container supplies one core, so larger native pools only waste memory
+# and can exhaust thread resources during repeated local arena startups.
+for _variable in (
+    "MKL_NUM_THREADS",
+    "NUMBA_NUM_THREADS",
+    "NUMEXPR_NUM_THREADS",
+    "OMP_NUM_THREADS",
+    "OPENBLAS_NUM_THREADS",
+    "VECLIB_MAXIMUM_THREADS",
+):
+    os.environ[_variable] = "1"
 
-import engine
-import search
+import chess  # noqa: E402 - thread limits must precede native-library imports
+import numpy as np  # noqa: E402
+from time_manager import move_budget_ms as _move_budget_ms  # noqa: E402
+
+import engine  # noqa: E402
+import search  # noqa: E402
 
 _memory = search.SearchMemory.create()
 _game_board: chess.Board | None = None
@@ -51,19 +64,6 @@ def _sync_board(fen: str) -> chess.Board:
     return _reset_game(incoming)
 
 
-def _move_budget_ms(time_left_ms: int) -> int:
-    """Allocate useful time while protecting against a wall-clock flag."""
-    reserve_ms = max(150, min(1_500, time_left_ms // 10))
-    usable_ms = max(0, time_left_ms - reserve_ms)
-    if time_left_ms >= 60_000:
-        target_ms = min(4_500, time_left_ms // 32 + 350)
-    elif time_left_ms >= 10_000:
-        target_ms = min(3_000, time_left_ms // 42 + 250)
-    else:
-        target_ms = min(800, time_left_ms // 55 + 80)
-    return max(0, min(target_ms, usable_ms))
-
-
 def _choose_move(fen: str, time_left_ms: int) -> str:
     global _game_board
     if time_left_ms <= 100:
@@ -82,7 +82,7 @@ def _choose_move(fen: str, time_left_ms: int) -> str:
     if len(legal_moves) == 1:
         chosen = fallback
     else:
-        budget_ms = _move_budget_ms(time_left_ms)
+        budget_ms = _move_budget_ms(time_left_ms, board.fullmove_number)
         chosen = fallback
         if budget_ms > 0:
             position = engine.position_from_board(board)
