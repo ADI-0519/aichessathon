@@ -11,3 +11,7 @@ benchmarks/suites/sources/
 # The V6 king-conditioned weight is generated locally, then replaced by the
 # trained export only after it passes the promotion gates.
 challengers/v6_halfkp/weights/model.npz
+
+# local machine paths and personal scripts
+.stockfish_path
+filter_commits.sh
