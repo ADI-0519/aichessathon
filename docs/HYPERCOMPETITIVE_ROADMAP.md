@@ -51,7 +51,7 @@ the live [AI Chessathon documentation](https://aichessathon.com/docs) and the da
 | Core remains available after returning | Pondering is free compute if only one search owns the core at a time and can be stopped safely. |
 | Illegal/crash/OOM/flag/init failure loses | Reliability is part of Elo. Root move validation and a deterministic legal fallback are non-negotiable. |
 | Curated, near-level starting positions | Test from diverse middlegame-adjacent opening positions, not just the initial board. |
-| 300-ply material adjudication | When adjudication is near, material becomes the literal objective; avoid shuffling while materially behind and simplify while ahead. |
+| 600-ply material adjudication | When adjudication is near, material becomes the literal objective; avoid shuffling while materially behind and simplify while ahead. |
 | Ten uploads/day; latest valid one plays | Maintain an immutable champion. Never let an unproven upload displace it late in the day. |
 
 The site currently says hourly ladder games only seed a 13-round Swiss, with points, Buchholz,

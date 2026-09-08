@@ -1,10 +1,8 @@
 import argparse
 from pathlib import Path
 
-import chess
-
 from harness.referee import play_match
-from harness.rules import BASE_MS, INCREMENT_MS, PLY_CAP
+from harness.rules import BASE_MS, INCREMENT_MS, OPENINGS, PLY_CAP
 from harness.sandbox import local
 
 
@@ -15,7 +13,7 @@ def main() -> None:
     parser.add_argument("--base-ms", type=int, default=BASE_MS)
     parser.add_argument("--increment-ms", type=int, default=INCREMENT_MS)
     parser.add_argument("--ply-cap", type=int, default=PLY_CAP)
-    parser.add_argument("--fen", default=chess.STARTING_FEN)
+    parser.add_argument("--fen", default=OPENINGS[0][1])
     parser.add_argument("--pgn", type=Path)
     arguments = parser.parse_args()
 
@@ -30,13 +28,13 @@ def main() -> None:
         start_fen=arguments.fen,
     )
 
-    print(f"{arguments.white} vs {arguments.black}: {outcome.result} by {outcome.termination}")
+    print(f"{arguments.white} vs {arguments.black}, {outcome.result} by {outcome.termination}")
     for name, agent in (("white", white), ("black", black)):
-        if agent.stderr_tail:
-            print(f"\n{name} wrote to stderr:\n{agent.stderr_tail.rstrip()}")
+        if agent.stderr_log:
+            print(f"\n{name.capitalize()} wrote to stderr\n{agent.stderr_log.rstrip()}")
     if arguments.pgn:
         arguments.pgn.write_text(outcome.pgn + "\n")
-        print(f"pgn written to {arguments.pgn}")
+        print(f"PGN written to {arguments.pgn}")
 
 
 if __name__ == "__main__":
