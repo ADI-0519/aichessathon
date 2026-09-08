@@ -15,7 +15,18 @@ from harness.rules import STDERR_HEAD, STDERR_TAIL, STDOUT_CAP, WATCHDOG_GRACE_M
 
 RUNNER = Path(__file__).resolve().parent / "runner.py"
 DRAIN_GRACE_S = 0.2
-SUSPENDS = hasattr(signal, "SIGSTOP")
+
+_SIGSTOP = getattr(signal, "SIGSTOP", None)
+_SIGCONT = getattr(signal, "SIGCONT", None)
+_SIGKILL = getattr(signal, "SIGKILL", None)
+_KILLPG = getattr(os, "killpg", None)
+SUSPENDS = (
+    _SIGSTOP is not None
+    and _SIGCONT is not None
+    and _SIGKILL is not None
+    and _KILLPG is not None
+)
+
 # The container points these at a /tmp wiped between games.
 SCRATCH_VARS = ("HOME", "TMPDIR", "XDG_CACHE_HOME", "TORCH_HOME", "HF_HOME", "NUMBA_CACHE_DIR")
 
@@ -73,12 +84,12 @@ class Agent:
 
     # The platform freezes you while the opponent thinks.
     def suspend(self) -> None:
-        if SUSPENDS:
-            self._signal(signal.SIGSTOP)
+        if _SIGSTOP is not None:
+            self._signal(_SIGSTOP)
 
     def resume(self) -> None:
-        if SUSPENDS:
-            self._signal(signal.SIGCONT)
+        if _SIGCONT is not None:
+            self._signal(_SIGCONT)
 
     def move(self, fen: str, time_left_ms: int) -> str:
         if self._process is None:
@@ -96,8 +107,8 @@ class Agent:
     def stop(self) -> None:
         if self._process is None:
             return
-        if SUSPENDS:
-            self._signal(signal.SIGKILL)
+        if _SIGKILL is not None:
+            self._signal(_SIGKILL)
         self._process.kill()
         for reader in self._readers:
             reader.join(DRAIN_GRACE_S)
@@ -118,11 +129,11 @@ class Agent:
         environment["HARNESS_SEED"] = str(self.seed)
         return environment
 
-    def _signal(self, number: signal.Signals) -> None:
-        if self._process is None:
+    def _signal(self, number: int) -> None:
+        if self._process is None or _KILLPG is None:
             return
         try:
-            os.killpg(self._process.pid, number)
+            _KILLPG(self._process.pid, number)
         except ProcessLookupError:
             return
 

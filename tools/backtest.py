@@ -10,6 +10,7 @@ import io
 import json
 import math
 import random
+import threading
 import time
 from collections import Counter
 from collections.abc import Callable, Sequence
@@ -18,7 +19,6 @@ from dataclasses import asdict, dataclass
 from functools import wraps
 from pathlib import Path
 from typing import Literal, cast
-import threading
 
 import chess
 import chess.pgn
@@ -564,7 +564,8 @@ def run(arguments: argparse.Namespace) -> int:
     for record in records:
         if not (output / record.pgn_file).is_file():
             raise ValueError(f"journal references missing PGN: {record.pgn_file}")
-    if not arguments.continue_on_failure and any(record.candidate_failure or record.opponent_failure for record in records):
+    if not arguments.continue_on_failure and \
+        any(record.candidate_failure or record.opponent_failure for record in records):
         summary = run_summary(records, arguments)
         atomic_write_json(output / "summary.json", summary)
         print_summary(summary)
@@ -664,8 +665,11 @@ def run(arguments: argparse.Namespace) -> int:
                                 stop_code = 0
 
                     if stop_code is not None:
+                        stop_event.set()
+
                         for future in futures.values():
                             future.cancel()
+
                         return stop_code
 
                     if next_to_submit < len(tasks):
@@ -685,9 +689,15 @@ def run(arguments: argparse.Namespace) -> int:
     summary = run_summary(records, arguments)
     print_summary(summary)
     candidate_failures = summary["candidate_failures"]
+    opponent_failures = summary["opponent_failures"]
+
     if not isinstance(candidate_failures, int):
         raise TypeError("summary candidate_failures must be an integer")
-    return 2 if candidate_failures else 0
+
+    if not isinstance(opponent_failures, int):
+        raise TypeError("summary opponent_failures must be an integer")
+
+    return 2 if candidate_failures or opponent_failures else 0
 
 
 def build_parser() -> argparse.ArgumentParser:
