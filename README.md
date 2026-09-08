@@ -168,6 +168,26 @@ Repeat the exact command to resume an interrupted run. Use a new output name if 
 opponent, clock, suite, or selection changes. See [Backtest Suite V2](docs/BACKTESTING.md) for the
 split policy and report format.
 
+For a behaviour-changing challenger, add a five-bin paired SPRT. The runner checks the boundary
+only after the colour-swapped pair is complete and persists its state in `summary.json`:
+
+```bash
+"$PY" -m tools.backtest \
+  --candidate "$CANDIDATE" \
+  --opponent current \
+  --suite benchmarks/suites/openings_8moves_v3_500.epd \
+  --split development \
+  --limit 200 \
+  --base-ms 10000 \
+  --increment-ms 100 \
+  --sprt --sprt-elo0 0 --sprt-elo1 20 \
+  --output "benchmarks/runs/${RUN}-sprt-0-20"
+```
+
+This tests whether the result is closer to 0 Elo or +20 Elo; a lower-bound stop does not establish
+negative Elo. See [the backtesting guide](docs/BACKTESTING.md) before choosing bounds or running
+tests concurrently.
+
 Confirm a promising change on the validation split rather than repeatedly tuning against it:
 
 ```bash

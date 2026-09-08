@@ -7,6 +7,7 @@ never included in ``submission.zip``.
 from __future__ import annotations
 
 import argparse
+from contextlib import suppress
 from pathlib import Path
 from typing import cast
 
@@ -61,10 +62,8 @@ class StockfishAgent:
             )
 
             if engine is not None:
-                try:
+                with suppress(Exception):
                     engine.close()
-                except Exception:
-                    pass
 
             raise AgentFailure("init") from exc
 
@@ -131,10 +130,8 @@ class StockfishAgent:
                 f"Stockfish shutdown failed: {type(exc).__name__}: {exc}"
             )
 
-            try:
+            with suppress(Exception):
                 engine.close()
-            except Exception:
-                pass
 
     def _append_log(self, message: str) -> None:
         self.stderr_log = f"{self.stderr_log}\n{message}".strip()

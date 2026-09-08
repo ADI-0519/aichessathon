@@ -117,6 +117,21 @@ which allows every exact-depth line to finish.
 
 ## Development workflow
 
+Before an exact throughput experiment, capture repeated fresh-memory fixed-node measurements from
+the canonical engine. The tool rejects a node limit if the move, score, depth, node counts, or
+search statistics change between repeats:
+
+```bash
+./.venv/Scripts/python.exe -m tools.numba_search_scaling \
+  --engine-root current \
+  --nodes 100000,300000,1000000 \
+  --repeats 5 \
+  --output benchmarks/diagnostics/current-scaling-baseline.json
+```
+
+Use the same FEN, limits and repeat count for a challenger. Compare median NPS only after confirming
+fixed-node equivalence; individual elapsed times are noisy.
+
 1. Run the frozen V3 engine and save JSON output.
 2. Make one isolated search change in a challenger directory.
 3. Run the challenger at identical node limits and root depth.

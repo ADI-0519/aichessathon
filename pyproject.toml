@@ -32,6 +32,9 @@ target-version = "py312"
 select = ["E", "F", "I", "N", "UP", "B", "SIM", "RUF"]
 ignore = ["N818"]
 
+[tool.ruff.lint.per-file-ignores]
+"challengers/**" = ["I001"]
+
 [tool.mypy]
 strict = true
 mypy_path = "current"
@@ -41,6 +44,8 @@ files = [
     "tools/build_suite.py",
     "tools/backtest.py",
     "tools/backtest_core.py",
+    "tools/pentanomial_sprt.py",
+    "tools/numba_search_scaling.py",
     "tools/cli.py",
     "tools/analyze_pgn_stockfish.py",
     "tools/build_critical_suite_from_analysis.py",

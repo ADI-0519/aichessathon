@@ -1,4 +1,4 @@
-# Backtest Suite V2
+# Reproducible backtesting and pentanomial SPRT
 
 `tools.backtest` is the reproducible strength-testing layer above the unmodified competition
 referee. It is development-only and is never packaged with the chess agent.
@@ -16,11 +16,14 @@ referee. It is development-only and is never packaged with the chess agent.
 - Voids are not misreported as draws, and technical failures are attributed to the candidate or
   opponent.
 - Reports include W/D/L, colour splits, terminations, Elo from score, paired pentanomial counts,
-  and an approximate paired 95% score interval.
+  and an approximate 95% interval derived from the complete-pair sample variance.
+- Optional SPRT state is stored in both the immutable manifest and the refreshed summary. Boundary
+  checks occur only after both colours of a position have finished.
 
-The confidence interval is a descriptive Wilson-style interval over complete colour-swapped pairs,
-not a full Fishtest-compatible GSPRT. It stays appropriately wide for tiny all-win or all-loss
-samples, but small samples remain directional evidence.
+The confidence interval is descriptive; it is not the sequential decision rule. With `--sprt`, the
+runner uses all five pair frequencies in a constrained-multinomial generalized likelihood ratio,
+following fishtest's logistic-Elo GSPRT construction. Empty bins receive the same small `1e-3`
+regularizer used by fishtest.
 
 ## Suites and leakage control
 
@@ -60,6 +63,43 @@ writes a provenance manifest next to the generated EPD.
   --increment-ms 100 \
   --output benchmarks/runs/v7-vs-v6-validation-8moves
 ```
+
+## Sequential strength test
+
+Use SPRT for changes that alter chess behaviour, such as pruning, evaluation, extensions, move
+ordering, a new network, or time management:
+
+```bash
+./.venv/Scripts/python.exe -m tools.backtest \
+  --candidate challengers/exp_candidate \
+  --opponent current \
+  --suite benchmarks/suites/openings_8moves_v3_500.epd \
+  --split development \
+  --limit 200 \
+  --base-ms 10000 \
+  --increment-ms 100 \
+  --sprt \
+  --sprt-elo0 0 \
+  --sprt-elo1 20 \
+  --sprt-alpha 0.05 \
+  --sprt-beta 0.05 \
+  --sprt-min-pairs 25 \
+  --output benchmarks/runs/exp-candidate-sprt-0-20
+```
+
+For `SPRT[0,+20]`, crossing the upper boundary favours the `+20 Elo` hypothesis. Crossing the
+lower boundary favours `0 Elo` over `+20 Elo`; it does not prove that the candidate is weaker.
+When neither boundary is reached before the selected positions are exhausted, the result remains
+inconclusive. Do not add an extra point-estimate stopping rule: doing so invalidates the configured
+sequential error rates.
+
+Do not run one logical SPRT as independent concurrent shards. Pair order and the cumulative stopping
+state belong to one journal. Concurrent fixed-length screens remain supported with disjoint offsets
+and output directories.
+
+Correctness-preserving speed changes should not be forced through `SPRT[0,+20]`. Prove identical
+fixed-node moves, scores and node counts, require repeatable throughput improvement, then run
+technical games. Use SPRT when the change can alter played moves.
 
 ## Stockfish example
 

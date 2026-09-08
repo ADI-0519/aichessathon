@@ -1,0 +1,73 @@
+{
+  "aggregates": [
+    {
+      "depth": 5,
+      "maximum_nps": 251477.91367979773,
+      "median_nps": 250713.0272679521,
+      "minimum_nps": 249948.14085610647,
+      "move": "d2d4",
+      "node_limit": 10000,
+      "nodes": 10001,
+      "qnodes": 7573,
+      "qshare": 0.7572242775722428,
+      "score": 13
+    }
+  ],
+  "configuration": {
+    "fen": "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1",
+    "max_depth": 32,
+    "node_limits": [
+      10000
+    ],
+    "repeats": 2
+  },
+  "engine": {
+    "bytes": 534256,
+    "files": [
+      "__init__.py",
+      "agent.py",
+      "engine.py",
+      "nnue.py",
+      "search.py",
+      "time_manager.py",
+      "weights/model.npz"
+    ],
+    "kind": "local",
+    "path": "C:\\Users\\adirj\\OneDrive\\Documents\\GitHub\\aichessathon\\current",
+    "sha256": "bea93db972ecd60ee5f38f7cb223f6d129cb8fe2c6caeec1cb27d0f75cf56e95"
+  },
+  "probes": [
+    {
+      "depth": 5,
+      "elapsed_s": 0.03976889999466948,
+      "lmr_reductions": 583,
+      "lmr_researches": 4,
+      "move": "d2d4",
+      "node_limit": 10000,
+      "nodes": 10001,
+      "nps": 251477.91367979773,
+      "qnodes": 7573,
+      "repeat": 1,
+      "score": 13,
+      "tt_cutoffs": 619,
+      "tt_hits": 983
+    },
+    {
+      "depth": 5,
+      "elapsed_s": 0.04001230001449585,
+      "lmr_reductions": 583,
+      "lmr_researches": 4,
+      "move": "d2d4",
+      "node_limit": 10000,
+      "nodes": 10001,
+      "nps": 249948.14085610647,
+      "qnodes": 7573,
+      "repeat": 2,
+      "score": 13,
+      "tt_cutoffs": 619,
+      "tt_hits": 983
+    }
+  ],
+  "schema_version": 1,
+  "warmup_s": 32.45573909999803
+}

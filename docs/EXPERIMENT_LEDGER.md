@@ -1,6 +1,6 @@
 # Experiment ledger
 
-Updated: 7 September 2026
+Updated: 8 September 2026
 
 This is the compact decision record for engine experiments. Detailed analysis remains in the
 dated research documents and machine-readable benchmark files. A development score is evidence
@@ -28,7 +28,10 @@ for choosing what to validate next, not proof of Elo; technical smokes establish
 ## Reliability and infrastructure completed
 
 - Reproducible paired backtests with source fingerprints, resumable journals, colour-swapped
-  openings, split protection, PGNs, failure attribution, and summary intervals.
+  openings, split protection, PGNs, failure attribution, paired intervals, and optional five-bin
+  logistic-Elo GSPRT stopping after complete pairs.
+- Engine-selectable repeated fixed-node scaling with deterministic-result enforcement and durable
+  JSON reports.
 - Fixed-node search diagnostics with principal variations, root alternatives, qsearch share, TT
   statistics, and LMR statistics.
 - Faithful persistent-memory replay for reproducing rated decisions.

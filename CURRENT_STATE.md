@@ -1,6 +1,6 @@
 # Current engine state
 
-Updated: 7 September 2026
+Updated: 8 September 2026
 
 ## Deployable champion
 
@@ -78,12 +78,16 @@ NNUE-only, no-LMR, no-null, and no-LMR/no-null searches on six rated-error posit
 Do not start another broad neural-network run or combine fashionable search features. The next
 candidate should target exact throughput while preserving scores and moves:
 
-1. Profile full-search time in NNUE accumulator updates, NNUE evaluation, handcrafted evaluation,
-   and quiescence.
+1. Use the engine-selectable repeated fixed-node scaling examiner to establish the canonical
+   baseline, then profile full-search time in NNUE accumulator updates, NNUE evaluation,
+   handcrafted evaluation, and quiescence.
 2. Implement exactly one independently written candidate: lazy accumulator updates if accumulator
    work dominates, otherwise a correctness-keyed quiescence/static-evaluation cache.
 3. Require exact fixed-node equivalence, a repeatable speed gain, critical-position checks, then
    paired development and untouched validation games against `current/`.
+
+Behaviour-changing candidates now use the integrated five-bin logistic-Elo GSPRT. Exact semantic
+optimisations use equivalence plus throughput gates instead of an inappropriate Elo hypothesis.
 
 The reviewed top-20 Toby Coad repository supports these as hypotheses, especially lazy accumulator
 updates and quiescence evaluation caching. Its ranking is not causal evidence, and its code or
