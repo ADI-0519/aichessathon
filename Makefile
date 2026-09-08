@@ -23,4 +23,6 @@ gate:
 	tests.test_backtest \
 	tests.test_referee \
 	tests.test_agent \
-	tests.test_pentanomial_sprt
+	tests.test_pentanomial_sprt \
+	tests.test_numba_search_scaling \
+	tests.test_qs_eval_cache

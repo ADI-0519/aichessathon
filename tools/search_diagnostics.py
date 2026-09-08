@@ -420,6 +420,10 @@ def analyze_root_moves(
         )
         if "countermoves" in negamax_parameters:
             negamax_arguments.append(memory.countermoves)
+        if "q_eval_keys" in negamax_parameters:
+            negamax_arguments.extend(
+                [memory.q_eval_keys, memory.q_eval_scores, memory.q_eval_valid]
+            )
         negamax_arguments.extend(
             [
                 memory.tt_keys,
