@@ -4,6 +4,16 @@ Every case is a position from a rated game where Stockfish says the move we
 played lost at least a set number of centipawns, and names a better one. A build
 is scored by how often it now plays Stockfish's move instead of ours.
 
+**This suite is underpowered and cannot tune.** Scoring the chosen moves in
+centipawns with Stockfish and comparing V7 against V8 over the 71 cases gave a
+mean paired difference of 12.7 cp, a bootstrap 95% interval of -301.5 to +317.1,
+V8 better on 30 positions and worse on 31, and a sign test at p = 0.60. Per
+position loss runs from 0 to 2000 cp, so the paired differences have a standard
+deviation near 1330 cp and resolving an effect this size would need tens of
+thousands of positions. Use it to catch a build that has broken badly. Do not
+use it to choose between builds, and do not read a few positions off it as
+evidence -- paired games remain the only thing that settles a change here.
+
 Scoring is by exact match against Stockfish's first choice, which is crude: a
 move that gives up fifteen centipawns counts the same as one that gives up four
 hundred, and both land in "other". Read the fixed/repeated split as a coarse
