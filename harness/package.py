@@ -56,6 +56,15 @@ def _names(path: Path) -> set[str]:
 
 
 def build(root: Path, destination: Path, includes: tuple[str, ...]) -> list[str]:
+    entries = list(members(root, includes))
+    written = [name for _, name in entries]
+
+    if "agent.py" not in written:
+        raise SystemExit(
+            f"{root / 'agent.py'} does not exist; "
+            "the platform imports it by name"
+        )
+
     unzipped = sum(source.stat().st_size for source, _ in entries)
     if unzipped > MAX_UNZIPPED_BYTES:
         raise SystemExit(
@@ -63,16 +72,11 @@ def build(root: Path, destination: Path, includes: tuple[str, ...]) -> list[str]
             f"{MAX_UNZIPPED_BYTES // 1_000_000} MB limit; "
             "the platform will reject this upload"
         )
-    entries = list(members(root, includes))
-    written = [name for _, name in entries]
-    if "agent.py" not in written:
-        raise SystemExit(
-            f"{root / 'agent.py'} does not exist; "
-            "the platform imports it by name"
-        )
+
     with zipfile.ZipFile(destination, "w", zipfile.ZIP_DEFLATED) as archive:
         for source, name in entries:
             archive.write(source, name)
+
     return written
 
 
@@ -106,11 +110,11 @@ def smoke(upload: Path) -> list[str]:
 def main() -> None:
     parser = argparse.ArgumentParser(description="Build a submission zip and smoke it.")
     parser.add_argument(
-    "--root",
-    type=Path,
-    default=Path("current"),
-    help="agent source directory (default: current)",
-)
+        "--root",
+        type=Path,
+        default=Path("current"),
+        help="agent source directory (default: current)",
+    )
     parser.add_argument("--out", type=Path, default=Path("submission.zip"))
     parser.add_argument("--include", action="append", default=[])
     arguments = parser.parse_args()
