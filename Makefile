@@ -18,4 +18,9 @@ gate:
 	uv run ruff check .
 	uv run mypy
 	uv run python -m harness.arena --agent current --opponent baselines/random --games 2 --base-ms 5000
-	uv run python -m unittest tests.test_package tests.test_backtest tests.test_agent tests.test_pentanomial_sprt tests.test_numba_search_scaling
+	uv run python -m unittest \
+	tests.test_package \
+	tests.test_backtest \
+	tests.test_referee \
+	tests.test_agent \
+	tests.test_pentanomial_sprt

@@ -18,11 +18,12 @@ from dataclasses import asdict, dataclass
 from functools import wraps
 from pathlib import Path
 from typing import Literal, cast
+import threading
 
 import chess
 import chess.pgn
 
-from harness.referee import FAILED_TERMINATIONS, Outcome, play_match
+from harness.referee import Outcome, play_match
 from harness.rules import PLY_CAP
 from harness.sandbox import Agent, local
 from tools.backtest_core import (
@@ -156,6 +157,21 @@ def candidate_result(outcome: Outcome, candidate_is_white: bool) -> CandidateRes
     candidate_won = (outcome.result == "white") == candidate_is_white
     return "win" if candidate_won else "loss"
 
+def failure_roles(outcome: Outcome, candidate_is_white: bool) -> tuple[bool, bool]:
+    """Return (candidate_failed, opponent_failed) from explicit referee attribution."""
+
+    failed_side = outcome.failed_side
+
+    if failed_side is None:
+        return False, False
+
+    if failed_side == "both":
+        return True, True
+
+    candidate_side = "white" if candidate_is_white else "black"
+    candidate_failed = failed_side == candidate_side
+
+    return candidate_failed, not candidate_failed
 
 def annotate_pgn(
     outcome: Outcome,
@@ -260,6 +276,7 @@ def configuration_for_run(
     increment_ms: int,
     ply_cap: int,
     workers: int,
+    continue_on_failure: bool,
     sprt: dict[str, object] | None,
 ) -> dict[str, object]:
     opponent_fingerprint: dict[str, object]
@@ -298,7 +315,7 @@ def configuration_for_run(
             "limit": limit,
         },
         "clock": {"base_ms": base_ms, "increment_ms": increment_ms, "ply_cap": ply_cap},
-        "execution": {"workers": workers},
+        "execution": {"workers": workers, "continue_on_failure": continue_on_failure},
         "git_commit": git_state(Path.cwd())["commit"],
     }
     if sprt is not None:
@@ -374,7 +391,12 @@ def play_game(
     )
     elapsed = time.monotonic() - started
     result = candidate_result(outcome, candidate_is_white)
-    failed = outcome.termination in FAILED_TERMINATIONS
+
+    candidate_failure, opponent_failure = failure_roles(
+        outcome,
+        candidate_is_white,
+    )
+
     relative_pgn = str(Path("games") / f"game-{game_id}-{result}.pgn")
     pgn, plies = annotate_pgn(
         outcome,
@@ -395,8 +417,8 @@ def play_game(
         plies=plies,
         elapsed_s=elapsed,
         pgn_file=relative_pgn,
-        candidate_failure=failed and result in {"loss", "void"},
-        opponent_failure=failed and result in {"win", "void"},
+        candidate_failure=candidate_failure,
+        opponent_failure=opponent_failure,
     )
     return GamePayload(
         record=record,
@@ -416,25 +438,31 @@ def play_pair(
     base_ms: int,
     increment_ms: int,
     ply_cap: int,
+    stop_event: threading.Event | None = None,
 ) -> PairResult:
     """Run a position's outstanding colours sequentially inside one worker task."""
-    games = tuple(
-        play_game(
-            task=task,
-            candidate_is_white=candidate_is_white,
-            candidate=candidate,
-            opponent_factory=opponent_factory,
-            candidate_name=candidate_name,
-            opponent_name=opponent_name,
-            configuration=configuration,
-            base_ms=base_ms,
-            increment_ms=increment_ms,
-            ply_cap=ply_cap,
-        )
-        for candidate_is_white in task.candidate_colours
-    )
-    return PairResult(games)
+    games: list[GamePayload] = []
 
+    for candidate_is_white in task.candidate_colours:
+        if stop_event is not None and stop_event.is_set():
+            break
+
+        games.append(
+            play_game(
+                task=task,
+                candidate_is_white=candidate_is_white,
+                candidate=candidate,
+                opponent_factory=opponent_factory,
+                candidate_name=candidate_name,
+                opponent_name=opponent_name,
+                configuration=configuration,
+                base_ms=base_ms,
+                increment_ms=increment_ms,
+                ply_cap=ply_cap,
+            )
+        )
+
+    return PairResult(tuple(games))
 
 def validate_arguments(arguments: argparse.Namespace) -> None:
     workers = getattr(arguments, "workers", 1)
@@ -517,6 +545,7 @@ def run(arguments: argparse.Namespace) -> int:
         increment_ms=arguments.increment_ms,
         ply_cap=arguments.ply_cap,
         workers=workers,
+        continue_on_failure=bool(arguments.continue_on_failure),
         sprt=sprt_configuration(arguments),
     )
     ensure_manifest(output, configuration)
@@ -535,7 +564,13 @@ def run(arguments: argparse.Namespace) -> int:
     for record in records:
         if not (output / record.pgn_file).is_file():
             raise ValueError(f"journal references missing PGN: {record.pgn_file}")
-
+    if not arguments.continue_on_failure and any(record.candidate_failure or record.opponent_failure for record in records):
+        summary = run_summary(records, arguments)
+        atomic_write_json(output / "summary.json", summary)
+        print_summary(summary)
+        print("technical failure is already recorded; no games were replayed")
+        return 2
+    
     initial_verdict = sprt_verdict(records, arguments)
     if initial_verdict is not None and initial_verdict.decision != "continue":
         summary = run_summary(records, arguments)
@@ -562,6 +597,7 @@ def run(arguments: argparse.Namespace) -> int:
         else:
             print(f"skip pair {position_index:05d}: already complete")
 
+    stop_event = threading.Event()
     def submit(executor: ThreadPoolExecutor, task: PairTask) -> Future[PairResult]:
         return executor.submit(
             play_pair,
@@ -574,60 +610,72 @@ def run(arguments: argparse.Namespace) -> int:
             base_ms=arguments.base_ms,
             increment_ms=arguments.increment_ms,
             ply_cap=arguments.ply_cap,
+            stop_event=stop_event,
         )
 
     try:
         with ThreadPoolExecutor(max_workers=workers) as executor:
-            futures: dict[int, Future[PairResult]] = {}
-            next_to_submit = 0
-            prefetch_limit = min(PAIR_PREFETCH_FACTOR * workers, len(tasks))
-            while next_to_submit < prefetch_limit:
-                futures[next_to_submit] = submit(executor, tasks[next_to_submit])
-                next_to_submit += 1
-
-            for task_index, task in enumerate(tasks):
-                pair = futures.pop(task_index).result()
-                stop_code: int | None = None
-                for game in pair.games:
-                    record = game.record
-                    atomic_write_text(output / record.pgn_file, game.pgn)
-                    save_log_payloads(output, record.game_id, game.logs)
-                    append_record(journal, record)
-                    records.append(record)
-                    completed.add(record.game_id)
-                    summary = run_summary(records, arguments)
-                    atomic_write_json(output / "summary.json", summary)
-                    print(
-                        f"game {len(records)}/{total_games}, {record.game_id}, "
-                        f"position {task.position.identifier}, "
-                        f"candidate {record.candidate_color}: {record.candidate_result} "
-                        f"by {record.termination} ({record.elapsed_s:.1f}s)"
-                    )
-                    if record.candidate_failure and not arguments.continue_on_failure:
-                        print_summary(summary)
-                        print(
-                            "stopped after candidate technical failure; "
-                            "use --continue-on-failure to override"
-                        )
-                        stop_code = 2
-                        break
-
-                if stop_code is None:
-                    verdict = sprt_verdict(records, arguments)
-                    if verdict is not None:
-                        print(verdict.summary)
-                        if verdict.decision != "continue":
-                            print("stopped after crossing an SPRT boundary")
-                            stop_code = 0
-
-                if stop_code is not None:
-                    for future in futures.values():
-                        future.cancel()
-                    return stop_code
-
-                if next_to_submit < len(tasks):
+            try:
+                futures: dict[int, Future[PairResult]] = {}
+                next_to_submit = 0
+                prefetch_limit = min(PAIR_PREFETCH_FACTOR * workers, len(tasks))
+                while next_to_submit < prefetch_limit:
                     futures[next_to_submit] = submit(executor, tasks[next_to_submit])
                     next_to_submit += 1
+
+                for task_index, task in enumerate(tasks):
+                    future = futures[task_index]
+                    pair = future.result()
+                    del futures[task_index]
+                    stop_code: int | None = None
+                    for game in pair.games:
+                        record = game.record
+                        atomic_write_text(output / record.pgn_file, game.pgn)
+                        save_log_payloads(output, record.game_id, game.logs)
+                        append_record(journal, record)
+                        records.append(record)
+                        completed.add(record.game_id)
+                        summary = run_summary(records, arguments)
+                        atomic_write_json(output / "summary.json", summary)
+                        print(
+                            f"game {len(records)}/{total_games}, {record.game_id}, "
+                            f"position {task.position.identifier}, "
+                            f"candidate {record.candidate_color}: {record.candidate_result} "
+                            f"by {record.termination} ({record.elapsed_s:.1f}s)"
+                        )
+                        if (
+                            (record.candidate_failure or record.opponent_failure)
+                            and not arguments.continue_on_failure
+                        ):
+                            print_summary(summary)
+                            print(
+                                "stopped after technical failure; "
+                                "use --continue-on-failure in a new output directory to override"
+                            )
+                            stop_code = 2
+                            break
+
+                    if stop_code is None:
+                        verdict = sprt_verdict(records, arguments)
+                        if verdict is not None:
+                            print(verdict.summary)
+                            if verdict.decision != "continue":
+                                print("stopped after crossing an SPRT boundary")
+                                stop_code = 0
+
+                    if stop_code is not None:
+                        for future in futures.values():
+                            future.cancel()
+                        return stop_code
+
+                    if next_to_submit < len(tasks):
+                        futures[next_to_submit] = submit(executor, tasks[next_to_submit])
+                        next_to_submit += 1
+            except BaseException:
+                stop_event.set()
+                for pending in futures.values():
+                    pending.cancel()
+                raise
     except KeyboardInterrupt:
         print("\ninterrupted; completed games were saved and can be resumed")
         return 130

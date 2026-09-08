@@ -3,6 +3,7 @@ from __future__ import annotations
 import argparse
 import json
 import tempfile
+import threading
 import unittest
 from pathlib import Path
 from unittest.mock import patch
@@ -42,7 +43,9 @@ class BacktestCoreTests(unittest.TestCase):
         self.assertEqual(default.workers, 1)
         self.assertEqual(parallel.workers, 4)
         with patch("sys.stderr"), self.assertRaises(SystemExit):
-            parser.parse_args(["--opponent", "opponent", "--output", "output", "--workers", "0"])
+            parser.parse_args(
+                ["--opponent", "opponent", "--output", "output", "--workers", "0"]
+            )
 
     def test_pair_worker_runs_candidate_colours_sequentially(self) -> None:
         position = backtest.SuitePosition("position", chess.STARTING_FEN, 7, "development")
@@ -74,6 +77,97 @@ class BacktestCoreTests(unittest.TestCase):
             ["00003-white", "00003-black"],
         )
         self.assertEqual([game.pgn for game in result.games], ["white pgn", "black pgn"])
+        
+    def test_failure_attribution_does_not_depend_on_game_result(self) -> None:
+    # White flags, but Black has insufficient mating material.
+    # Official chess result is therefore a draw, while White still unquestionably suffered the technical failure.
+        outcome = Outcome(
+            "draw",
+            "flag",
+            "",
+            failed_side="white",
+        )
+
+        self.assertEqual(
+            backtest.candidate_result(
+                outcome,
+                candidate_is_white=True,
+            ),
+            "draw",
+        )
+
+        self.assertEqual(
+            backtest.failure_roles(
+                outcome,
+                candidate_is_white=True,
+            ),
+            (True, False),
+        )
+
+        # Same referee outcome, but candidate is Black:
+        # now the opponent was the side that failed.
+        self.assertEqual(
+            backtest.failure_roles(
+                outcome,
+                candidate_is_white=False,
+            ),
+            (False, True),
+        )
+        
+    def test_both_failed_attributes_failure_to_both_agents(self) -> None:
+        outcome = Outcome(
+            "void",
+            "both_failed",
+            "",
+            failed_side="both",
+        )
+
+        self.assertEqual(
+            backtest.failure_roles(
+                outcome,
+                candidate_is_white=True,
+            ),
+            (True, True),
+        )
+
+        self.assertEqual(
+            backtest.failure_roles(
+                outcome,
+                candidate_is_white=False,
+            ),
+            (True, True),
+        )
+
+    def test_pair_worker_does_not_start_second_colour_after_stop(self) -> None:
+        position = backtest.SuitePosition("position", chess.STARTING_FEN, 7, "development")
+        task = backtest.PairTask(1, position, (True, False))
+        stop_event = threading.Event()
+        calls: list[bool] = []
+
+        def fake_play_game(*, candidate_is_white: bool, **_: object) -> backtest.GamePayload:
+            calls.append(candidate_is_white)
+            stop_event.set()
+            color = "white" if candidate_is_white else "black"
+            record = make_record(f"00001-{color}", "p1", color, "draw")
+            return backtest.GamePayload(record, "mock pgn", ())
+
+        with patch("tools.backtest.play_game", side_effect=fake_play_game):
+            result = backtest.play_pair(
+                task,
+                candidate=Path("candidate"),
+                opponent_factory=lambda: Agent([], "opponent"),
+                candidate_name="candidate",
+                opponent_name="opponent",
+                configuration={},
+                base_ms=1,
+                increment_ms=0,
+                ply_cap=1,
+                stop_event=stop_event,
+            )
+
+        self.assertEqual(calls, [True])
+        self.assertEqual(len(result.games), 1)
+        self.assertEqual(result.games[0].record.game_id, "00001-white")
 
     def test_agent_stderr_is_bounded_and_persisted(self) -> None:
         candidate = Agent([], "candidate")
@@ -93,7 +187,9 @@ class BacktestCoreTests(unittest.TestCase):
     def test_normalization_deduplicates_phantom_en_passant(self) -> None:
         plain = "8/8/8/8/8/8/4K3/7k w - - 0 1"
         phantom = "8/8/8/8/8/8/4K3/7k w - e3 0 1"
-        positions = positions_from_fens((("plain", plain), ("phantom", phantom)), split_seed="test")
+        positions = positions_from_fens(
+            (("plain", plain), ("phantom", phantom)), split_seed="test"
+        )
         self.assertEqual(len(positions), 1)
         self.assertEqual(positions[0].fen, plain)
 
@@ -148,13 +244,15 @@ class BacktestCoreTests(unittest.TestCase):
     def test_agent_fingerprint_matches_packaged_inputs_only(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
-            (root / "agent.py").write_text("def get_move(fen, time): return 'e2e4'\n")
-            (root / "ignored.txt").write_text("first")
+            (root / "agent.py").write_text(
+                "def get_move(fen, time): return 'e2e4'\n", encoding="utf-8"
+            )
+            (root / "ignored.txt").write_text("first", encoding="utf-8")
             weights = root / "weights"
             weights.mkdir()
             (weights / "model.bin").write_bytes(b"weights")
             first = fingerprint_agent(root)
-            (root / "ignored.txt").write_text("second")
+            (root / "ignored.txt").write_text("second", encoding="utf-8")
             self.assertEqual(first["sha256"], fingerprint_agent(root)["sha256"])
             (weights / "model.bin").write_bytes(b"changed")
             self.assertNotEqual(first["sha256"], fingerprint_agent(root)["sha256"])
@@ -168,7 +266,7 @@ class BacktestCoreTests(unittest.TestCase):
             with self.assertRaisesRegex(ValueError, "different experiment"):
                 ensure_manifest(output, {"candidate": "two"})
 
-    def test_worker_count_is_part_of_the_immutable_configuration(self) -> None:
+    def test_execution_policy_is_part_of_the_immutable_configuration(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
             candidate = root / "candidate"
@@ -177,8 +275,8 @@ class BacktestCoreTests(unittest.TestCase):
             candidate.mkdir()
             opponent.mkdir()
             output.mkdir()
-            (candidate / "agent.py").write_text("VERSION = 1\n")
-            (opponent / "agent.py").write_text("VERSION = 1\n")
+            (candidate / "agent.py").write_text("VERSION = 1\n", encoding="utf-8")
+            (opponent / "agent.py").write_text("VERSION = 1\n", encoding="utf-8")
             position = backtest.SuitePosition(
                 "position", chess.STARTING_FEN, 1, "development"
             )
@@ -200,14 +298,28 @@ class BacktestCoreTests(unittest.TestCase):
                 "ply_cap": 2,
                 "sprt": None,
             }
-            config_with_1_worker = backtest.configuration_for_run(**common, workers=1)
-            config_with_6_workers = backtest.configuration_for_run(**common, workers=6)
+            config_workers_1 = backtest.configuration_for_run(
+                **common, workers=1, continue_on_failure=False
+            )
+            config_workers_6 = backtest.configuration_for_run(
+                **common, workers=6, continue_on_failure=False
+            )
+            config_continue_on_failure = backtest.configuration_for_run(
+                **common, workers=1, continue_on_failure=True
+            )
 
-            self.assertNotEqual(config_with_1_worker, config_with_6_workers)
-            self.assertEqual(config_with_1_worker["execution"], {"workers": 1})
-            ensure_manifest(output, config_with_1_worker)
+            self.assertEqual(
+                config_workers_1["execution"],
+                {"workers": 1, "continue_on_failure": False},
+            )
+            self.assertNotEqual(config_workers_1, config_workers_6)
+            self.assertNotEqual(config_workers_1, config_continue_on_failure)
+
+            ensure_manifest(output, config_workers_1)
             with self.assertRaisesRegex(ValueError, "different experiment"):
-                ensure_manifest(output, config_with_6_workers)
+                ensure_manifest(output, config_workers_6)
+            with self.assertRaisesRegex(ValueError, "different experiment"):
+                ensure_manifest(output, config_continue_on_failure)
 
     def test_output_lock_rejects_a_second_writer_and_can_be_reacquired(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
@@ -241,7 +353,7 @@ class BacktestCoreTests(unittest.TestCase):
             with self.assertRaisesRegex(ValueError, "duplicate game id"):
                 load_records(journal)
 
-    def test_summary_uses_complete_pairs_and_excludes_voids(self) -> None:
+    def test_summary_uses_only_clean_complete_pairs(self) -> None:
         records = [
             make_record("00001-white", "p1", "white", "win"),
             make_record("00001-black", "p1", "black", "win"),
@@ -270,6 +382,36 @@ class BacktestCoreTests(unittest.TestCase):
         self.assertEqual(complete_pair_scores(records), [2.0, 0.5])
         self.assertEqual(pentanomial_counts(records), (0, 1, 0, 0, 1))
 
+    def test_strength_statistics_exclude_technical_failure_pairs(self) -> None:
+        records = [
+            make_record(
+                "00001-white",
+                "p1",
+                "white",
+                "win",
+                termination="init",
+                opponent_failure=True,
+            ),
+            make_record("00001-black", "p1", "black", "draw"),
+        ]
+
+        self.assertEqual(complete_pair_scores(records), [])
+        self.assertEqual(pentanomial_counts(records), (0, 0, 0, 0, 0))
+        self.assertEqual(summarize(records)["complete_pairs"], 0)
+
+        arguments = argparse.Namespace(
+            sprt=True,
+            sprt_elo0=0.0,
+            sprt_elo1=20.0,
+            sprt_alpha=0.05,
+            sprt_beta=0.05,
+            sprt_min_pairs=0,
+        )
+        verdict = backtest.sprt_verdict(records, arguments)
+        self.assertIsNotNone(verdict)
+        assert verdict is not None
+        self.assertEqual(verdict.pairs, 0)
+
     def test_paired_interval_uses_pair_variance(self) -> None:
         records = [
             make_record("00001-white", "p1", "white", "win"),
@@ -297,6 +439,7 @@ class BacktestCoreTests(unittest.TestCase):
         self.assertIsNotNone(incomplete_verdict)
         assert incomplete_verdict is not None
         self.assertEqual(incomplete_verdict.pairs, 0)
+
         complete = [
             *incomplete,
             make_record("00001-black", "p1", "black", "win"),
@@ -310,9 +453,13 @@ class BacktestCoreTests(unittest.TestCase):
         white_win = Outcome("white", "checkmate", "")
         self.assertEqual(backtest.candidate_result(white_win, True), "win")
         self.assertEqual(backtest.candidate_result(white_win, False), "loss")
-        self.assertEqual(backtest.candidate_result(Outcome("draw", "stalemate", ""), True), "draw")
         self.assertEqual(
-            backtest.candidate_result(Outcome("void", "both_failed", ""), True), "void"
+            backtest.candidate_result(Outcome("draw", "stalemate", ""), True),
+            "draw",
+        )
+        self.assertEqual(
+            backtest.candidate_result(Outcome("void", "both_failed", ""), True),
+            "void",
         )
 
     def test_source_guard_detects_a_mixed_build(self) -> None:
@@ -322,8 +469,8 @@ class BacktestCoreTests(unittest.TestCase):
             opponent = root / "opponent"
             candidate.mkdir()
             opponent.mkdir()
-            (candidate / "agent.py").write_text("VERSION = 1\n")
-            (opponent / "agent.py").write_text("VERSION = 1\n")
+            (candidate / "agent.py").write_text("VERSION = 1\n", encoding="utf-8")
+            (opponent / "agent.py").write_text("VERSION = 1\n", encoding="utf-8")
             configuration: dict[str, object] = {
                 "candidate": fingerprint_agent(candidate),
                 "opponent": {
@@ -332,7 +479,7 @@ class BacktestCoreTests(unittest.TestCase):
                 },
             }
             backtest.assert_sources_unchanged(configuration)
-            (candidate / "agent.py").write_text("VERSION = 2\n")
+            (candidate / "agent.py").write_text("VERSION = 2\n", encoding="utf-8")
             with self.assertRaisesRegex(RuntimeError, "candidate files changed"):
                 backtest.assert_sources_unchanged(configuration)
 
@@ -381,11 +528,260 @@ class BacktestIntegrationTests(unittest.TestCase):
             self.assertTrue(
                 all((Path(temporary) / record.pgn_file).is_file() for record in records)
             )
-            summary = json.loads((Path(temporary) / "summary.json").read_text())
+            summary = json.loads(
+                (Path(temporary) / "summary.json").read_text(encoding="utf-8")
+            )
             self.assertEqual(summary["complete_pairs"], 2)
+
             arguments.workers = 6
             with self.assertRaisesRegex(ValueError, "different experiment"):
                 backtest.run(arguments)
+
+    def test_parallel_out_of_order_completion_is_committed_in_suite_order(self) -> None:
+        repository = Path(__file__).resolve().parents[1]
+        random_agent = repository / "baselines" / "random"
+        pair_1_started = threading.Event()
+        pair_2_completed_first = threading.Event()
+
+        def fake_payload(
+            task: backtest.PairTask,
+            candidate_is_white: bool,
+        ) -> backtest.GamePayload:
+            color = "white" if candidate_is_white else "black"
+            game_id = f"{task.position_index:05d}-{color}"
+            record = GameRecord.from_dict(
+                {
+                    "game_id": game_id,
+                    "position_id": task.position.identifier,
+                    "position_index": task.position_index,
+                    "fen": task.position.fen,
+                    "candidate_color": color,
+                    "candidate_result": "draw",
+                    "board_result": "draw",
+                    "termination": "stalemate",
+                    "plies": 10,
+                    "elapsed_s": 1.0,
+                    "pgn_file": f"games/{game_id}.pgn",
+                    "candidate_failure": False,
+                    "opponent_failure": False,
+                }
+            )
+            return backtest.GamePayload(record=record, pgn=f"mock {game_id}\n", logs=())
+
+        def fake_play_pair(
+            task: backtest.PairTask,
+            **_: object,
+        ) -> backtest.PairResult:
+            if task.position_index == 1:
+                pair_1_started.set()
+                if not pair_2_completed_first.wait(timeout=5):
+                    raise AssertionError(
+                        "pair 2 did not finish while pair 1 was blocked"
+                    )
+            elif task.position_index == 2:
+                if not pair_1_started.wait(timeout=5):
+                    raise AssertionError("pair 1 did not start before pair 2")
+                pair_2_completed_first.set()
+
+            return backtest.PairResult(
+                tuple(
+                    fake_payload(task, candidate_is_white)
+                    for candidate_is_white in task.candidate_colours
+                )
+            )
+
+        with tempfile.TemporaryDirectory() as temporary:
+            arguments = argparse.Namespace(
+                candidate=random_agent,
+                opponent=random_agent,
+                stockfish=None,
+                stockfish_nodes=None,
+                suite="builtin",
+                split="development",
+                unlock_holdout=False,
+                split_seed="out-of-order-test",
+                order_seed=17,
+                offset=0,
+                limit=2,
+                base_ms=1_000,
+                increment_ms=0,
+                ply_cap=2,
+                output=Path(temporary),
+                continue_on_failure=False,
+                workers=2,
+                sprt=False,
+            )
+            with patch("tools.backtest.play_pair", side_effect=fake_play_pair):
+                self.assertEqual(backtest.run(arguments), 0)
+
+            records = load_records(Path(temporary) / "games.jsonl")
+            self.assertEqual(
+                [record.game_id for record in records],
+                ["00001-white", "00001-black", "00002-white", "00002-black"],
+            )
+            self.assertTrue(pair_2_completed_first.is_set())
+
+    def test_resume_repairs_half_completed_pair_before_later_pairs(self) -> None:
+        repository = Path(__file__).resolve().parents[1]
+        random_agent = repository / "baselines" / "random"
+
+        def fake_payload(
+            task: backtest.PairTask,
+            candidate_is_white: bool,
+        ) -> backtest.GamePayload:
+            color = "white" if candidate_is_white else "black"
+            game_id = f"{task.position_index:05d}-{color}"
+            record = GameRecord.from_dict(
+                {
+                    "game_id": game_id,
+                    "position_id": task.position.identifier,
+                    "position_index": task.position_index,
+                    "fen": task.position.fen,
+                    "candidate_color": color,
+                    "candidate_result": "draw",
+                    "board_result": "draw",
+                    "termination": "stalemate",
+                    "plies": 10,
+                    "elapsed_s": 1.0,
+                    "pgn_file": f"games/{game_id}.pgn",
+                    "candidate_failure": False,
+                    "opponent_failure": False,
+                }
+            )
+            return backtest.GamePayload(record=record, pgn=f"mock {game_id}\n", logs=())
+
+        with tempfile.TemporaryDirectory() as temporary:
+            output = Path(temporary)
+            arguments = argparse.Namespace(
+                candidate=random_agent,
+                opponent=random_agent,
+                stockfish=None,
+                stockfish_nodes=None,
+                suite="builtin",
+                split="development",
+                unlock_holdout=False,
+                split_seed="half-pair-resume-test",
+                order_seed=23,
+                offset=0,
+                limit=2,
+                base_ms=1_000,
+                increment_ms=0,
+                ply_cap=2,
+                output=output,
+                continue_on_failure=False,
+                workers=1,
+                sprt=False,
+            )
+
+            def first_play_pair(
+                task: backtest.PairTask,
+                **_: object,
+            ) -> backtest.PairResult:
+                if task.position_index == 1:
+                    return backtest.PairResult((fake_payload(task, True),))
+                return backtest.PairResult(())
+
+            with patch("tools.backtest.play_pair", side_effect=first_play_pair):
+                self.assertEqual(backtest.run(arguments), 0)
+
+            first_records = load_records(output / "games.jsonl")
+            self.assertEqual(
+                [record.game_id for record in first_records],
+                ["00001-white"],
+            )
+
+            resumed_tasks: list[tuple[int, tuple[bool, ...]]] = []
+
+            def resumed_play_pair(
+                task: backtest.PairTask,
+                **_: object,
+            ) -> backtest.PairResult:
+                resumed_tasks.append((task.position_index, task.candidate_colours))
+                return backtest.PairResult(
+                    tuple(
+                        fake_payload(task, candidate_is_white)
+                        for candidate_is_white in task.candidate_colours
+                    )
+                )
+
+            with patch("tools.backtest.play_pair", side_effect=resumed_play_pair):
+                self.assertEqual(backtest.run(arguments), 0)
+
+            records = load_records(output / "games.jsonl")
+            self.assertEqual(
+                [record.game_id for record in records],
+                ["00001-white", "00001-black", "00002-white", "00002-black"],
+            )
+            self.assertEqual(resumed_tasks[0], (1, (False,)))
+            self.assertEqual(resumed_tasks[1], (2, (True, False)))
+
+            summary = json.loads((output / "summary.json").read_text(encoding="utf-8"))
+            self.assertEqual(summary["complete_pairs"], 2)
+
+    def test_resume_does_not_continue_past_recorded_technical_failure(self) -> None:
+        repository = Path(__file__).resolve().parents[1]
+        random_agent = repository / "baselines" / "random"
+        calls = 0
+
+        def failed_pair(
+            task: backtest.PairTask,
+            **_: object,
+        ) -> backtest.PairResult:
+            nonlocal calls
+            calls += 1
+            game_id = f"{task.position_index:05d}-white"
+            record = make_record(
+                game_id,
+                task.position.identifier,
+                "white",
+                "win",
+                termination="init",
+                opponent_failure=True,
+            )
+            return backtest.PairResult(
+                (backtest.GamePayload(record, "mock pgn\n", ()),)
+            )
+
+        with tempfile.TemporaryDirectory() as temporary:
+            output = Path(temporary)
+            arguments = argparse.Namespace(
+                candidate=random_agent,
+                opponent=random_agent,
+                stockfish=None,
+                stockfish_nodes=None,
+                suite="builtin",
+                split="development",
+                unlock_holdout=False,
+                split_seed="technical-failure-resume-test",
+                order_seed=31,
+                offset=0,
+                limit=2,
+                base_ms=1_000,
+                increment_ms=0,
+                ply_cap=2,
+                output=output,
+                continue_on_failure=False,
+                workers=1,
+                sprt=False,
+            )
+
+            with patch("tools.backtest.play_pair", side_effect=failed_pair):
+                self.assertEqual(backtest.run(arguments), 2)
+
+            first_call_count = calls
+            records = load_records(output / "games.jsonl")
+            self.assertEqual(len(records), 1)
+            self.assertTrue(records[0].opponent_failure)
+
+            with patch(
+                "tools.backtest.play_pair",
+                side_effect=AssertionError("resume must not start another pair"),
+            ):
+                self.assertEqual(backtest.run(arguments), 2)
+
+            self.assertEqual(calls, first_call_count)
+            resumed_records = load_records(output / "games.jsonl")
+            self.assertEqual(resumed_records, records)
 
     def test_sprt_stops_after_a_pair_and_resume_replays_nothing(self) -> None:
         repository = Path(__file__).resolve().parents[1]
@@ -426,7 +822,9 @@ class BacktestIntegrationTests(unittest.TestCase):
             self.assertEqual(backtest.run(arguments), 0)
             second = load_records(Path(temporary) / "games.jsonl")
             self.assertEqual(second, first)
-            summary = json.loads((Path(temporary) / "summary.json").read_text())
+            summary = json.loads(
+                (Path(temporary) / "summary.json").read_text(encoding="utf-8")
+            )
             self.assertEqual(summary["games"], 2)
             self.assertEqual(summary["complete_pairs"], 1)
             self.assertEqual(summary["sprt"]["decision"], "accept_h0")

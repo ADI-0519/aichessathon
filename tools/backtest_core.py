@@ -389,7 +389,12 @@ def complete_pair_scores(records: Sequence[GameRecord]) -> list[float]:
         colors = {game.candidate_color for game in games}
         if len(games) != 2 or colors != {"white", "black"}:
             continue
-        if any(game.candidate_result == "void" for game in games):
+        if any(
+            game.candidate_result == "void"
+            or game.candidate_failure
+            or game.opponent_failure
+            for game in games
+        ):
             continue
         pair_scores.append(sum(RESULT_POINTS[game.candidate_result] for game in games))
     return pair_scores
@@ -462,5 +467,5 @@ def summarize(records: Sequence[GameRecord]) -> dict[str, object]:
         "complete_pairs": len(pair_scores),
         "pentanomial": dict(zip(PENTANOMIAL_KEYS, counts, strict=True)),
         "confidence_95": interval,
-        "elapsed_s": sum(record.elapsed_s for record in records),
+        "game_elapsed_s_sum": sum(record.elapsed_s for record in records),
     }
