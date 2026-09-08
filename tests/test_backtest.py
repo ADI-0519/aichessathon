@@ -168,6 +168,47 @@ class BacktestCoreTests(unittest.TestCase):
             with self.assertRaisesRegex(ValueError, "different experiment"):
                 ensure_manifest(output, {"candidate": "two"})
 
+    def test_worker_count_is_part_of_the_immutable_configuration(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            candidate = root / "candidate"
+            opponent = root / "opponent"
+            output = root / "output"
+            candidate.mkdir()
+            opponent.mkdir()
+            output.mkdir()
+            (candidate / "agent.py").write_text("VERSION = 1\n")
+            (opponent / "agent.py").write_text("VERSION = 1\n")
+            position = backtest.SuitePosition(
+                "position", chess.STARTING_FEN, 1, "development"
+            )
+            common: dict[str, object] = {
+                "candidate": candidate,
+                "opponent": opponent,
+                "stockfish": None,
+                "stockfish_nodes": None,
+                "suite_source": "test",
+                "suite": [position],
+                "selected": [position],
+                "split": "development",
+                "split_seed": "test",
+                "order_seed": 1,
+                "offset": 0,
+                "limit": 1,
+                "base_ms": 1_000,
+                "increment_ms": 0,
+                "ply_cap": 2,
+                "sprt": None,
+            }
+            config_with_1_worker = backtest.configuration_for_run(**common, workers=1)
+            config_with_6_workers = backtest.configuration_for_run(**common, workers=6)
+
+            self.assertNotEqual(config_with_1_worker, config_with_6_workers)
+            self.assertEqual(config_with_1_worker["execution"], {"workers": 1})
+            ensure_manifest(output, config_with_1_worker)
+            with self.assertRaisesRegex(ValueError, "different experiment"):
+                ensure_manifest(output, config_with_6_workers)
+
     def test_output_lock_rejects_a_second_writer_and_can_be_reacquired(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             output = Path(temporary)
@@ -342,6 +383,9 @@ class BacktestIntegrationTests(unittest.TestCase):
             )
             summary = json.loads((Path(temporary) / "summary.json").read_text())
             self.assertEqual(summary["complete_pairs"], 2)
+            arguments.workers = 6
+            with self.assertRaisesRegex(ValueError, "different experiment"):
+                backtest.run(arguments)
 
     def test_sprt_stops_after_a_pair_and_resume_replays_nothing(self) -> None:
         repository = Path(__file__).resolve().parents[1]

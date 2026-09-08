@@ -53,6 +53,7 @@ from tools.stockfish_arena import StockfishAgent
 
 AgentFactory = Callable[[], Agent]
 AGENT_LOG_LIMIT = 8 * 1024
+PAIR_PREFETCH_FACTOR = 2
 AgentRole = Literal["candidate", "opponent"]
 
 
@@ -258,6 +259,7 @@ def configuration_for_run(
     base_ms: int,
     increment_ms: int,
     ply_cap: int,
+    workers: int,
     sprt: dict[str, object] | None,
 ) -> dict[str, object]:
     opponent_fingerprint: dict[str, object]
@@ -296,6 +298,7 @@ def configuration_for_run(
             "limit": limit,
         },
         "clock": {"base_ms": base_ms, "increment_ms": increment_ms, "ply_cap": ply_cap},
+        "execution": {"workers": workers},
         "git_commit": git_state(Path.cwd())["commit"],
     }
     if sprt is not None:
@@ -513,6 +516,7 @@ def run(arguments: argparse.Namespace) -> int:
         base_ms=arguments.base_ms,
         increment_ms=arguments.increment_ms,
         ply_cap=arguments.ply_cap,
+        workers=workers,
         sprt=sprt_configuration(arguments),
     )
     ensure_manifest(output, configuration)
@@ -576,7 +580,8 @@ def run(arguments: argparse.Namespace) -> int:
         with ThreadPoolExecutor(max_workers=workers) as executor:
             futures: dict[int, Future[PairResult]] = {}
             next_to_submit = 0
-            while next_to_submit < min(workers, len(tasks)):
+            prefetch_limit = min(PAIR_PREFETCH_FACTOR * workers, len(tasks))
+            while next_to_submit < prefetch_limit:
                 futures[next_to_submit] = submit(executor, tasks[next_to_submit])
                 next_to_submit += 1
 
