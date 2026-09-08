@@ -8,6 +8,7 @@ from tools.numba_search_scaling import Probe, assert_deterministic, positive_int
 
 def probe(*, move: str = "e2e4", score: int = 12) -> Probe:
     return Probe(
+        position_id="test",
         node_limit=10_000,
         repeat=1,
         move=move,
@@ -19,8 +20,11 @@ def probe(*, move: str = "e2e4", score: int = 12) -> Probe:
         nps=100_010.0,
         tt_hits=100,
         tt_cutoffs=50,
+        beta_cutoffs=500,
         lmr_reductions=20,
         lmr_researches=2,
+        q_eval_probes=0,
+        q_eval_hits=0,
     )
 
 

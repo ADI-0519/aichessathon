@@ -124,6 +124,7 @@ search statistics change between repeats:
 ```bash
 ./.venv/Scripts/python.exe -m tools.numba_search_scaling \
   --engine-root current \
+  --suite benchmarks/suites/v5_priority_losses.json \
   --nodes 100000,300000,1000000 \
   --repeats 5 \
   --output benchmarks/diagnostics/current-scaling-baseline.json

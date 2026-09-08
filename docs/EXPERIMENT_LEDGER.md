@@ -24,6 +24,7 @@ for choosing what to validate next, not proof of Elo; technical smokes establish
 | V7 continuous time | 20W 12D 8L against V6 in development (65.0%); 48.75% in independent validation; 50.0% directly against V5 | Canonical champion for its causal fixes, not proven Elo superiority. |
 | V8 linear strategic residual | Validation residual RMSE 267.6 -> 204.0 cp with exact runtime parity; failed all three round-50 probes and lost the first three smoke games | Reject; offline fit did not translate through search. |
 | V7 six-profile mechanism matrix | Compared baseline, HCE-only, NNUE-only, no-LMR, no-null, and combined no-LMR/no-null on six rated errors | Complete; rejects a global LMR/null rollback and points to throughput plus evaluator-disagreement work. |
+| V7 qsearch evaluation cache | Exact 100k parity on six priority positions; exact repeated 100k/300k parity and about 7.2% starting-position median NPS gain | Promising isolated throughput candidate; technical and broader speed gates remain before promotion. |
 
 ## Reliability and infrastructure completed
 
