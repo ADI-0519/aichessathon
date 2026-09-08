@@ -1,0 +1,504 @@
+{
+  "schema_version": 1,
+  "source": "benchmarks/runs/sf-audit/rated-archive.json",
+  "criterion": "cp_loss >= 150 on a move we selected, referee Stockfish 19 at 1M nodes",
+  "cases": [
+    {
+      "round": "34",
+      "fen": "2k5/4K1P1/8/4Q3/8/5q2/5P2/8 b - - 28 80",
+      "played": "f3b7",
+      "best": "f3g2",
+      "loss": 1996
+    },
+    {
+      "round": "30",
+      "fen": "r7/P1P3p1/4k3/7p/5K1P/8/8/8 w - - 2 58",
+      "played": "f4g5",
+      "best": "f4f3",
+      "loss": 845
+    },
+    {
+      "round": "34",
+      "fen": "8/2k1Q1P1/5K2/8/8/8/5Pq1/8 b - - 34 83",
+      "played": "c7b8",
+      "best": "c7b6",
+      "loss": 795
+    },
+    {
+      "round": "32",
+      "fen": "r1r3k1/8/1p1p3R/8/n2B4/P4N1P/5P2/5K2 b - - 4 39",
+      "played": "d6d5",
+      "best": "g8f7",
+      "loss": 662
+    },
+    {
+      "round": "38",
+      "fen": "8/6pk/4Kp1p/7P/4R1P1/4p3/4r3/8 b - - 3 79",
+      "played": "g7g6",
+      "best": "e2e1",
+      "loss": 651
+    },
+    {
+      "round": "34",
+      "fen": "2k5/6P1/4KQ2/8/8/8/3q1P2/8 b - - 18 75",
+      "played": "d2e2",
+      "best": "c8b7",
+      "loss": 503
+    },
+    {
+      "round": "36",
+      "fen": "r3r1k1/1pp2ppp/p7/3P4/P3BP2/2B1qP2/1P2bR2/1Q4K1 w - - 0 26",
+      "played": "c3e5",
+      "best": "e4h7",
+      "loss": 490
+    },
+    {
+      "round": "34",
+      "fen": "1r1q4/4b2k/3p1np1/p2Ppr1p/R1N5/4B1QP/1P3PP1/3R2K1 b - - 2 25",
+      "played": "e5e4",
+      "best": "f6e4",
+      "loss": 447
+    },
+    {
+      "round": "32",
+      "fen": "r1r5/3R4/1p5k/3p4/n2B4/P4N1P/5P2/5K2 b - - 5 42",
+      "played": "a8a5",
+      "best": "h6g6",
+      "loss": 419
+    },
+    {
+      "round": "66",
+      "fen": "r3kb1r/1p1bpppp/pq1p4/8/1n2P1n1/1NN2P2/PPPBQ1PP/2R1KB1R b Kkq - 0 11",
+      "played": "g4e5",
+      "best": "g4f6",
+      "loss": 407
+    },
+    {
+      "round": "30",
+      "fen": "R3rN1k/P4pp1/7p/2P5/6P1/7P/6K1/4r3 w - - 3 50",
+      "played": "a8e8",
+      "best": "f8g6",
+      "loss": 400
+    },
+    {
+      "round": "33",
+      "fen": "3R1nk1/q4p2/6p1/1p6/r7/2Q4P/5PP1/5RK1 b - - 1 42",
+      "played": "b5b4",
+      "best": "a7e7",
+      "loss": 400
+    },
+    {
+      "round": "66",
+      "fen": "5R2/1P1R2p1/8/5k1p/8/P6P/6PK/1r6 b - - 4 48",
+      "played": "f5g5",
+      "best": "f5e6",
+      "loss": 393
+    },
+    {
+      "round": "30",
+      "fen": "R7/5ppk/P1N2r1p/8/2P3P1/6KP/3r4/8 w - - 1 40",
+      "played": "c6e5",
+      "best": "a6a7",
+      "loss": 392
+    },
+    {
+      "round": "38",
+      "fen": "6k1/8/8/8/2K5/5R1p/7r/8 b - - 1 92",
+      "played": "h2c2",
+      "best": "h2h1",
+      "loss": 377
+    },
+    {
+      "round": "31",
+      "fen": "2b1r1k1/5ppp/8/1Pq5/3RpP1P/2N1P1P1/3P3K/5R2 w - - 1 34",
+      "played": "f1e1",
+      "best": "f4f5",
+      "loss": 365
+    },
+    {
+      "round": "38",
+      "fen": "2r3k1/5pp1/1p5p/3Pp2P/6P1/p3P3/8/1R4K1 b - - 0 38",
+      "played": "f7f6",
+      "best": "a3a2",
+      "loss": 339
+    },
+    {
+      "round": "28",
+      "fen": "6k1/R2nr1pp/1p6/4B3/2P2P2/4p1P1/3rP2P/4R1K1 b - - 3 28",
+      "played": "e7e5",
+      "best": "h7h6",
+      "loss": 330
+    },
+    {
+      "round": "36",
+      "fen": "r3r1k1/1pp2ppp/p1n1q3/2R5/P2PnPb1/3BP3/1P1BN1P1/3Q1RK1 w - - 5 20",
+      "played": "d4d5",
+      "best": "f4f5",
+      "loss": 330
+    },
+    {
+      "round": "38",
+      "fen": "6k1/6p1/1p1P1p1p/4p2P/6P1/p1r1P3/8/R5K1 b - - 0 40",
+      "played": "b6b5",
+      "best": "g8f7",
+      "loss": 321
+    },
+    {
+      "round": "38",
+      "fen": "8/6pk/4Kp1p/4p2P/4r1P1/8/6R1/8 b - - 1 75",
+      "played": "e4e1",
+      "best": "e4f4",
+      "loss": 317
+    },
+    {
+      "round": "32",
+      "fen": "rnb1r1k1/1ppq1ppp/3b4/6P1/p1BPn3/5N1P/PPQ2PK1/RNB4R b - - 1 16",
+      "played": "d7f5",
+      "best": "b8c6",
+      "loss": 313
+    },
+    {
+      "round": "30",
+      "fen": "4rN1k/P4pp1/7p/2P5/6P1/7P/6K1/8 w - - 0 51",
+      "played": "f8g6",
+      "best": "f8d7",
+      "loss": 312
+    },
+    {
+      "round": "38",
+      "fen": "6k1/8/8/8/1K5p/5R2/7r/8 b - - 5 91",
+      "played": "h4h3",
+      "best": "g8g7",
+      "loss": 311
+    },
+    {
+      "round": "27",
+      "fen": "6k1/pp2pp1p/6pb/3P4/4P1b1/4KN2/P1q2PPP/3R1B1R w - - 6 22",
+      "played": "f3g5",
+      "best": "e3d4",
+      "loss": 301
+    },
+    {
+      "round": "38",
+      "fen": "8/6pk/4Kp1p/4p2P/6P1/8/5R2/4r3 b - - 3 76",
+      "played": "e5e4",
+      "best": "h7g8",
+      "loss": 296
+    },
+    {
+      "round": "27",
+      "fen": "r1bq1rk1/pp1nppbp/6p1/2p5/Q2PPB2/2P2N2/P4PPP/R3KB1R w KQ - 2 10",
+      "played": "e1c1",
+      "best": "a1d1",
+      "loss": 295
+    },
+    {
+      "round": "34",
+      "fen": "2k5/6P1/5Q2/8/5K2/8/5P2/7q b - - 4 68",
+      "played": "h1c1",
+      "best": "h1g1",
+      "loss": 292
+    },
+    {
+      "round": "29",
+      "fen": "3r1rk1/1p1b1ppp/p2n4/P1bBq3/3N1R1P/1P1QP3/1B4P1/R5K1 w - - 5 25",
+      "played": "d5e4",
+      "best": "b3b4",
+      "loss": 289
+    },
+    {
+      "round": "33",
+      "fen": "r1bqr1k1/1ppn1p1p/5npB/p3p1N1/1bP1P3/2NQ3P/PP2BPP1/3R1RK1 b - - 6 16",
+      "played": "a8a6",
+      "best": "b4f8",
+      "loss": 288
+    },
+    {
+      "round": "28",
+      "fen": "r2q1rk1/3n2pp/1p6/4B3/1pP2P2/4p1P1/2Q1P2P/3R1RK1 b - - 0 22",
+      "played": "a8a3",
+      "best": "d8c8",
+      "loss": 283
+    },
+    {
+      "round": "38",
+      "fen": "6k1/4R3/8/r7/1K5p/8/8/8 b - - 1 89",
+      "played": "a5a2",
+      "best": "a5h5",
+      "loss": 278
+    },
+    {
+      "round": "67",
+      "fen": "2r1k2r/5ppp/p1nQb3/1p2p3/P3P2q/2N1N3/1PP1BPP1/R3K3 b Qk - 0 17",
+      "played": "c6d4",
+      "best": "h4e7",
+      "loss": 266
+    },
+    {
+      "round": "34",
+      "fen": "8/5q1k/3Q2p1/3n2B1/4p1P1/8/1P3P2/6K1 b - - 0 35",
+      "played": "f7b7",
+      "best": "f7f3",
+      "loss": 251
+    },
+    {
+      "round": "67",
+      "fen": "2r1k2r/R4ppp/3Qb3/1p2p3/3nP2q/2N1N3/1PP1BPP1/4K3 b k - 1 19",
+      "played": "d4e2",
+      "best": "c8d8",
+      "loss": 246
+    },
+    {
+      "round": "35",
+      "fen": "r4rk1/pppqnpb1/3p1npp/3Pp3/1PP1P1b1/P1N1BN2/4BPPP/R2Q1RK1 w - - 2 12",
+      "played": "f3e5",
+      "best": "h2h3",
+      "loss": 245
+    },
+    {
+      "round": "27",
+      "fen": "r1bq1rk1/pp2ppbp/1n4p1/8/Q2PPB2/5N2/P4PPP/2KR1B1R w - - 1 12",
+      "played": "a4c2",
+      "best": "a4a3",
+      "loss": 242
+    },
+    {
+      "round": "38",
+      "fen": "1R6/5Kpk/5p1p/4p2P/4P1P1/1p3r2/8/8 b - - 32 68",
+      "played": "f3d3",
+      "best": "f3f4",
+      "loss": 241
+    },
+    {
+      "round": "37",
+      "fen": "3r2k1/5ppp/p3p3/1b1p4/1q1P2PP/1Pr1P3/3N1P2/R2QR1K1 w - - 1 22",
+      "played": "f2f4",
+      "best": "d2f3",
+      "loss": 234
+    },
+    {
+      "round": "33",
+      "fen": "2b2rk1/2Nnqp2/rp4pQ/p1n1p3/2P5/P4N1P/1P2BPP1/3R1RK1 b - - 0 25",
+      "played": "c5e4",
+      "best": "d7f6",
+      "loss": 232
+    },
+    {
+      "round": "30",
+      "fen": "2r2rk1/5ppp/p1Pq4/3p4/1R6/3P1N1P/P1P2PP1/2Q3K1 w - - 1 23",
+      "played": "b4b6",
+      "best": "b4g4",
+      "loss": 228
+    },
+    {
+      "round": "30",
+      "fen": "2rq1rk1/5ppp/p1P5/3p4/1p2R3/2bP1N1P/P1P2PP1/1RQ3K1 w - - 0 21",
+      "played": "e4b4",
+      "best": "e4g4",
+      "loss": 217
+    },
+    {
+      "round": "30",
+      "fen": "4r1k1/5ppp/R1N5/8/2P5/3r3P/P4PPK/8 w - - 0 34",
+      "played": "g2g4",
+      "best": "a2a4",
+      "loss": 216
+    },
+    {
+      "round": "38",
+      "fen": "8/5Kpk/5p1p/4p2P/1R2P1P1/1p4r1/8/8 b - - 26 65",
+      "played": "g3c3",
+      "best": "g3f3",
+      "loss": 213
+    },
+    {
+      "round": "27",
+      "fen": "r4rk1/ppBqppbp/1n2b1p1/8/3PP3/5N2/P1Q2PPP/2KR1B1R w - - 5 14",
+      "played": "d4d5",
+      "best": "f3e5",
+      "loss": 208
+    },
+    {
+      "round": "32",
+      "fen": "rnb1r1k1/1pp2ppp/3b4/5qP1/p1BPn3/P4N1P/1PQ2PK1/RNB4R b - - 0 17",
+      "played": "c8e6",
+      "best": "b8c6",
+      "loss": 205
+    },
+    {
+      "round": "35",
+      "fen": "5k2/8/p3B2P/1p2p3/1Pn5/P4P2/8/5K2 w - - 1 45",
+      "played": "a3a4",
+      "best": "e6c4",
+      "loss": 201
+    },
+    {
+      "round": "38",
+      "fen": "1R6/6pk/4Kp1p/4p2P/4P1P1/1p1r4/8/8 b - - 34 69",
+      "played": "d3g3",
+      "best": "d3e3",
+      "loss": 199
+    },
+    {
+      "round": "38",
+      "fen": "8/1R4pk/4Kp1p/4p2P/4P1P1/1p3r2/8/8 b - - 22 63",
+      "played": "f3c3",
+      "best": "f3f4",
+      "loss": 196
+    },
+    {
+      "round": "38",
+      "fen": "8/1R4pk/4Kp1p/4p2P/4P1P1/1p3r2/8/8 b - - 10 57",
+      "played": "f3g3",
+      "best": "f3f4",
+      "loss": 193
+    },
+    {
+      "round": "30",
+      "fen": "6k1/5pp1/R1N4p/P7/2P3P1/6KP/3r1r2/8 w - - 0 38",
+      "played": "a6a8",
+      "best": "a6b6",
+      "loss": 192
+    },
+    {
+      "round": "66",
+      "fen": "r1q2b1r/1pNb1kpp/pBnpppn1/8/2B1PP2/PN6/1PPQ2PP/2R1K2R b K - 1 19",
+      "played": "f7g8",
+      "best": "f8e7",
+      "loss": 192
+    },
+    {
+      "round": "34",
+      "fen": "8/1q5k/6p1/3nQ1B1/4p1P1/8/1P3P2/6K1 b - - 2 36",
+      "played": "d5b4",
+      "best": "e4e3",
+      "loss": 189
+    },
+    {
+      "round": "28",
+      "fen": "8/8/8/2k5/8/4K1P1/4P3/8 b - - 0 49",
+      "played": "c5d5",
+      "best": "c5b4",
+      "loss": 186
+    },
+    {
+      "round": "31",
+      "fen": "2bqk2r/1p3ppp/2p1pb2/r1n5/2P1B3/B1QpP1P1/P2P1P1P/RN2NRK1 w k - 1 16",
+      "played": "a3b4",
+      "best": "c3c1",
+      "loss": 183
+    },
+    {
+      "round": "30",
+      "fen": "4r1k1/5pp1/R1N4p/8/2P3P1/3r3P/P4P1K/8 w - - 0 35",
+      "played": "a2a4",
+      "best": "a6a7",
+      "loss": 180
+    },
+    {
+      "round": "35",
+      "fen": "3r2k1/5p2/p4qp1/1pP1p2n/1P6/PB2QP2/6PP/R5K1 w - - 2 29",
+      "played": "a1d1",
+      "best": "a1e1",
+      "loss": 178
+    },
+    {
+      "round": "33",
+      "fen": "2bq1rk1/2pn1p2/rp3npp/pN2p3/2P1P3/P1Q2N1P/1P2BPP1/3R1RK1 b - - 1 22",
+      "played": "f6e4",
+      "best": "d8e7",
+      "loss": 176
+    },
+    {
+      "round": "33",
+      "fen": "2bq1rk1/2pn1p1p/rp3np1/pN2p1N1/2P1P3/P1Q4P/1P2BPP1/3R1RK1 b - - 1 21",
+      "played": "h7h6",
+      "best": "a6a8",
+      "loss": 175
+    },
+    {
+      "round": "34",
+      "fen": "1r1q4/4b2k/2Np2p1/3n3p/R3p3/4B1QP/1P3PP1/6K1 b - - 1 28",
+      "played": "d8e8",
+      "best": "d8d7",
+      "loss": 171
+    },
+    {
+      "round": "38",
+      "fen": "2rq2k1/1p2rpp1/n2pb2p/p3p3/P1N1P1PP/1PP1P3/4B3/R2Q1RK1 b - - 0 21",
+      "played": "e7d7",
+      "best": "a6c5",
+      "loss": 170
+    },
+    {
+      "round": "37",
+      "fen": "r4rk1/pp3ppp/2b1pn2/3p4/1q1P2P1/4PN1P/PP1N1P2/R2QK2R w KQ - 0 13",
+      "played": "b2b3",
+      "best": "d1b3",
+      "loss": 169
+    },
+    {
+      "round": "34",
+      "fen": "2k5/6P1/5Q2/2K5/8/8/q4P2/8 b - - 14 73",
+      "played": "a2c2",
+      "best": "c8d7",
+      "loss": 166
+    },
+    {
+      "round": "34",
+      "fen": "2k5/6P1/3K1Q2/8/8/8/2q2P2/8 b - - 16 74",
+      "played": "c2d2",
+      "best": "c2c7",
+      "loss": 165
+    },
+    {
+      "round": "28",
+      "fen": "7Q/8/8/3k4/3n4/4p1P1/4P1K1/8 b - - 0 46",
+      "played": "d5c4",
+      "best": "d5e4",
+      "loss": 164
+    },
+    {
+      "round": "67",
+      "fen": "2r1k2r/5ppp/p2Qb3/1P2p3/3nP2q/2N1N3/1PP1BPP1/R3K3 b Qk - 0 18",
+      "played": "a6b5",
+      "best": "h4d8",
+      "loss": 163
+    },
+    {
+      "round": "28",
+      "fen": "r2q1rk1/3n2pp/1p6/4B3/1pP1p3/6P1/2Q1PP1P/3R1RK1 b - - 0 21",
+      "played": "e4e3",
+      "best": "f8f7",
+      "loss": 159
+    },
+    {
+      "round": "34",
+      "fen": "1r1q1rk1/3nbp2/3p2p1/p2Pp2p/p1N1P3/4BQ1P/1P3PP1/R4RK1 b - - 1 21",
+      "played": "f7f5",
+      "best": "e7g5",
+      "loss": 155
+    },
+    {
+      "round": "34",
+      "fen": "8/8/8/8/1k1BQ1P1/1q1n4/5P1K/8 b - - 0 52",
+      "played": "d3c5",
+      "best": "b3d1",
+      "loss": 155
+    },
+    {
+      "round": "37",
+      "fen": "2r3k1/5pp1/pq2p2p/3p3P/R2P1PP1/1PrbP3/3N4/3QR1K1 w - - 3 26",
+      "played": "d1f3",
+      "best": "d2f3",
+      "loss": 154
+    },
+    {
+      "round": "31",
+      "fen": "2bqk2r/1pp1bppp/4pn2/r7/2P1n3/1Q1pPNP1/P2P1PBP/RNB2RK1 w k - 0 12",
+      "played": "f3e1",
+      "best": "b1c3",
+      "loss": 150
+    }
+  ]
+}
