@@ -31,9 +31,9 @@ from tools.backtest_core import (
 
 class BacktestCoreTests(unittest.TestCase):
     def test_agent_stderr_is_bounded_and_persisted(self) -> None:
-        candidate = Agent([])
-        opponent = Agent([])
-        candidate.stderr_tail = "prefix" + "x" * backtest.AGENT_LOG_LIMIT
+        candidate = Agent([], "candidate")
+        opponent = Agent([], "opponent")
+        candidate.stderr_log = "prefix" + "x" * backtest.AGENT_LOG_LIMIT
         with tempfile.TemporaryDirectory() as temporary:
             output = Path(temporary)
             backtest.save_agent_logs(output, "00001-white", candidate, opponent)
