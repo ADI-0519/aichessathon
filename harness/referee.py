@@ -11,6 +11,7 @@ from harness.sandbox import Agent, AgentFailure
 RESULT_HEADERS = {"white": "1-0", "black": "0-1", "draw": "1/2-1/2", "void": "*"}
 FAILED_TERMINATIONS = frozenset({"crash", "illegal", "flag", "init", "both_failed"})
 
+Side = Literal["white", "black"]
 Result = Literal["white", "black", "draw", "void"]
 Decision = Literal["white", "black", "draw"]
 FailureSide = Literal["white", "black", "both"]
@@ -76,16 +77,37 @@ def _play(
         try:
             uci = agents[mover].move(board.fen(), int(clock[mover]))
         except AgentFailure as failure:
-            return _outcome(board, _side(not mover), failure.reason, clocks, agents, failed_side=_side(mover))
+            return _outcome(
+                board,
+                _side(not mover),
+                failure.reason,
+                clocks,
+                agents,
+                failed_side=_side(mover),
+            )
         spent_ms = (time.monotonic() - started_at) * 1000.0
         agents[mover].suspend()  # After the timer, so the freeze is never on your clock.
         clock[mover] -= spent_ms
         if clock[mover] < 0:
-            return _outcome(board, _flagged(board, mover), "flag", clocks, agents, failed_side=_side(mover))
+            return _outcome(
+                board,
+                _flagged(board, mover),
+                "flag",
+                clocks,
+                agents,
+                failed_side=_side(mover),
+            )
 
         move = _legal_move(board, uci)
         if move is None:
-            return _outcome(board, _side(not mover), "illegal", clocks, agents, failed_side=_side(mover))
+            return _outcome(
+                board,
+                _side(not mover),
+                "illegal",
+                clocks,
+                agents,
+                failed_side=_side(mover),
+            )
         board.push(move)
         clock[mover] += increment_ms
         clocks.append(clock[mover])
@@ -108,7 +130,7 @@ def _legal_move(board: chess.Board, uci: str) -> chess.Move | None:
     return move if move in board.legal_moves else None
 
 
-def _side(colour: chess.Color) -> Decision:
+def _side(colour: chess.Color) -> Side:
     return "white" if colour == chess.WHITE else "black"
 
 

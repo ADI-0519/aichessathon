@@ -80,7 +80,6 @@ class BacktestCoreTests(unittest.TestCase):
         
     def test_failure_attribution_does_not_depend_on_game_result(self) -> None:
     # White flags, but Black has insufficient mating material.
-    # Official chess result is therefore a draw, while White still unquestionably suffered the technical failure.
         outcome = Outcome(
             "draw",
             "flag",

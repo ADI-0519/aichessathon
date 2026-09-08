@@ -7,7 +7,7 @@ from pathlib import Path
 
 import chess
 
-from harness.referee import FAILED_TERMINATIONS, play_match
+from harness.referee import play_match
 from harness.rules import BASE_MS, INCREMENT_MS, MAX_UNZIPPED_BYTES, OPENINGS, SMOKE_PLIES
 from harness.sandbox import local
 
@@ -102,7 +102,8 @@ def smoke(upload: Path) -> list[str]:
             print(f"\nSmoke game as {colour} from {opening}, {outcome.termination}")
             if agent.stderr_log:
                 print(agent.stderr_log.rstrip())
-            if outcome.termination in FAILED_TERMINATIONS:
+            agent_side = "white" if plays_white else "black"
+            if outcome.failed_side in {agent_side, "both"}:
                 problems.append(f"Your agent failed as {colour}, {outcome.termination}")
     return problems
 
