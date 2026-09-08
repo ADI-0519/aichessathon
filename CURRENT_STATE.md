@@ -8,15 +8,15 @@ Updated: 8 September 2026
 diagnostic, type-checking, and packaging commands all target it. Packaging copies the contents of
 that directory to the archive root, where the platform imports `agent.py`.
 
-- Engine generation: V7 continuous time
+- Engine generation: V7 continuous time plus exact qsearch evaluation caching
 - Frozen source ancestor: `challengers/v7_continuous_time/`
 - Rollback artifact: `submission_v7.zip`
 - Fresh local artifact: `submission.zip` (gitignored and rebuilt with `make zip`)
-- Lineage: V5 NNUE -> V6 stable completed-depth timeout -> V7 continuous allocation
+- Lineage: V5 NNUE -> V6 stable completed-depth timeout -> V7 continuous allocation -> qsearch evaluation cache
 
-The current source differs from the frozen V7 directory only in non-functional import formatting
-and its package description. The model weights are byte-identical. Engine files no longer live at
-the repository root, and the repository root must not be packaged as an agent.
+The current source adds the independently implemented, fixed-node-equivalent qsearch evaluation
+cache to the frozen V7 engine. The model weights are byte-identical. Engine files no longer live
+at the repository root, and the repository root must not be packaged as an agent.
 
 ## What V7 contains
 
@@ -25,11 +25,12 @@ the repository root, and the repository root must not be packaged as an agent.
   search.
 - A fixed-size array transposition table, aspiration windows, quiescence search, SEE move scoring,
   killer moves, quiet history, late-move reductions, and guarded null-move pruning.
+- A 65,536-entry direct-mapped cache for exact blended static evaluations reached in quiescence.
 - Persistent per-game search memory and repetition history.
 - Last-completed-iteration timeout safety and continuous, move-aware clock allocation.
 
-It does not contain pondering, an opening book, Syzygy tablebases, a lazy NNUE accumulator,
-quiescence evaluation caching, or code/model assets copied from another engine.
+It does not contain pondering, an opening book, Syzygy tablebases, a lazy NNUE accumulator, or
+code/model assets copied from another engine.
 
 ## Strength evidence
 
@@ -41,6 +42,8 @@ quiescence evaluation caching, or code/model assets copied from another engine.
 | V7 vs V6 stable timeout, development, 20 pairs | 65.0% | Strong directional development result with no failures. |
 | V7 vs V6 stable timeout, validation, 20 pairs | 48.75% | No independent evidence of a general Elo gain. |
 | V7 vs submitted V5, validation, 10 pairs | 50.0% | No measured regression or superiority. |
+| Qsearch evaluation cache, clean fixed-node suite | Exact parity over 90 probes; +7.50%, +4.49%, and +5.49% median NPS at 100k, 300k, and 1M nodes | Repeatable semantic-preserving throughput gain. |
+| Qsearch evaluation cache vs prior V7, development, 20 pairs | 51.25%, zero technical failures | Passed the timed gross-regression and reliability screen; too few games to claim Elo. |
 
 V7 is therefore a reliability champion, not a proven large Elo improvement. Ladder losses from V5
 remain useful diagnostics because V7 changes timeout handling and allocation rather than the core
@@ -58,6 +61,8 @@ The full evidence ledger is in `docs/EXPERIMENT_LEDGER.md`. The most important d
   smoke match, so it was rejected.
 - Global no-LMR and no-null configurations did not repair the two persistent critical misses in
   the completed six-profile V7 mechanism matrix.
+- Exact qsearch evaluation caching was promoted after deterministic parity, clean throughput, and
+  timed reliability gates.
 
 ## What the mechanism matrix established
 
@@ -75,14 +80,13 @@ NNUE-only, no-LMR, no-null, and no-LMR/no-null searches on six rated-error posit
 
 ## Next development decision
 
-Do not start another broad neural-network run or combine fashionable search features. The next
-candidate should target exact throughput while preserving scores and moves:
+Do not start another broad neural-network run or combine fashionable search features. Qsearch
+evaluation caching completed the first exact-throughput experiment. The next candidate should:
 
-1. Use the engine-selectable repeated fixed-node scaling examiner to establish the canonical
-   baseline, then profile full-search time in NNUE accumulator updates, NNUE evaluation,
-   handcrafted evaluation, and quiescence.
-2. Implement exactly one independently written candidate: lazy accumulator updates if accumulator
-   work dominates, otherwise a correctness-keyed quiescence/static-evaluation cache.
+1. Re-establish profiling against the new cached champion, separating accumulator-update work,
+   cache misses, NNUE evaluation, handcrafted evaluation, and other quiescence work.
+2. Implement exactly one independently written candidate, with lazy accumulator updates as the
+   leading hypothesis if profiling confirms that accumulator work now dominates.
 3. Require exact fixed-node equivalence, a repeatable speed gain, critical-position checks, then
    paired development and untouched validation games against `current/`.
 

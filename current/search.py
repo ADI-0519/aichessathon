@@ -44,6 +44,7 @@ TT_GENERATION = 4
 TT_HALFMOVE = 5
 TT_FIELD_COUNT = 6
 DEFAULT_TT_BITS = 18
+Q_EVAL_BITS = 16
 
 STAT_NODES = 0
 STAT_QNODES = 1
@@ -53,7 +54,9 @@ STAT_TT_CUTOFFS = 4
 STAT_BETA_CUTOFFS = 5
 STAT_LMR_REDUCTIONS = 6
 STAT_LMR_RESEARCHES = 7
-STAT_COUNT = 8
+STAT_Q_EVAL_PROBES = 8
+STAT_Q_EVAL_HITS = 9
+STAT_COUNT = 10
 
 MG_VALUE = np.array((100, 320, 330, 500, 900, 0), dtype=np.int32)
 EG_VALUE = np.array((120, 310, 335, 525, 900, 0), dtype=np.int32)
@@ -125,6 +128,9 @@ class SearchMemory:
     tt_keys: NDArray[np.uint64]
     tt_data: NDArray[np.int32]
     quiet_history: NDArray[np.int32]
+    q_eval_keys: NDArray[np.uint64]
+    q_eval_scores: NDArray[np.int32]
+    q_eval_valid: NDArray[np.uint8]
     generation: int = 0
 
     @classmethod
@@ -132,10 +138,14 @@ class SearchMemory:
         if not 10 <= tt_bits <= 24:
             raise ValueError("tt_bits must be between 10 and 24")
         size = 1 << tt_bits
+        q_eval_size = 1 << Q_EVAL_BITS
         return cls(
             np.zeros(size, dtype=np.uint64),
             np.zeros((size, TT_FIELD_COUNT), dtype=np.int32),
             np.zeros((2, 64, 64), dtype=np.int32),
+            np.zeros(q_eval_size, dtype=np.uint64),
+            np.zeros(q_eval_size, dtype=np.int32),
+            np.zeros(q_eval_size, dtype=np.uint8),
         )
 
     def next_generation(self) -> int:
@@ -146,6 +156,7 @@ class SearchMemory:
         self.tt_keys.fill(0)
         self.tt_data.fill(0)
         self.quiet_history.fill(0)
+        self.q_eval_valid.fill(0)
         self.generation = 0
 
 
@@ -163,6 +174,8 @@ class SearchResult:
     beta_cutoffs: int
     lmr_reductions: int
     lmr_researches: int
+    q_eval_probes: int
+    q_eval_hits: int
 
 
 @njit(cache=False)
@@ -260,6 +273,31 @@ def evaluate(
         return learned
     handcrafted = handcrafted_evaluate(pieces, state)
     return (NNUE_BLEND * learned + (100 - NNUE_BLEND) * handcrafted) // 100
+
+
+@njit(cache=False, inline="always")
+def _cached_qeval(
+    pieces: NDArray[np.uint64],
+    state: NDArray[np.int64],
+    key: np.uint64,
+    accumulators: NDArray[np.int32],
+    q_eval_keys: NDArray[np.uint64],
+    q_eval_scores: NDArray[np.int32],
+    q_eval_valid: NDArray[np.uint8],
+    stats: NDArray[np.int64],
+) -> int:
+    """Return the exact blended evaluation through a direct-mapped cache."""
+    stats[STAT_Q_EVAL_PROBES] += 1
+    index = int(key & np.uint64(len(q_eval_keys) - 1))
+    if q_eval_valid[index] != 0 and q_eval_keys[index] == key:
+        stats[STAT_Q_EVAL_HITS] += 1
+        return int(q_eval_scores[index])
+
+    score = evaluate(pieces, state, accumulators)
+    q_eval_keys[index] = key
+    q_eval_scores[index] = np.int32(score)
+    q_eval_valid[index] = np.uint8(1)
+    return score
 
 
 @njit(cache=False, inline="always")
@@ -598,6 +636,9 @@ def _quiescence(
     see_gain_stack: NDArray[np.int32],
     killers: NDArray[np.int32],
     quiet_history: NDArray[np.int32],
+    q_eval_keys: NDArray[np.uint64],
+    q_eval_scores: NDArray[np.int32],
+    q_eval_valid: NDArray[np.uint8],
     stop: NDArray[np.uint8],
     node_limit: int,
     stats: NDArray[np.int64],
@@ -605,7 +646,19 @@ def _quiescence(
     if _visit_node(stats, stop, node_limit, True):
         return 0, True
     if ply >= MAX_PLY - 1 or history_count >= len(history):
-        return evaluate(pieces, state, accumulator_stack[ply]), False
+        return (
+            _cached_qeval(
+                pieces,
+                state,
+                key[0],
+                accumulator_stack[ply],
+                q_eval_keys,
+                q_eval_scores,
+                q_eval_valid,
+                stats,
+            ),
+            False,
+        )
 
     side = int(state[engine.STATE_SIDE])
     in_check = engine.is_in_check(pieces, side)
@@ -642,7 +695,16 @@ def _quiescence(
     if in_check:
         best = -INFINITY
     else:
-        stand_pat = evaluate(pieces, state, accumulator_stack[ply])
+        stand_pat = _cached_qeval(
+            pieces,
+            state,
+            key[0],
+            accumulator_stack[ply],
+            q_eval_keys,
+            q_eval_scores,
+            q_eval_valid,
+            stats,
+        )
         if stand_pat >= beta:
             return stand_pat, False
         if stand_pat > alpha:
@@ -713,6 +775,9 @@ def _quiescence(
             see_gain_stack,
             killers,
             quiet_history,
+            q_eval_keys,
+            q_eval_scores,
+            q_eval_valid,
             stop,
             node_limit,
             stats,
@@ -763,6 +828,9 @@ def _negamax(
     see_gain_stack: NDArray[np.int32],
     killers: NDArray[np.int32],
     quiet_history: NDArray[np.int32],
+    q_eval_keys: NDArray[np.uint64],
+    q_eval_scores: NDArray[np.int32],
+    q_eval_valid: NDArray[np.uint8],
     tt_keys: NDArray[np.uint64],
     tt_data: NDArray[np.int32],
     generation: int,
@@ -790,6 +858,9 @@ def _negamax(
             see_gain_stack,
             killers,
             quiet_history,
+            q_eval_keys,
+            q_eval_scores,
+            q_eval_valid,
             stop,
             node_limit,
             stats,
@@ -882,6 +953,9 @@ def _negamax(
             see_gain_stack,
             killers,
             quiet_history,
+            q_eval_keys,
+            q_eval_scores,
+            q_eval_valid,
             tt_keys,
             tt_data,
             generation,
@@ -959,6 +1033,9 @@ def _negamax(
                 see_gain_stack,
                 killers,
                 quiet_history,
+                q_eval_keys,
+                q_eval_scores,
+                q_eval_valid,
                 tt_keys,
                 tt_data,
                 generation,
@@ -988,6 +1065,9 @@ def _negamax(
                 see_gain_stack,
                 killers,
                 quiet_history,
+                q_eval_keys,
+                q_eval_scores,
+                q_eval_valid,
                 tt_keys,
                 tt_data,
                 generation,
@@ -1018,6 +1098,9 @@ def _negamax(
                     see_gain_stack,
                     killers,
                     quiet_history,
+                    q_eval_keys,
+                    q_eval_scores,
+                    q_eval_valid,
                     tt_keys,
                     tt_data,
                     generation,
@@ -1047,6 +1130,9 @@ def _negamax(
                     see_gain_stack,
                     killers,
                     quiet_history,
+                    q_eval_keys,
+                    q_eval_scores,
+                    q_eval_valid,
                     tt_keys,
                     tt_data,
                     generation,
@@ -1114,6 +1200,9 @@ def _search_root(
     see_gain_stack: NDArray[np.int32],
     killers: NDArray[np.int32],
     quiet_history: NDArray[np.int32],
+    q_eval_keys: NDArray[np.uint64],
+    q_eval_scores: NDArray[np.int32],
+    q_eval_valid: NDArray[np.uint8],
     tt_keys: NDArray[np.uint64],
     tt_data: NDArray[np.int32],
     generation: int,
@@ -1191,6 +1280,9 @@ def _search_root(
                 see_gain_stack,
                 killers,
                 quiet_history,
+                q_eval_keys,
+                q_eval_scores,
+                q_eval_valid,
                 tt_keys,
                 tt_data,
                 generation,
@@ -1220,6 +1312,9 @@ def _search_root(
                 see_gain_stack,
                 killers,
                 quiet_history,
+                q_eval_keys,
+                q_eval_scores,
+                q_eval_valid,
                 tt_keys,
                 tt_data,
                 generation,
@@ -1249,6 +1344,9 @@ def _search_root(
                     see_gain_stack,
                     killers,
                     quiet_history,
+                    q_eval_keys,
+                    q_eval_scores,
+                    q_eval_valid,
                     tt_keys,
                     tt_data,
                     generation,
@@ -1308,10 +1406,10 @@ def search_position(
     working = position.copy()
     root_moves = engine.legal_moves(working)
     if len(root_moves) == 0:
-        return SearchResult(0, 0, 0, 0, 0, 0.0, False, 0, 0, 0, 0, 0)
+        return SearchResult(0, 0, 0, 0, 0, 0.0, False, 0, 0, 0, 0, 0, 0, 0)
     fallback = int(root_moves[0])
     if len(root_moves) == 1:
-        return SearchResult(fallback, 0, 0, 0, 0, 0.0, False, 0, 0, 0, 0, 0)
+        return SearchResult(fallback, 0, 0, 0, 0, 0.0, False, 0, 0, 0, 0, 0, 0, 0)
 
     history, history_count = _history_buffer(working, prior_history)
     root_history_count = history_count
@@ -1369,6 +1467,9 @@ def search_position(
                 see_gain_stack,
                 killers,
                 memory.quiet_history,
+                memory.q_eval_keys,
+                memory.q_eval_scores,
+                memory.q_eval_valid,
                 memory.tt_keys,
                 memory.tt_data,
                 generation,
@@ -1403,6 +1504,9 @@ def search_position(
                     see_gain_stack,
                     killers,
                     memory.quiet_history,
+                    memory.q_eval_keys,
+                    memory.q_eval_scores,
+                    memory.q_eval_valid,
                     memory.tt_keys,
                     memory.tt_data,
                     generation,
@@ -1438,6 +1542,8 @@ def search_position(
         int(stats[STAT_BETA_CUTOFFS]),
         int(stats[STAT_LMR_REDUCTIONS]),
         int(stats[STAT_LMR_RESEARCHES]),
+        int(stats[STAT_Q_EVAL_PROBES]),
+        int(stats[STAT_Q_EVAL_HITS]),
     )
 
 
