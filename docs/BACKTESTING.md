@@ -128,9 +128,15 @@ Only one process may use an output directory at a time. A hard process kill can 
 behind; after confirming no matching backtest is active, delete that one lock file and resume.
 
 Use `--workers N` to run up to `N` position pairs at once. Every individual game still receives
-fresh harness agent processes, and changing the worker count does not change the immutable
-experiment configuration or prevent a resume. Because concurrent games share the host's CPU,
-choose a worker count appropriate for the machine and time-control sensitivity.
+fresh harness agent processes. The scheduler keeps at most `2 * N` pair tasks in flight or queued
+to reduce head-of-line idling while bounding speculative work. Changing the worker count changes
+the immutable experiment configuration, so resume with the same value. Because concurrent games
+share the host's CPU, choose a worker count appropriate for the machine and time-control
+sensitivity.
+
+`summary.json["elapsed_s"]` is the sum of individual game durations, not end-to-end wall time. It
+will exceed actual runtime when games overlap. For worker-scaling measurements, wrap the complete
+Git Bash command in `time` and compare that wall-clock result instead.
 
 Use `--limit N` for a short screen and `--offset N` for an explicitly selected later slice. The
 position order is deterministically shuffled by `--order-seed` before those options apply.
