@@ -77,9 +77,10 @@ def _play(
         try:
             uci = agents[mover].move(board.fen(), int(clock[mover]))
         except AgentFailure as failure:
+            result = _flagged(board, mover) if failure.reason == "flag" else _side(not mover)
             return _outcome(
                 board,
-                _side(not mover),
+                result,
                 failure.reason,
                 clocks,
                 agents,
