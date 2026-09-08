@@ -61,9 +61,9 @@ def save_agent_logs(
         ("candidate", candidate_agent),
         ("opponent", opponent_agent),
     ):
-        if not agent.stderr_tail:
+        if not agent.stderr_log:
             continue
-        tail = agent.stderr_tail[-AGENT_LOG_LIMIT:]
+        tail = agent.stderr_log[-AGENT_LOG_LIMIT:]
         path = output / "logs" / f"game-{game_id}-{name}.stderr.log"
         path.parent.mkdir(parents=True, exist_ok=True)
         atomic_write_text(path, tail)

@@ -56,10 +56,20 @@ def _names(path: Path) -> set[str]:
 
 
 def build(root: Path, destination: Path, includes: tuple[str, ...]) -> list[str]:
+    unzipped = sum(source.stat().st_size for source, _ in entries)
+    if unzipped > MAX_UNZIPPED_BYTES:
+        raise SystemExit(
+            f"{unzipped:,} bytes unzipped is over the "
+            f"{MAX_UNZIPPED_BYTES // 1_000_000} MB limit; "
+            "the platform will reject this upload"
+        )
     entries = list(members(root, includes))
     written = [name for _, name in entries]
     if "agent.py" not in written:
-        raise SystemExit(f"No agent.py in {root}. The platform imports it by name")
+        raise SystemExit(
+            f"{root / 'agent.py'} does not exist; "
+            "the platform imports it by name"
+        )
     with zipfile.ZipFile(destination, "w", zipfile.ZIP_DEFLATED) as archive:
         for source, name in entries:
             archive.write(source, name)
