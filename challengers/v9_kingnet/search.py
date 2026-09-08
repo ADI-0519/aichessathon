@@ -31,7 +31,7 @@ DELTA_MARGIN = 120
 
 # Percentage of the static evaluation supplied by the learned model.  Keep this
 # as a source constant so every packaged challenger is reproducible.
-NNUE_BLEND = 50
+NNUE_BLEND = 75
 
 TT_EMPTY = 0
 TT_EXACT = 1
