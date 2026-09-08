@@ -41,6 +41,11 @@ class Probe:
     lmr_researches: int
     q_eval_probes: int
     q_eval_hits: int
+    q_moves_considered: int
+    q_accumulator_updates: int
+    q_pruned_after_update: int
+    q_check_saves: int
+    q_children_searched: int
 
 
 def selected_pgn_position(path: Path, color: chess.Color, fullmove: int) -> chess.Board:
@@ -101,6 +106,11 @@ def run_probe(
         lmr_researches=result.lmr_researches,
         q_eval_probes=getattr(result, "q_eval_probes", 0),
         q_eval_hits=getattr(result, "q_eval_hits", 0),
+        q_moves_considered=getattr(result, "q_moves_considered", 0),
+        q_accumulator_updates=getattr(result, "q_accumulator_updates", 0),
+        q_pruned_after_update=getattr(result, "q_pruned_after_update", 0),
+        q_check_saves=getattr(result, "q_check_saves", 0),
+        q_children_searched=getattr(result, "q_children_searched", 0),
     )
 
 
@@ -120,6 +130,11 @@ def assert_deterministic(probes: list[Probe]) -> None:
             probe.lmr_researches,
             probe.q_eval_probes,
             probe.q_eval_hits,
+            probe.q_moves_considered,
+            probe.q_accumulator_updates,
+            probe.q_pruned_after_update,
+            probe.q_check_saves,
+            probe.q_children_searched,
         )
         for probe in probes
     }
@@ -185,7 +200,10 @@ def main() -> None:
     print(f"engine={engine_root}")
     print(f"positions={len(positions)}")
     print(f"cold_warmup={warmup_s:.3f}s, repeats={arguments.repeats}")
-    print("limit      d      nodes    q% median nps      range move     score qeval-hit")
+    print(
+        "limit      d      nodes    q% median nps      range move     score "
+        "qeval-hit qacc-waste"
+    )
 
     all_probes: list[Probe] = []
     aggregates: list[dict[str, object]] = []
@@ -213,6 +231,17 @@ def main() -> None:
             q_eval_hit_rate = (
                 first.q_eval_hits / first.q_eval_probes if first.q_eval_probes else None
             )
+            q_accumulator_waste_rate = (
+                first.q_pruned_after_update / first.q_accumulator_updates
+                if first.q_accumulator_updates
+                else None
+            )
+            if first.q_accumulator_updates and (
+                first.q_accumulator_updates != first.q_moves_considered
+                or first.q_pruned_after_update + first.q_children_searched
+                != first.q_moves_considered
+            ):
+                raise RuntimeError("inconsistent qsearch accumulator profile counters")
             aggregates.append(
                 {
                     "position_id": position_id,
@@ -229,15 +258,26 @@ def main() -> None:
                     "q_eval_probes": first.q_eval_probes,
                     "q_eval_hits": first.q_eval_hits,
                     "q_eval_hit_rate": q_eval_hit_rate,
+                    "q_moves_considered": first.q_moves_considered,
+                    "q_accumulator_updates": first.q_accumulator_updates,
+                    "q_pruned_after_update": first.q_pruned_after_update,
+                    "q_check_saves": first.q_check_saves,
+                    "q_children_searched": first.q_children_searched,
+                    "q_accumulator_waste_rate": q_accumulator_waste_rate,
                 }
             )
             hit_text = (
                 f"{q_eval_hit_rate:>8.1%}" if q_eval_hit_rate is not None else "       -"
             )
+            waste_text = (
+                f"{q_accumulator_waste_rate:>10.1%}"
+                if q_accumulator_waste_rate is not None
+                else "         -"
+            )
             print(
                 f"{node_limit:>8,} {first.depth:>6} {first.nodes:>10,} {qshare:>5.1%} "
                 f"{median_nps:>10,.0f} {min(nps_values):>8,.0f}..{max(nps_values):<8,.0f} "
-                f"{first.move:<8} {first.score:>6} {hit_text}"
+                f"{first.move:<8} {first.score:>6} {hit_text} {waste_text}"
             )
 
     overall: list[dict[str, object]] = []

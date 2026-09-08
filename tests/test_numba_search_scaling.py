@@ -25,6 +25,11 @@ def probe(*, move: str = "e2e4", score: int = 12) -> Probe:
         lmr_researches=2,
         q_eval_probes=0,
         q_eval_hits=0,
+        q_moves_considered=0,
+        q_accumulator_updates=0,
+        q_pruned_after_update=0,
+        q_check_saves=0,
+        q_children_searched=0,
     )
 
 

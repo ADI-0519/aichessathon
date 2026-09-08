@@ -83,10 +83,11 @@ NNUE-only, no-LMR, no-null, and no-LMR/no-null searches on six rated-error posit
 Do not start another broad neural-network run or combine fashionable search features. Qsearch
 evaluation caching completed the first exact-throughput experiment. The next candidate should:
 
-1. Re-establish profiling against the new cached champion, separating accumulator-update work,
-   cache misses, NNUE evaluation, handcrafted evaluation, and other quiescence work.
-2. Implement exactly one independently written candidate, with lazy accumulator updates as the
-   leading hypothesis if profiling confirms that accumulator work now dominates.
+1. The six-position profile retained exact parity across all 18 probes and found wasted qsearch
+   accumulator-update rates of 49.33%, 50.28%, and 49.47% at 100k, 300k, and 1M nodes.
+2. `challengers/exp_qs_lazy_accumulator_v8` now implements the isolated post-move update. Exact
+   rebuild tests pass for both colours, captures, en passant, promotions, and castling; fixed-node
+   parity and throughput gates remain before any promotion.
 3. Require exact fixed-node equivalence, a repeatable speed gain, critical-position checks, then
    paired development and untouched validation games against `current/`.
 
