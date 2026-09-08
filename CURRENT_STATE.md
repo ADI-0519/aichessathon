@@ -93,5 +93,4 @@ network must not be copied into the submission.
 
 The canonical source is <https://aichessathon.com/docs>. At this update: 120 s + 0.5 s, a 90 s
 initialization budget, one CPU core, 2 GB RAM, no GPU or network, a draw at 600 plies, 50 MB
-uncompressed, and ten uploads per day. The checked-in harness still carries an older 300-ply cap;
-sync that file from the official upstream rather than editing the platform mirror locally.
+uncompressed, and ten uploads per day. The checked-in harness is synced with the current official starter semantics: 600-ply draw, suspended pondering, platform-style scratch paths/log truncation seeded opening-pair arenas, and extracted-ZIP smoke testing.
