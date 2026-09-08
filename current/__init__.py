@@ -1,1 +1,1 @@
-"""Canonical deployable V7 engine source."""
+"""Canonical deployable V7 engine with qsearch evaluation caching."""
