@@ -6,11 +6,15 @@ referee. It is development-only and is never packaged with the chess agent.
 ## Guarantees
 
 - Every selected position is played once with each colour.
+- `--workers N` runs independent position pairs concurrently while keeping both colours of each
+  pair sequential and committing results in deterministic suite order. The default is one worker.
 - Candidate and opponent package inputs are SHA-256 fingerprinted in `manifest.json`.
 - Those fingerprints are checked before every new game. Editing an engine stops the run instead of
   silently mixing versions.
 - Every completed game is durably appended to `games.jsonl`; repeating the same command skips it.
 - PGNs are written atomically under `games/`, and `summary.json` is refreshed after every game.
+- Worker tasks keep records, PGNs, and stderr tails in memory; only the coordinator writes run
+  artifacts.
 - A pre-existing output directory can only resume an identical experiment configuration.
 - An atomic writer lock prevents two processes from corrupting the same experiment directory.
 - Voids are not misreported as draws, and technical failures are attributed to the candidate or
@@ -122,6 +126,11 @@ new output directory; old and new builds must never share a report.
 
 Only one process may use an output directory at a time. A hard process kill can leave `.run.lock`
 behind; after confirming no matching backtest is active, delete that one lock file and resume.
+
+Use `--workers N` to run up to `N` position pairs at once. Every individual game still receives
+fresh harness agent processes, and changing the worker count does not change the immutable
+experiment configuration or prevent a resume. Because concurrent games share the host's CPU,
+choose a worker count appropriate for the machine and time-control sensitivity.
 
 Use `--limit N` for a short screen and `--offset N` for an explicitly selected later slice. The
 position order is deterministically shuffled by `--order-seed` before those options apply.

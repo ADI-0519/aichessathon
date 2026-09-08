@@ -5,6 +5,7 @@ import json
 import tempfile
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
 import chess
 
@@ -32,6 +33,48 @@ from tools.backtest_core import (
 
 
 class BacktestCoreTests(unittest.TestCase):
+    def test_workers_argument_defaults_to_one_and_requires_positive_values(self) -> None:
+        parser = backtest.build_parser()
+        default = parser.parse_args(["--opponent", "opponent", "--output", "output"])
+        parallel = parser.parse_args(
+            ["--opponent", "opponent", "--output", "output", "--workers", "4"]
+        )
+        self.assertEqual(default.workers, 1)
+        self.assertEqual(parallel.workers, 4)
+        with patch("sys.stderr"), self.assertRaises(SystemExit):
+            parser.parse_args(["--opponent", "opponent", "--output", "output", "--workers", "0"])
+
+    def test_pair_worker_runs_candidate_colours_sequentially(self) -> None:
+        position = backtest.SuitePosition("position", chess.STARTING_FEN, 7, "development")
+        task = backtest.PairTask(3, position, (True, False))
+        calls: list[bool] = []
+
+        def fake_play_game(*, candidate_is_white: bool, **_: object) -> backtest.GamePayload:
+            calls.append(candidate_is_white)
+            color = "white" if candidate_is_white else "black"
+            record = make_record(f"00003-{color}", "000007:position", color, "draw")
+            return backtest.GamePayload(record, f"{color} pgn", (("candidate", color),))
+
+        with patch("tools.backtest.play_game", side_effect=fake_play_game):
+            result = backtest.play_pair(
+                task,
+                candidate=Path("candidate"),
+                opponent_factory=lambda: Agent([], "opponent"),
+                candidate_name="candidate",
+                opponent_name="opponent",
+                configuration={},
+                base_ms=1,
+                increment_ms=0,
+                ply_cap=1,
+            )
+
+        self.assertEqual(calls, [True, False])
+        self.assertEqual(
+            [game.record.game_id for game in result.games],
+            ["00003-white", "00003-black"],
+        )
+        self.assertEqual([game.pgn for game in result.games], ["white pgn", "black pgn"])
+
     def test_agent_stderr_is_bounded_and_persisted(self) -> None:
         candidate = Agent([], "candidate")
         opponent = Agent([], "opponent")
@@ -264,6 +307,42 @@ class BacktestCoreTests(unittest.TestCase):
 
 
 class BacktestIntegrationTests(unittest.TestCase):
+    def test_parallel_fixed_run_journals_complete_pairs_in_suite_order(self) -> None:
+        repository = Path(__file__).resolve().parents[1]
+        random_agent = repository / "baselines" / "random"
+        with tempfile.TemporaryDirectory() as temporary:
+            arguments = argparse.Namespace(
+                candidate=random_agent,
+                opponent=random_agent,
+                stockfish=None,
+                stockfish_nodes=None,
+                suite="builtin",
+                split="development",
+                unlock_holdout=False,
+                split_seed="parallel-integration-test",
+                order_seed=11,
+                offset=0,
+                limit=2,
+                base_ms=1_000,
+                increment_ms=0,
+                ply_cap=2,
+                output=Path(temporary),
+                continue_on_failure=False,
+                workers=2,
+                sprt=False,
+            )
+            self.assertEqual(backtest.run(arguments), 0)
+            records = load_records(Path(temporary) / "games.jsonl")
+            self.assertEqual(
+                [record.game_id for record in records],
+                ["00001-white", "00001-black", "00002-white", "00002-black"],
+            )
+            self.assertTrue(
+                all((Path(temporary) / record.pgn_file).is_file() for record in records)
+            )
+            summary = json.loads((Path(temporary) / "summary.json").read_text())
+            self.assertEqual(summary["complete_pairs"], 2)
+
     def test_sprt_stops_after_a_pair_and_resume_replays_nothing(self) -> None:
         repository = Path(__file__).resolve().parents[1]
         random_agent = repository / "baselines" / "random"
@@ -285,6 +364,7 @@ class BacktestIntegrationTests(unittest.TestCase):
                 ply_cap=4,
                 output=Path(temporary),
                 continue_on_failure=False,
+                workers=2,
                 sprt=True,
                 sprt_elo0=0.0,
                 sprt_elo1=1000.0,
@@ -295,6 +375,10 @@ class BacktestIntegrationTests(unittest.TestCase):
             self.assertEqual(backtest.run(arguments), 0)
             first = load_records(Path(temporary) / "games.jsonl")
             self.assertEqual(len(first), 2)
+            self.assertEqual(
+                [record.game_id for record in first],
+                ["00001-white", "00001-black"],
+            )
             self.assertEqual(backtest.run(arguments), 0)
             second = load_records(Path(temporary) / "games.jsonl")
             self.assertEqual(second, first)
