@@ -25,6 +25,8 @@ for choosing what to validate next, not proof of Elo; technical smokes establish
 | V8 linear strategic residual | Validation residual RMSE 267.6 -> 204.0 cp with exact runtime parity; failed all three round-50 probes and lost the first three smoke games | Reject; offline fit did not translate through search. |
 | V7 six-profile mechanism matrix | Compared baseline, HCE-only, NNUE-only, no-LMR, no-null, and combined no-LMR/no-null on six rated errors | Complete; rejects a global LMR/null rollback and points to throughput plus evaluator-disagreement work. |
 | V7 qsearch evaluation cache | Exact parity over 90 clean probes; median NPS gains of 7.50%, 4.49%, and 5.49% at 100k, 300k, and 1M nodes; 51.25% over 20 timed pairs with zero failures | Promote as an exact throughput improvement; the timed sample establishes non-regression, not Elo. |
+| Qsearch lazy-accumulator profile | Exact parity across all 18 six-position probes; wasted-update rates were 49.33%, 50.28%, and 49.47% at 100k, 300k, and 1M nodes | Build an isolated post-move lazy-update candidate; do not change the champion yet. |
+| Lazy qsearch accumulator V8 | Post-move update shares the eager feature-delta implementation and matches full rebuilds across special moves plus 200+ deterministic random positions; two-colour smoke passed | Candidate implemented; fixed-node parity and clean throughput remain mandatory before promotion. |
 
 ## Reliability and infrastructure completed
 
