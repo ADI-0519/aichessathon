@@ -8,6 +8,7 @@ from __future__ import annotations
 import argparse
 import io
 import json
+import math
 import random
 import time
 from collections import Counter
@@ -37,6 +38,7 @@ from tools.backtest_core import (
     git_state,
     load_records,
     load_suite_file,
+    pentanomial_counts,
     positions_from_fens,
     release_output_lock,
     suite_digest,
@@ -44,6 +46,8 @@ from tools.backtest_core import (
 )
 from tools.cli import nonnegative_int, positive_int
 from tools.paired_arena import positions as builtin_fens
+from tools.pentanomial_sprt import Verdict
+from tools.pentanomial_sprt import evaluate as evaluate_sprt
 from tools.stockfish_arena import StockfishAgent
 
 AgentFactory = Callable[[], Agent]
@@ -144,6 +148,52 @@ def print_summary(summary: dict[str, object]) -> None:
         high = interval.get("score_high")
         if isinstance(low, float) and isinstance(high, float):
             print(f"paired 95% score interval {low:.1%}..{high:.1%}")
+    sprt = summary.get("sprt")
+    if isinstance(sprt, dict):
+        print(
+            f"SPRT {sprt['decision']}: LLR {sprt['llr']:+.3f} "
+            f"[{sprt['lower_bound']:+.3f}, {sprt['upper_bound']:+.3f}]"
+        )
+
+
+def sprt_configuration(arguments: argparse.Namespace) -> dict[str, object] | None:
+    """Return immutable SPRT settings, or ``None`` for a fixed-length run."""
+    if not getattr(arguments, "sprt", False):
+        return None
+    return {
+        "model": "logistic",
+        "elo0": float(arguments.sprt_elo0),
+        "elo1": float(arguments.sprt_elo1),
+        "alpha": float(arguments.sprt_alpha),
+        "beta": float(arguments.sprt_beta),
+        "min_pairs": int(arguments.sprt_min_pairs),
+    }
+
+
+def sprt_verdict(records: Sequence[GameRecord], arguments: argparse.Namespace) -> Verdict | None:
+    """Evaluate only complete pairs accumulated by an SPRT-enabled run."""
+    settings = sprt_configuration(arguments)
+    if settings is None:
+        return None
+    return evaluate_sprt(
+        pentanomial_counts(records),
+        elo0=cast(float, settings["elo0"]),
+        elo1=cast(float, settings["elo1"]),
+        alpha=cast(float, settings["alpha"]),
+        beta=cast(float, settings["beta"]),
+        min_pairs=cast(int, settings["min_pairs"]),
+    )
+
+
+def run_summary(
+    records: Sequence[GameRecord], arguments: argparse.Namespace
+) -> dict[str, object]:
+    """Build the durable summary, including sequential-test state when enabled."""
+    result = summarize(records)
+    verdict = sprt_verdict(records, arguments)
+    if verdict is not None:
+        result["sprt"] = asdict(verdict)
+    return result
 
 
 def configuration_for_run(
@@ -163,6 +213,7 @@ def configuration_for_run(
     base_ms: int,
     increment_ms: int,
     ply_cap: int,
+    sprt: dict[str, object] | None,
 ) -> dict[str, object]:
     opponent_fingerprint: dict[str, object]
     opponent_config: dict[str, object]
@@ -182,7 +233,7 @@ def configuration_for_run(
         raise ValueError("exactly one opponent type is required")
 
     split_counts = Counter(position.split for position in suite)
-    return {
+    configuration: dict[str, object] = {
         "candidate": fingerprint_agent(candidate),
         "opponent": opponent_config,
         "suite": {
@@ -202,6 +253,9 @@ def configuration_for_run(
         "clock": {"base_ms": base_ms, "increment_ms": increment_ms, "ply_cap": ply_cap},
         "git_commit": git_state(Path.cwd())["commit"],
     }
+    if sprt is not None:
+        configuration["sprt"] = sprt
+    return configuration
 
 
 def assert_sources_unchanged(configuration: dict[str, object]) -> None:
@@ -244,6 +298,21 @@ def validate_arguments(arguments: argparse.Namespace) -> None:
         raise ValueError("--stockfish-nodes requires --stockfish")
     if arguments.split in {"holdout", "all"} and not arguments.unlock_holdout:
         raise ValueError("holdout access requires --unlock-holdout")
+    if getattr(arguments, "sprt", False):
+        values = (
+            arguments.sprt_elo0,
+            arguments.sprt_elo1,
+            arguments.sprt_alpha,
+            arguments.sprt_beta,
+        )
+        if not all(math.isfinite(value) for value in values):
+            raise ValueError("SPRT parameters must be finite")
+        if not arguments.sprt_elo0 < arguments.sprt_elo1:
+            raise ValueError("--sprt-elo0 must be smaller than --sprt-elo1")
+        if not 0.0 < arguments.sprt_alpha < 1.0:
+            raise ValueError("--sprt-alpha must lie strictly between zero and one")
+        if not 0.0 < arguments.sprt_beta < 1.0:
+            raise ValueError("--sprt-beta must lie strictly between zero and one")
 
 
 def with_output_lock(
@@ -298,6 +367,7 @@ def run(arguments: argparse.Namespace) -> int:
         base_ms=arguments.base_ms,
         increment_ms=arguments.increment_ms,
         ply_cap=arguments.ply_cap,
+        sprt=sprt_configuration(arguments),
     )
     ensure_manifest(output, configuration)
     journal = output / "games.jsonl"
@@ -315,6 +385,14 @@ def run(arguments: argparse.Namespace) -> int:
     for record in records:
         if not (output / record.pgn_file).is_file():
             raise ValueError(f"journal references missing PGN: {record.pgn_file}")
+
+    initial_verdict = sprt_verdict(records, arguments)
+    if initial_verdict is not None and initial_verdict.decision != "continue":
+        summary = run_summary(records, arguments)
+        atomic_write_json(output / "summary.json", summary)
+        print_summary(summary)
+        print("SPRT boundary was already crossed; no games were replayed")
+        return 0
 
     opponent_factory, opponent_name = make_opponent_factory(
         opponent, stockfish, arguments.stockfish_nodes
@@ -387,26 +465,38 @@ def run(arguments: argparse.Namespace) -> int:
                 append_record(journal, record)
                 records.append(record)
                 completed.add(game_id)
-                atomic_write_json(output / "summary.json", summarize(records))
+                summary = run_summary(records, arguments)
+                atomic_write_json(output / "summary.json", summary)
                 print(
                     f"game {len(records)}/{total_games}, {game_id}, "
                     f"position {position.identifier}, "
                     f"candidate {color}: {result} by {outcome.termination} ({elapsed:.1f}s)"
                 )
                 if candidate_failure and not arguments.continue_on_failure:
-                    print_summary(summarize(records))
+                    print_summary(summary)
                     print(
                         "stopped after candidate technical failure; "
                         "use --continue-on-failure to override"
                     )
                     return 2
+                verdict = sprt_verdict(records, arguments)
+                if (
+                    not candidate_is_white
+                    and verdict is not None
+                    and verdict.decision != "continue"
+                ):
+                    print(verdict.summary)
+                    print("stopped after crossing an SPRT boundary")
+                    return 0
+                if not candidate_is_white and verdict is not None:
+                    print(verdict.summary)
     except KeyboardInterrupt:
         print("\ninterrupted; completed games were saved and can be resumed")
         return 130
     finally:
-        atomic_write_json(output / "summary.json", summarize(records))
+        atomic_write_json(output / "summary.json", run_summary(records, arguments))
 
-    summary = summarize(records)
+    summary = run_summary(records, arguments)
     print_summary(summary)
     candidate_failures = summary["candidate_failures"]
     if not isinstance(candidate_failures, int):
@@ -437,6 +527,16 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--ply-cap", type=positive_int, default=PLY_CAP)
     parser.add_argument("--output", type=Path, required=True)
     parser.add_argument("--continue-on-failure", action="store_true")
+    parser.add_argument(
+        "--sprt",
+        action="store_true",
+        help="stop on a five-bin paired logistic-Elo GSPRT boundary",
+    )
+    parser.add_argument("--sprt-elo0", type=float, default=0.0, help="null Elo bound")
+    parser.add_argument("--sprt-elo1", type=float, default=20.0, help="alternative Elo bound")
+    parser.add_argument("--sprt-alpha", type=float, default=0.05)
+    parser.add_argument("--sprt-beta", type=float, default=0.05)
+    parser.add_argument("--sprt-min-pairs", type=nonnegative_int, default=25)
     return parser
 
 

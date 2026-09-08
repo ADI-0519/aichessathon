@@ -15,12 +15,14 @@ from tools.backtest_core import (
     GameRecord,
     acquire_output_lock,
     append_record,
+    complete_pair_scores,
     ensure_manifest,
     fingerprint_agent,
     load_epd,
     load_fen,
     load_pgn,
     load_records,
+    pentanomial_counts,
     positions_from_fens,
     release_output_lock,
     stable_split,
@@ -181,8 +183,10 @@ class BacktestCoreTests(unittest.TestCase):
         )
         self.assertEqual(summary["candidate_failures"], 1)
         self.assertEqual(summary["opponent_failures"], 1)
+        self.assertEqual(complete_pair_scores(records), [2.0, 0.5])
+        self.assertEqual(pentanomial_counts(records), (0, 1, 0, 0, 1))
 
-    def test_perfect_small_sample_keeps_an_uncertain_interval(self) -> None:
+    def test_paired_interval_uses_pair_variance(self) -> None:
         records = [
             make_record("00001-white", "p1", "white", "win"),
             make_record("00001-black", "p1", "black", "win"),
@@ -192,8 +196,31 @@ class BacktestCoreTests(unittest.TestCase):
         interval = summarize(records)["confidence_95"]
         self.assertIsInstance(interval, dict)
         assert isinstance(interval, dict)
-        self.assertLess(interval["score_low"], 1.0)
+        self.assertEqual(interval["score_low"], 1.0)
         self.assertEqual(interval["score_high"], 1.0)
+
+    def test_sprt_snapshot_uses_only_complete_pairs(self) -> None:
+        arguments = argparse.Namespace(
+            sprt=True,
+            sprt_elo0=0.0,
+            sprt_elo1=20.0,
+            sprt_alpha=0.05,
+            sprt_beta=0.05,
+            sprt_min_pairs=0,
+        )
+        incomplete = [make_record("00001-white", "p1", "white", "win")]
+        incomplete_verdict = backtest.sprt_verdict(incomplete, arguments)
+        self.assertIsNotNone(incomplete_verdict)
+        assert incomplete_verdict is not None
+        self.assertEqual(incomplete_verdict.pairs, 0)
+        complete = [
+            *incomplete,
+            make_record("00001-black", "p1", "black", "win"),
+        ]
+        complete_verdict = backtest.sprt_verdict(complete, arguments)
+        self.assertIsNotNone(complete_verdict)
+        assert complete_verdict is not None
+        self.assertEqual(complete_verdict.pairs, 1)
 
     def test_result_mapping_handles_colors_draws_and_voids(self) -> None:
         white_win = Outcome("white", "checkmate", "")
@@ -237,7 +264,7 @@ class BacktestCoreTests(unittest.TestCase):
 
 
 class BacktestIntegrationTests(unittest.TestCase):
-    def test_tiny_run_resumes_without_replaying_games(self) -> None:
+    def test_sprt_stops_after_a_pair_and_resume_replays_nothing(self) -> None:
         repository = Path(__file__).resolve().parents[1]
         random_agent = repository / "baselines" / "random"
         with tempfile.TemporaryDirectory() as temporary:
@@ -252,12 +279,18 @@ class BacktestIntegrationTests(unittest.TestCase):
                 split_seed="integration-test",
                 order_seed=7,
                 offset=0,
-                limit=1,
+                limit=2,
                 base_ms=1_000,
                 increment_ms=0,
                 ply_cap=4,
                 output=Path(temporary),
                 continue_on_failure=False,
+                sprt=True,
+                sprt_elo0=0.0,
+                sprt_elo1=1000.0,
+                sprt_alpha=0.05,
+                sprt_beta=0.05,
+                sprt_min_pairs=0,
             )
             self.assertEqual(backtest.run(arguments), 0)
             first = load_records(Path(temporary) / "games.jsonl")
@@ -268,6 +301,7 @@ class BacktestIntegrationTests(unittest.TestCase):
             summary = json.loads((Path(temporary) / "summary.json").read_text())
             self.assertEqual(summary["games"], 2)
             self.assertEqual(summary["complete_pairs"], 1)
+            self.assertEqual(summary["sprt"]["decision"], "accept_h0")
 
 
 def make_record(

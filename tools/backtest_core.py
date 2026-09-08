@@ -26,6 +26,7 @@ CandidateResult = Literal["win", "draw", "loss", "void"]
 SCHEMA_VERSION = 1
 SPLIT_THRESHOLDS = (("development", 60), ("validation", 80), ("holdout", 100))
 RESULT_POINTS = {"win": 1.0, "draw": 0.5, "loss": 0.0}
+PENTANOMIAL_KEYS = ("0.0", "0.5", "1.0", "1.5", "2.0")
 
 
 @dataclass(frozen=True, slots=True)
@@ -377,18 +378,41 @@ def _score_to_elo(score: float) -> float | None:
     return 400.0 * math.log10(score / (1.0 - score))
 
 
-def _wilson_interval(score: float, samples: int) -> tuple[float, float]:
-    """Return a bounded descriptive interval that remains honest at 0% and 100%."""
-    z = 1.96
-    z_squared = z * z
-    denominator = 1.0 + z_squared / samples
-    center = (score + z_squared / (2.0 * samples)) / denominator
-    margin = (
-        z
-        * math.sqrt(score * (1.0 - score) / samples + z_squared / (4.0 * samples**2))
-        / denominator
-    )
-    return max(0.0, center - margin), min(1.0, center + margin)
+def complete_pair_scores(records: Sequence[GameRecord]) -> list[float]:
+    """Return candidate points for every complete, non-void colour pair."""
+    grouped: dict[str, list[GameRecord]] = defaultdict(list)
+    for record in records:
+        grouped[record.position_id].append(record)
+
+    pair_scores: list[float] = []
+    for games in grouped.values():
+        colors = {game.candidate_color for game in games}
+        if len(games) != 2 or colors != {"white", "black"}:
+            continue
+        if any(game.candidate_result == "void" for game in games):
+            continue
+        pair_scores.append(sum(RESULT_POINTS[game.candidate_result] for game in games))
+    return pair_scores
+
+
+def pentanomial_counts(records: Sequence[GameRecord]) -> tuple[int, int, int, int, int]:
+    """Return LL, LD/DL, LW/DD/WL, DW/WD, and WW pair frequencies."""
+    counts = [0, 0, 0, 0, 0]
+    index_for_score = {0.0: 0, 0.5: 1, 1.0: 2, 1.5: 3, 2.0: 4}
+    for score in complete_pair_scores(records):
+        counts[index_for_score[score]] += 1
+    return counts[0], counts[1], counts[2], counts[3], counts[4]
+
+
+def _paired_mean_interval(pair_scores: Sequence[float]) -> tuple[float, float]:
+    """Return a descriptive normal interval using pair scores as observations."""
+    normalized = [score / 2.0 for score in pair_scores]
+    mean = sum(normalized) / len(normalized)
+    if len(normalized) == 1:
+        return 0.0, 1.0
+    variance = sum((value - mean) ** 2 for value in normalized) / (len(normalized) - 1)
+    margin = 1.96 * math.sqrt(variance / len(normalized))
+    return max(0.0, mean - margin), min(1.0, mean + margin)
 
 
 def summarize(records: Sequence[GameRecord]) -> dict[str, object]:
@@ -410,24 +434,11 @@ def summarize(records: Sequence[GameRecord]) -> dict[str, object]:
             "voids": color_counts["void"],
         }
 
-    grouped: dict[str, list[GameRecord]] = defaultdict(list)
-    for record in records:
-        grouped[record.position_id].append(record)
-    pair_scores: list[float] = []
-    for games in grouped.values():
-        colors = {game.candidate_color for game in games}
-        if len(games) != 2 or colors != {"white", "black"}:
-            continue
-        if any(game.candidate_result == "void" for game in games):
-            continue
-        pair_scores.append(sum(RESULT_POINTS[game.candidate_result] for game in games))
-
-    pentanomial = Counter(f"{pair_score:.1f}" for pair_score in pair_scores)
+    pair_scores = complete_pair_scores(records)
+    counts = pentanomial_counts(records)
     interval: dict[str, float | None] | None = None
     if pair_scores:
-        normalized = [pair_score / 2.0 for pair_score in pair_scores]
-        mean = sum(normalized) / len(normalized)
-        low, high = _wilson_interval(mean, len(normalized))
+        low, high = _paired_mean_interval(pair_scores)
         interval = {
             "score_low": low,
             "score_high": high,
@@ -449,7 +460,7 @@ def summarize(records: Sequence[GameRecord]) -> dict[str, object]:
         "candidate_failures": sum(record.candidate_failure for record in records),
         "opponent_failures": sum(record.opponent_failure for record in records),
         "complete_pairs": len(pair_scores),
-        "pentanomial": {key: pentanomial[key] for key in ("0.0", "0.5", "1.0", "1.5", "2.0")},
+        "pentanomial": dict(zip(PENTANOMIAL_KEYS, counts, strict=True)),
         "confidence_95": interval,
         "elapsed_s": sum(record.elapsed_s for record in records),
     }
