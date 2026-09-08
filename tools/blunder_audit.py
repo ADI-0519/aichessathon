@@ -16,18 +16,33 @@ audit deterministic and reproducible. When a UCI engine binary is available,
 from __future__ import annotations
 
 import argparse
+import importlib
 import sys
 from dataclasses import dataclass, field
 from pathlib import Path
+from typing import Any
 
 import chess
 import chess.pgn
 
-CHALLENGER = Path(__file__).resolve().parent.parent / "challengers" / "numba_v1"
-sys.path.insert(0, str(CHALLENGER))
+REPOSITORY = Path(__file__).resolve().parent.parent
+DEFAULT_ENGINE_ROOT = REPOSITORY / "current"
 
-import engine  # noqa: E402
-import search  # noqa: E402
+# Bound by _load_engine before any search runs.  The referee has to be a real
+# engine directory chosen at run time: auditing a V7 game with the retired
+# root-era engine would score today's moves against a weaker understanding.
+engine: Any = None
+search: Any = None
+
+
+def _load_engine(root: Path) -> None:
+    """Import the compiled engine that lives in ``root`` as the referee."""
+    global engine, search
+    if not (root / "engine.py").is_file() or not (root / "search.py").is_file():
+        raise SystemExit(f"not an engine directory: {root}")
+    sys.path.insert(0, str(root.resolve()))
+    engine = importlib.import_module("engine")
+    search = importlib.import_module("search")
 
 INACCURACY = 50
 MISTAKE = 100
@@ -154,6 +169,12 @@ def main() -> None:
         help="plies to skip before scoring, so book moves are not counted",
     )
     parser.add_argument("--show-worst", type=int, default=8)
+    parser.add_argument(
+        "--engine",
+        type=Path,
+        default=DEFAULT_ENGINE_ROOT,
+        help="engine directory used as the referee (default: current/)",
+    )
     arguments = parser.parse_args()
 
     sides = {
@@ -162,6 +183,7 @@ def main() -> None:
         "both": {chess.WHITE, chess.BLACK},
     }[arguments.side]
 
+    _load_engine(arguments.engine)
     search.warmup()
     totals = {chess.WHITE: Tally(), chess.BLACK: Tally()}
     games = 0
