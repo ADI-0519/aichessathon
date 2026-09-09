@@ -2,10 +2,11 @@ from __future__ import annotations
 
 from pathlib import Path
 
-import engine
 import numpy as np
 from numba import njit
 from numpy.typing import NDArray
+
+import engine
 
 BASE_FEATURE_COUNT = 12 * 64
 KING_BUCKET_COUNT = 16

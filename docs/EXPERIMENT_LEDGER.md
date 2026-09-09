@@ -21,12 +21,14 @@ for choosing what to validate next, not proof of Elo; technical smokes establish
 | HalfKP-256 | Offline probability MSE improved 3.38%; 7W 14D 19L against V5, 35.0% | Reject. |
 | Exact-pruned HalfKP-128 | Same model output with about 22.8% more probe throughput than HalfKP-256; 5W 10D 5L over ten pairs | No promotion evidence; stop expanding this rejected parent. |
 | V6 stable completed-depth timeout | Repaired round 47 exactly; 14W 15D 11L against V5, 53.75%, zero failures | Promote as reliability baseline. |
-| V7 continuous time | 20W 12D 8L against V6 in development (65.0%); 48.75% in independent validation; 50.0% directly against V5 | Canonical champion for its causal fixes, not proven Elo superiority. |
+| V7 continuous time | 20W 12D 8L against V6 in development (65.0%); 48.75% in independent validation; 50.0% directly against V5 | Promoted for causal reliability fixes; later superseded by KingNet75/qcache. |
 | V8 linear strategic residual | Validation residual RMSE 267.6 -> 204.0 cp with exact runtime parity; failed all three round-50 probes and lost the first three smoke games | Reject; offline fit did not translate through search. |
 | V7 six-profile mechanism matrix | Compared baseline, HCE-only, NNUE-only, no-LMR, no-null, and combined no-LMR/no-null on six rated errors | Complete; rejects a global LMR/null rollback and points to throughput plus evaluator-disagreement work. |
 | V7 qsearch evaluation cache | Exact parity over 90 clean probes; median NPS gains of 7.50%, 4.49%, and 5.49% at 100k, 300k, and 1M nodes; 51.25% over 20 timed pairs with zero failures | Promote as an exact throughput improvement; the timed sample establishes non-regression, not Elo. |
 | Qsearch lazy-accumulator profile | Exact parity across all 18 six-position probes; wasted-update rates were 49.33%, 50.28%, and 49.47% at 100k, 300k, and 1M nodes | Build an isolated post-move lazy-update candidate; do not change the champion yet. |
 | Lazy qsearch accumulator V8 | Post-move update shares the eager feature-delta implementation and matches full rebuilds across special moves plus 200+ deterministic random positions; two-colour smoke passed | Candidate implemented; fixed-node parity and clean throughput remain mandatory before promotion. |
+| Raw V9 KingNet | 18W 14D 8L against frozen V7 over 20 development pairs: 62.5%, about +89 Elo, zero failures | Strong evaluator candidate; retained as the no-qcache control. |
+| KingNet75 plus qcache | 54.0% over 100 pairs against raw V9; then 71W 35D 16L against prior `current/` over 61 pairs (72.54%, about +169 Elo), accepting the 0-vs-20 Elo pentanomial SPRT with zero failures | Promote as canonical champion; recover the exact training manifest before upload. |
 
 ## Reliability and infrastructure completed
 
