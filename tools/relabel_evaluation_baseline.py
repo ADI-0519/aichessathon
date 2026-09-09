@@ -21,7 +21,7 @@ import numpy as np
 
 from tools.backtest_core import atomic_write_text, fingerprint_agent
 from tools.evaluation_dataset import EvaluationLabel, load_labels, write_labels
-from tools.search_diagnostics import load_engine_modules
+from tools.search_diagnostics import accumulator_row_size, load_engine_modules
 
 
 def rebase_labels(
@@ -39,7 +39,7 @@ class RuntimeStaticEvaluator:
         self.engine, self.search = load_engine_modules(engine_root)
         if not hasattr(self.search, "nnue"):
             raise ValueError("selected baseline does not expose an NNUE accumulator")
-        size = int(self.search.nnue.ACCUMULATOR_SIZE)
+        size = accumulator_row_size(self.search.nnue)
         self.accumulators = np.empty((2, size), dtype=np.int32)
 
     def __call__(self, fen: str) -> int:

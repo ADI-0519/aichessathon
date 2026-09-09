@@ -1,0 +1,724 @@
+{
+  "schema_version": 1,
+  "engine": {
+    "kind": "local",
+    "path": "C:\\Users\\adirj\\OneDrive\\Documents\\GitHub\\aichessathon\\challengers\\exp_search_v10",
+    "sha256": "47ac085a27b69b9022df8d617c61ca2533c58a76ad4784433e3b33c4106a7c0b",
+    "files": [
+      "__init__.py",
+      "agent.py",
+      "engine.py",
+      "nnue.py",
+      "search.py",
+      "time_manager.py",
+      "weights/model.npz"
+    ],
+    "bytes": 6444483
+  },
+  "git": {
+    "commit": "2fb8c6a4bdc0081f68d1a12b9df49ad6858544c7",
+    "dirty": true
+  },
+  "configuration": {
+    "suite": "C:\\Users\\adirj\\OneDrive\\Documents\\GitHub\\aichessathon\\benchmarks\\suites\\round79_f3.json",
+    "nodes": [
+      100000,
+      300000,
+      1000000
+    ],
+    "root_depth": 5,
+    "tt_bits": 18,
+    "pv_plies": 12,
+    "trial_timeout_s": 600
+  },
+  "reports": [
+    {
+      "engine_root": "C:\\Users\\adirj\\OneDrive\\Documents\\GitHub\\aichessathon\\challengers\\exp_search_v10",
+      "profile": "baseline",
+      "memory_mode": "fresh",
+      "warmup_s": 41.10168309999426,
+      "positions": [
+        {
+          "case": {
+            "identifier": "aichessathon-round-79-zugzwang-ply-34",
+            "label": "aichessathon-round-79-zugzwang, ply 34 (f3)",
+            "fen": "1r2r3/1p1k2pp/p1p1b3/3p1p2/5RnP/1PN3PB/P1PR1P2/2K5 w - - 0 23",
+            "played_move": "f2f3",
+            "reference_move": "c3a4",
+            "baseline_move": "f2f3",
+            "diagnosis": "Focused player chose f3 (f2f3); the 500000 node teacher preferred c3a4, with an estimated loss of 71 cp."
+          },
+          "node_probes": [
+            {
+              "node_limit": 100000,
+              "move": "c3a4",
+              "score": -49,
+              "depth": 8,
+              "nodes": 100001,
+              "qnodes": 69088,
+              "elapsed_s": 0.6564231000011205,
+              "tt_hits": 8109,
+              "tt_cutoffs": 2237,
+              "lmr_reductions": 11919,
+              "lmr_researches": 320,
+              "memory_mode": "fresh"
+            },
+            {
+              "node_limit": 300000,
+              "move": "h3g4",
+              "score": -62,
+              "depth": 9,
+              "nodes": 300001,
+              "qnodes": 197445,
+              "elapsed_s": 1.9714959999982966,
+              "tt_hits": 21306,
+              "tt_cutoffs": 5633,
+              "lmr_reductions": 40937,
+              "lmr_researches": 1068,
+              "memory_mode": "fresh"
+            },
+            {
+              "node_limit": 1000000,
+              "move": "c3e2",
+              "score": -60,
+              "depth": 10,
+              "nodes": 1000001,
+              "qnodes": 663500,
+              "elapsed_s": 6.659431899999618,
+              "tt_hits": 70107,
+              "tt_cutoffs": 19633,
+              "lmr_reductions": 130843,
+              "lmr_researches": 3844,
+              "memory_mode": "fresh"
+            }
+          ],
+          "root_lines": [
+            {
+              "move": "c3a4",
+              "score": -65,
+              "static_score": -94,
+              "depth": 5,
+              "complete": true,
+              "nodes": 2017,
+              "qnodes": 1617,
+              "tt_hits": 64,
+              "tt_cutoffs": 29,
+              "lmr_reductions": 136,
+              "lmr_researches": 3,
+              "pv": [
+                "c3a4",
+                "b7b6",
+                "c2c4",
+                "h7h5",
+                "c4d5"
+              ]
+            },
+            {
+              "move": "c3d1",
+              "score": -66,
+              "static_score": -97,
+              "depth": 5,
+              "complete": true,
+              "nodes": 2420,
+              "qnodes": 1850,
+              "tt_hits": 123,
+              "tt_cutoffs": 52,
+              "lmr_reductions": 154,
+              "lmr_researches": 9,
+              "pv": [
+                "c3d1",
+                "g4h6",
+                "c2c4",
+                "b8d8",
+                "c4d5"
+              ]
+            },
+            {
+              "move": "d2d1",
+              "score": -68,
+              "static_score": -118,
+              "depth": 5,
+              "complete": true,
+              "nodes": 1528,
+              "qnodes": 1238,
+              "tt_hits": 35,
+              "tt_cutoffs": 8,
+              "lmr_reductions": 98,
+              "lmr_researches": 8,
+              "pv": [
+                "d2d1",
+                "g4h6",
+                "c3a4",
+                "b7b6",
+                "h3g2"
+              ]
+            },
+            {
+              "move": "b3b4",
+              "score": -77,
+              "static_score": -136,
+              "depth": 5,
+              "complete": true,
+              "nodes": 1890,
+              "qnodes": 1460,
+              "tt_hits": 72,
+              "tt_cutoffs": 22,
+              "lmr_reductions": 149,
+              "lmr_researches": 8,
+              "pv": [
+                "b3b4",
+                "g4h6",
+                "d2e2",
+                "b7b5",
+                "a2a3"
+              ]
+            },
+            {
+              "move": "c3e2",
+              "score": -86,
+              "static_score": -100,
+              "depth": 5,
+              "complete": true,
+              "nodes": 674,
+              "qnodes": 496,
+              "tt_hits": 8,
+              "tt_cutoffs": 0,
+              "lmr_reductions": 63,
+              "lmr_researches": 0,
+              "pv": [
+                "c3e2",
+                "a6a5",
+                "h3g4",
+                "f5g4",
+                "a2a3"
+              ]
+            },
+            {
+              "move": "h4h5",
+              "score": -87,
+              "static_score": -118,
+              "depth": 5,
+              "complete": true,
+              "nodes": 1851,
+              "qnodes": 1370,
+              "tt_hits": 80,
+              "tt_cutoffs": 27,
+              "lmr_reductions": 131,
+              "lmr_researches": 11,
+              "pv": [
+                "h4h5",
+                "b7b6",
+                "c3e2",
+                "g7g5",
+                "h5g6"
+              ]
+            },
+            {
+              "move": "d2e2",
+              "score": -90,
+              "static_score": -101,
+              "depth": 5,
+              "complete": true,
+              "nodes": 1434,
+              "qnodes": 1128,
+              "tt_hits": 41,
+              "tt_cutoffs": 15,
+              "lmr_reductions": 99,
+              "lmr_researches": 4,
+              "pv": [
+                "d2e2",
+                "b7b5",
+                "f2f3",
+                "g4h6",
+                "a2a3"
+              ]
+            },
+            {
+              "move": "a2a3",
+              "score": -90,
+              "static_score": -111,
+              "depth": 5,
+              "complete": true,
+              "nodes": 2232,
+              "qnodes": 1783,
+              "tt_hits": 71,
+              "tt_cutoffs": 23,
+              "lmr_reductions": 150,
+              "lmr_researches": 7,
+              "pv": [
+                "a2a3",
+                "h7h6",
+                "c3e2",
+                "g7g5",
+                "h4g5"
+              ]
+            },
+            {
+              "move": "c1b2",
+              "score": -91,
+              "static_score": -123,
+              "depth": 5,
+              "complete": true,
+              "nodes": 1621,
+              "qnodes": 1211,
+              "tt_hits": 68,
+              "tt_cutoffs": 14,
+              "lmr_reductions": 137,
+              "lmr_researches": 14,
+              "pv": [
+                "c1b2",
+                "g4h6",
+                "c3e2",
+                "b8d8",
+                "e2d4"
+              ]
+            },
+            {
+              "move": "a2a4",
+              "score": -95,
+              "static_score": -121,
+              "depth": 5,
+              "complete": true,
+              "nodes": 1730,
+              "qnodes": 1339,
+              "tt_hits": 57,
+              "tt_cutoffs": 26,
+              "lmr_reductions": 144,
+              "lmr_researches": 4,
+              "pv": [
+                "a2a4",
+                "h7h6",
+                "c3e2",
+                "g7g5",
+                "h4g5"
+              ]
+            },
+            {
+              "move": "c1b1",
+              "score": -101,
+              "static_score": -119,
+              "depth": 5,
+              "complete": true,
+              "nodes": 1372,
+              "qnodes": 1037,
+              "tt_hits": 37,
+              "tt_cutoffs": 12,
+              "lmr_reductions": 120,
+              "lmr_researches": 3,
+              "pv": [
+                "c1b1",
+                "b7b6",
+                "h3g4",
+                "f5g4",
+                "f4b4"
+              ]
+            },
+            {
+              "move": "f2f3",
+              "score": -103,
+              "static_score": -114,
+              "depth": 5,
+              "complete": true,
+              "nodes": 2118,
+              "qnodes": 1604,
+              "tt_hits": 59,
+              "tt_cutoffs": 14,
+              "lmr_reductions": 117,
+              "lmr_researches": 11,
+              "pv": [
+                "f2f3",
+                "g4e3",
+                "c3d1",
+                "e3d1",
+                "c1d1"
+              ]
+            },
+            {
+              "move": "h3g4",
+              "score": -107,
+              "static_score": 287,
+              "depth": 5,
+              "complete": true,
+              "nodes": 495,
+              "qnodes": 363,
+              "tt_hits": 14,
+              "tt_cutoffs": 0,
+              "lmr_reductions": 50,
+              "lmr_researches": 13,
+              "pv": [
+                "h3g4",
+                "f5g4",
+                "a2a3",
+                "b7b5",
+                "c3e4"
+              ]
+            },
+            {
+              "move": "c1d1",
+              "score": -107,
+              "static_score": -143,
+              "depth": 5,
+              "complete": true,
+              "nodes": 1943,
+              "qnodes": 1466,
+              "tt_hits": 99,
+              "tt_cutoffs": 56,
+              "lmr_reductions": 132,
+              "lmr_researches": 5,
+              "pv": [
+                "c1d1",
+                "b7b5",
+                "c3e2",
+                "h7h5",
+                "h3g4"
+              ]
+            },
+            {
+              "move": "c3b1",
+              "score": -109,
+              "static_score": -132,
+              "depth": 5,
+              "complete": true,
+              "nodes": 960,
+              "qnodes": 709,
+              "tt_hits": 24,
+              "tt_cutoffs": 8,
+              "lmr_reductions": 75,
+              "lmr_researches": 1,
+              "pv": [
+                "c3b1",
+                "a6a5",
+                "b1c3",
+                "h7h6",
+                "a2a3"
+              ]
+            },
+            {
+              "move": "c3e4",
+              "score": -111,
+              "static_score": -96,
+              "depth": 5,
+              "complete": true,
+              "nodes": 668,
+              "qnodes": 527,
+              "tt_hits": 2,
+              "tt_cutoffs": 0,
+              "lmr_reductions": 48,
+              "lmr_researches": 0,
+              "pv": [
+                "c3e4",
+                "f5e4",
+                "f4e4",
+                "g4f2",
+                "h3e6"
+              ]
+            },
+            {
+              "move": "f4b4",
+              "score": -113,
+              "static_score": -138,
+              "depth": 5,
+              "complete": true,
+              "nodes": 1634,
+              "qnodes": 1294,
+              "tt_hits": 63,
+              "tt_cutoffs": 22,
+              "lmr_reductions": 112,
+              "lmr_researches": 6,
+              "pv": [
+                "f4b4",
+                "a6a5",
+                "b4d4",
+                "a5a4"
+              ]
+            },
+            {
+              "move": "d2d4",
+              "score": -116,
+              "static_score": -120,
+              "depth": 5,
+              "complete": true,
+              "nodes": 1878,
+              "qnodes": 1455,
+              "tt_hits": 66,
+              "tt_cutoffs": 15,
+              "lmr_reductions": 104,
+              "lmr_researches": 10,
+              "pv": [
+                "d2d4",
+                "b7b5",
+                "h3g4",
+                "f5g4",
+                "c3e4"
+              ]
+            },
+            {
+              "move": "h3g2",
+              "score": -124,
+              "static_score": -98,
+              "depth": 5,
+              "complete": true,
+              "nodes": 2013,
+              "qnodes": 1489,
+              "tt_hits": 113,
+              "tt_cutoffs": 41,
+              "lmr_reductions": 145,
+              "lmr_researches": 20,
+              "pv": [
+                "h3g2",
+                "b7b5",
+                "g2h3",
+                "d7c7",
+                "h3g4"
+              ]
+            },
+            {
+              "move": "f4f3",
+              "score": -124,
+              "static_score": -135,
+              "depth": 5,
+              "complete": true,
+              "nodes": 3248,
+              "qnodes": 2515,
+              "tt_hits": 166,
+              "tt_cutoffs": 55,
+              "lmr_reductions": 181,
+              "lmr_researches": 31,
+              "pv": [
+                "f4f3",
+                "b7b5",
+                "f3f4",
+                "d7c7",
+                "h3g4"
+              ]
+            },
+            {
+              "move": "f4a4",
+              "score": -126,
+              "static_score": -140,
+              "depth": 5,
+              "complete": true,
+              "nodes": 1650,
+              "qnodes": 1317,
+              "tt_hits": 67,
+              "tt_cutoffs": 27,
+              "lmr_reductions": 90,
+              "lmr_researches": 12,
+              "pv": [
+                "f4a4",
+                "g4f6",
+                "c3d1",
+                "h7h6",
+                "a2a3"
+              ]
+            },
+            {
+              "move": "f4d4",
+              "score": -138,
+              "static_score": -125,
+              "depth": 5,
+              "complete": true,
+              "nodes": 2635,
+              "qnodes": 2205,
+              "tt_hits": 98,
+              "tt_cutoffs": 36,
+              "lmr_reductions": 92,
+              "lmr_researches": 21,
+              "pv": [
+                "f4d4",
+                "g4f6",
+                "d4a4",
+                "g7g6",
+                "a2a3"
+              ]
+            },
+            {
+              "move": "d2d3",
+              "score": -158,
+              "static_score": -135,
+              "depth": 5,
+              "complete": true,
+              "nodes": 1110,
+              "qnodes": 828,
+              "tt_hits": 43,
+              "tt_cutoffs": 21,
+              "lmr_reductions": 84,
+              "lmr_researches": 4,
+              "pv": [
+                "d2d3",
+                "g4e5",
+                "d3e3",
+                "e5g6",
+                "f4f5"
+              ]
+            },
+            {
+              "move": "c3d5",
+              "score": -192,
+              "static_score": 90,
+              "depth": 5,
+              "complete": true,
+              "nodes": 623,
+              "qnodes": 440,
+              "tt_hits": 23,
+              "tt_cutoffs": 11,
+              "lmr_reductions": 59,
+              "lmr_researches": 3,
+              "pv": [
+                "c3d5",
+                "e6d5",
+                "f4f5",
+                "e8e1",
+                "c1b2"
+              ]
+            },
+            {
+              "move": "h3f1",
+              "score": -250,
+              "static_score": -108,
+              "depth": 5,
+              "complete": true,
+              "nodes": 1943,
+              "qnodes": 1428,
+              "tt_hits": 90,
+              "tt_cutoffs": 29,
+              "lmr_reductions": 136,
+              "lmr_researches": 15,
+              "pv": [
+                "h3f1",
+                "g4h2",
+                "c3d5",
+                "c6d5"
+              ]
+            },
+            {
+              "move": "f4g4",
+              "score": -354,
+              "static_score": 258,
+              "depth": 5,
+              "complete": true,
+              "nodes": 452,
+              "qnodes": 355,
+              "tt_hits": 4,
+              "tt_cutoffs": 0,
+              "lmr_reductions": 45,
+              "lmr_researches": 2,
+              "pv": [
+                "f4g4",
+                "f5g4",
+                "h3g2",
+                "a6a5",
+                "a2a3"
+              ]
+            },
+            {
+              "move": "c3b5",
+              "score": -375,
+              "static_score": -103,
+              "depth": 5,
+              "complete": true,
+              "nodes": 431,
+              "qnodes": 302,
+              "tt_hits": 7,
+              "tt_cutoffs": 0,
+              "lmr_reductions": 54,
+              "lmr_researches": 3,
+              "pv": [
+                "c3b5",
+                "a6b5",
+                "f2f3",
+                "g7g5",
+                "h4g5"
+              ]
+            },
+            {
+              "move": "f4c4",
+              "score": -387,
+              "static_score": -147,
+              "depth": 5,
+              "complete": true,
+              "nodes": 584,
+              "qnodes": 410,
+              "tt_hits": 10,
+              "tt_cutoffs": 3,
+              "lmr_reductions": 65,
+              "lmr_researches": 3,
+              "pv": [
+                "f4c4",
+                "g4e5",
+                "c3e2",
+                "e5c4",
+                "b3c4"
+              ]
+            },
+            {
+              "move": "d2d5",
+              "score": -560,
+              "static_score": 48,
+              "depth": 5,
+              "complete": true,
+              "nodes": 903,
+              "qnodes": 751,
+              "tt_hits": 33,
+              "tt_cutoffs": 6,
+              "lmr_reductions": 23,
+              "lmr_researches": 6,
+              "pv": [
+                "d2d5",
+                "c6d5",
+                "f2f3",
+                "g4f2",
+                "h3f5"
+              ]
+            },
+            {
+              "move": "f4f5",
+              "score": -574,
+              "static_score": 51,
+              "depth": 5,
+              "complete": true,
+              "nodes": 425,
+              "qnodes": 304,
+              "tt_hits": 10,
+              "tt_cutoffs": 0,
+              "lmr_reductions": 50,
+              "lmr_researches": 6,
+              "pv": [
+                "f4f5",
+                "e6f5",
+                "d2d4",
+                "e8e1",
+                "c1b2"
+              ]
+            },
+            {
+              "move": "f4e4",
+              "score": -588,
+              "static_score": -96,
+              "depth": 5,
+              "complete": true,
+              "nodes": 418,
+              "qnodes": 325,
+              "tt_hits": 1,
+              "tt_cutoffs": 0,
+              "lmr_reductions": 50,
+              "lmr_researches": 0,
+              "pv": [
+                "f4e4",
+                "f5e4",
+                "c3e4",
+                "b7b6",
+                "h3g4"
+              ]
+            }
+          ]
+        }
+      ],
+      "trial": {
+        "name": "baseline",
+        "profile": "baseline",
+        "memory_mode": "fresh"
+      }
+    }
+  ]
+}

@@ -27,7 +27,11 @@ from tools.evaluation_dataset import (
     write_labels,
     write_manifest,
 )
-from tools.search_diagnostics import REPOSITORY, load_engine_modules
+from tools.search_diagnostics import (
+    REPOSITORY,
+    accumulator_row_size,
+    load_engine_modules,
+)
 
 BASELINE_ROOT = REPOSITORY / "current"
 baseline_engine, baseline_search = load_engine_modules(BASELINE_ROOT)
@@ -37,7 +41,7 @@ def baseline_static_score(board: chess.Board) -> int:
     """Evaluate from the side-to-move perspective with the canonical champion."""
     position = baseline_engine.position_from_board(board)
     accumulators = np.empty(
-        (2, baseline_search.nnue.ACCUMULATOR_SIZE),
+        (2, accumulator_row_size(baseline_search.nnue)),
         dtype=np.int32,
     )
     baseline_search.nnue.rebuild(position.pieces, accumulators)

@@ -38,6 +38,13 @@ TRIALS = {
         Trial("nnue-only", "nnue-only"),
         Trial("no-null", "no-null"),
         Trial("no-lmr-no-null", "no-lmr-no-null"),
+        Trial("v10-current", "current"),
+        Trial("v10-no-dynamic-nmp", "no-dynamic-nmp"),
+        Trial("v10-no-rfp", "no-reverse-futility"),
+        Trial("v10-no-lmp", "no-late-move-pruning"),
+        Trial("v10-no-quiet-futility", "no-quiet-futility"),
+        Trial("v10-no-see", "no-see-pruning"),
+        Trial("v10-no-contextual-lmr", "no-contextual-lmr"),
     )
 }
 
