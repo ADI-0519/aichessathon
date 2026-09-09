@@ -8,17 +8,17 @@ Updated: 9 September 2026
 diagnostic, type-checking, and packaging commands all target it. Packaging copies the contents of
 that directory to the archive root, where the platform imports `agent.py`.
 
-- Engine generation: KingNet75 plus V7 continuous time and exact qsearch evaluation caching
-- Exact promotion candidate: `challengers/exp_kingnet75_qcache/`
-- Frozen search ancestor: `challengers/v7_continuous_time/`
+- Engine generation: Search V10 with KingNet75 and exact qsearch evaluation caching
+- Exact Search V10 promotion candidate: `challengers/exp_search_v10/`
+- Frozen pre-V10 champion: `challengers/exp_kingnet75_qcache/`
 - Rollback artifact: `submission_v7.zip`
 - Fresh local artifact: `submission.zip` (gitignored and rebuilt with `make zip`)
-- Lineage: V5 NNUE -> V6 stable timeout -> V7 continuous allocation -> qcache -> KingNet75
+- Lineage: V5 NNUE -> V6 stable timeout -> V7 continuous allocation -> qcache -> KingNet75 -> Search V10
 
 The current source is the exact executable promotion candidate, apart from descriptive package
-metadata. It combines V7's reliability fixes and qsearch cache with the team-trained KingNet
-evaluator. Engine files no longer live at the repository root, and the repository root must not be
-packaged as an agent.
+metadata. It combines V7's reliability fixes, qsearch cache, team-trained KingNet evaluator, and
+the validated Search V10 pruning/reduction bundle. Engine files no longer live at the repository
+root, and the repository root must not be packaged as an agent.
 
 ## Promoted evaluator
 
@@ -45,6 +45,8 @@ the weights are considered submission-ready.
   search.
 - A fixed-size array transposition table, aspiration windows, quiescence search, SEE move scoring,
   killer moves, quiet history, late-move reductions, and guarded null-move pruning.
+- Search V10's dynamic null-move reduction, reverse futility, late-move pruning, quiet futility,
+  SEE pruning, and contextual LMR.
 - A 65,536-entry direct-mapped cache for exact blended static evaluations reached in quiescence.
 - Persistent per-game search memory and repetition history.
 - Last-completed-iteration timeout safety and continuous, move-aware clock allocation.
@@ -67,10 +69,12 @@ code/model assets copied from another engine.
 | Raw V9 KingNet vs frozen V7, development, 20 pairs | 62.5%, about +89 Elo, zero failures | Strong directional evidence for the king-conditioned evaluator. |
 | KingNet75/qcache vs raw V9, development, 100 pairs | 54.0%, about +28 Elo, zero failures | Qcache was non-regressive and directionally positive with KingNet. |
 | KingNet75/qcache vs prior `current/`, development SPRT | 71W 35D 16L, 72.54%, about +169 Elo over 61 pairs | Accepted H1 in the 0-versus-20 Elo pentanomial SPRT; promote. |
+| Search V10 vs KingNet75/qcache, development, 25 pairs | 24W 10D 16L, 58.0%, about +56 Elo, zero failures | Positive development result. |
+| Search V10 vs KingNet75/qcache, independent validation, 25 pairs | 24W 11D 15L, 59.0%, about +63 Elo, zero failures | Confirmed the direction on the held-out split; promote. |
 
-KingNet75/qcache is now the strength champion. Historical ladder losses remain useful as position-
-distribution diagnostics, but they came from the older submitted lineage and are not direct
-measurements of this engine.
+Search V10 with KingNet75/qcache is now the strength champion. Historical ladder losses remain
+useful as position-distribution diagnostics, but they came from the older submitted lineage and
+are not direct measurements of this engine.
 
 ## Completed experiments
 
@@ -105,19 +109,16 @@ NNUE-only, no-LMR, no-null, and no-LMR/no-null searches on six rated-error posit
 
 ## Next development decision
 
-First recover the promoted model's complete training provenance and run independent validation,
-official-clock smoke games, `make gate`, and packaging inspection. Do not delay a safe release for
-another speculative feature.
+Keep `current/` frozen while the next lanes are measured independently:
 
-After that release is secure, the next candidate should:
-
-1. The six-position profile retained exact parity across all 18 probes and found wasted qsearch
-   accumulator-update rates of 49.33%, 50.28%, and 49.47% at 100k, 300k, and 1M nodes.
-2. `challengers/exp_qs_lazy_accumulator_v8` now implements the isolated post-move update. Exact
-   rebuild tests pass for both colours, captures, en passant, promotions, and castling; fixed-node
-   parity and throughput gates remain before any promotion.
-3. Require exact fixed-node equivalence, a repeatable speed gain, critical-position checks, then
-   paired development and untouched validation games against `current/`.
+1. Benchmark V11-BIG accumulator widths with equal zero-network semantics, including package size,
+   import/JIT time, evaluator/update throughput, fixed-node NPS, and timed depth.
+2. Train the selected width from scratch on source-disjoint mixed data and gate it on material-aware
+   validation, runtime parity, search throughput, paired games, and official-clock safety.
+3. Rebase adaptive time management onto Search V10 as a separate challenger and test it at official
+   or near-official clocks; short games cannot exercise healthy-clock extensions properly.
+4. Screen the already-built S1-lean search challenger cheaply. Do not combine it with evaluator or
+   time changes before its isolated result is known.
 
 Behaviour-changing candidates now use the integrated five-bin logistic-Elo GSPRT. Exact semantic
 optimisations use equivalence plus throughput gates instead of an inappropriate Elo hypothesis.
