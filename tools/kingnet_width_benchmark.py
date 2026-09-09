@@ -1,8 +1,9 @@
-"""Measure V11-BIG width costs with equal, zero-valued search semantics.
+"""Measure V11-BIG width costs with equal, neutral-output search semantics.
 
 Each width is materialized as a separate source tree and benchmarked in a fresh
-process. Zeroing every learned parameter keeps the search tree identical across
-widths, so differences measure implementation cost rather than random evaluator
+process. Nonzero hidden work is arranged in exactly cancelling unit pairs, which
+keeps the search tree identical without letting a compiler erase the evaluator.
+Differences therefore measure implementation cost rather than random evaluator
 quality. This tool does not estimate Elo and does not train a network.
 """
 
@@ -57,10 +58,28 @@ def positive_widths(text: str) -> tuple[int, ...]:
     return widths
 
 
-def _zero_model(model: V11BigEvaluator) -> None:
+def _neutral_workload_model(model: V11BigEvaluator) -> None:
+    """Fill every expensive path while making paired output contributions cancel."""
+    generator = torch.Generator(device="cpu")
+    generator.manual_seed(0xA1C4E55)
     with torch.no_grad():
-        for parameter in model.parameters():
-            parameter.zero_()
+        model.embedding.weight.uniform_(-0.01, 0.01, generator=generator)
+        model.factor.weight.uniform_(-0.01, 0.01, generator=generator)
+        model.embedding.weight[-1].zero_()
+        model.factor.weight[-1].zero_()
+        model.accumulator_bias.fill_(0.5)
+        model.hidden_weight.uniform_(-0.05, 0.05, generator=generator)
+        model.hidden_bias.uniform_(-0.05, 0.05, generator=generator)
+        model.output_relu_weight.zero_()
+        model.output_clipped_square_weight.zero_()
+        model.output_bias.zero_()
+        for unit in range(0, model.config.hidden - 1, 2):
+            model.hidden_weight[:, unit + 1].copy_(model.hidden_weight[:, unit])
+            model.hidden_bias[:, unit + 1].copy_(model.hidden_bias[:, unit])
+            model.output_relu_weight[:, unit] = 0.125
+            model.output_relu_weight[:, unit + 1] = -0.125
+            model.output_clipped_square_weight[:, unit] = 0.125
+            model.output_clipped_square_weight[:, unit + 1] = -0.125
 
 
 def materialize_width(
@@ -90,7 +109,7 @@ def materialize_width(
             piece_head_map=architecture.piece_head_map,
         )
     )
-    _zero_model(model)
+    _neutral_workload_model(model)
     export_model(
         model,
         destination / "weights" / "model.npz",
@@ -173,7 +192,7 @@ def run_benchmark(arguments: argparse.Namespace) -> None:
             output / "summary.partial.json",
             {
                 "schema_version": 1,
-                "purpose": "incomplete cost-only width comparison",
+                "purpose": "incomplete cost-only neutral-output width comparison",
                 "reports": reports,
             },
         )
@@ -195,7 +214,7 @@ def run_benchmark(arguments: argparse.Namespace) -> None:
         }
     result = {
         "schema_version": 1,
-        "purpose": "cost-only zero-network width comparison; not an Elo estimate",
+        "purpose": "cost-only neutral-output width comparison; not an Elo estimate",
         "source": source.as_posix(),
         "config": config_path.as_posix(),
         "feature_storage": export.feature_storage,

@@ -111,7 +111,7 @@ NNUE-only, no-LMR, no-null, and no-LMR/no-null searches on six rated-error posit
 
 Keep `current/` frozen while the next lanes are measured independently:
 
-1. Benchmark V11-BIG accumulator widths with equal zero-network semantics, including package size,
+1. Benchmark V11-BIG widths with equal neutral-output semantics, including package size,
    import/JIT time, evaluator/update throughput, fixed-node NPS, and timed depth.
 2. Train the selected width from scratch on source-disjoint mixed data and gate it on material-aware
    validation, runtime parity, search throughput, paired games, and official-clock safety.

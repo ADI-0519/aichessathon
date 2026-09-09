@@ -7,16 +7,44 @@ import unittest
 from pathlib import Path
 
 import numpy as np
+import torch
 
 from tools.kingnet_width_benchmark import (
     DEFAULT_SOURCE,
+    _neutral_workload_model,
     materialize_width,
     positive_widths,
 )
-from tools.train_kingnet_v11 import load_architecture_config
+from tools.train_kingnet_v11 import (
+    ModelConfig,
+    V11BigEvaluator,
+    load_architecture_config,
+)
 
 
 class KingNetWidthBenchmarkTests(unittest.TestCase):
+    def test_neutral_workload_executes_nonzero_network_with_zero_output(self) -> None:
+        model = V11BigEvaluator(
+            ModelConfig(
+                accumulator=8,
+                hidden=4,
+                pairwise_width=4,
+                cp_scale=400.0,
+                piece_head_map=(0,) * 33,
+            )
+        )
+        _neutral_workload_model(model)
+
+        features = torch.full((2, 32), 768, dtype=torch.long)
+        counts = torch.zeros(2, dtype=torch.long)
+        side_to_move = torch.tensor((False, True), dtype=torch.bool)
+        output = model(features, side_to_move, counts)
+
+        self.assertGreater(torch.count_nonzero(model.embedding.weight).item(), 0)
+        self.assertGreater(torch.count_nonzero(model.hidden_weight).item(), 0)
+        self.assertGreater(torch.count_nonzero(model.output_relu_weight).item(), 0)
+        torch.testing.assert_close(output, torch.zeros_like(output), atol=1e-7, rtol=0.0)
+
     def test_width_list_validation(self) -> None:
         self.assertEqual(positive_widths("128,256,1024"), (128, 256, 1024))
         for invalid in ("", "0", "127", "128,128", "bad"):
