@@ -1,4 +1,4 @@
-"""Create an immutable local V5 candidate with one explicit evaluation blend."""
+"""Create an immutable local candidate with one explicit evaluation blend."""
 
 from __future__ import annotations
 

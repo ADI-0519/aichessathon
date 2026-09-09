@@ -59,15 +59,26 @@ PY="./.venv-training/Scripts/python.exe"
   --validation-groups 1 \
   --min-ply 12 \
   --group-order-seed 20260909 \
+  --exclude-validation benchmarks/runs/nnue-v1/validation-500k.npy \
   --report-config benchmarks/runs/<experiment-config>.json
 ```
 
 Training row groups are visited in a deterministic seeded order, while held-out
-validation groups remain separate. This prevents a capped pack from taking only
-the beginning of a large monthly file. When `--report-config` is supplied, the
-manifest records accepted counts for the exact material bands used by training.
+validation groups remain separate. Validation is packed first and deduplicated;
+its evaluator-input fingerprints are then excluded from training. This matters
+because common chess positions can recur even across different games and row
+groups. Training duplicates remain allowed so the source distribution retains
+its natural frequency without a large global deduplication index. When
+`--report-config` is supplied, the manifest records overlap rejections and
+accepted counts for the exact material bands used by training.
 Fishnet's `move` column is the next human move, not the teacher's best move; the
 capture filter therefore acts only as a cheap quiet-position heuristic.
+
+Repeat `--exclude-validation` to reserve validation inputs from other source
+months. Pack the designated modern holdout month first; for later training
+months, exclude that modern holdout as well as the older independent validation
+set. A per-month holdout that was not excluded from every other training shard
+must not be used to select checkpoints.
 
 The trainer rejects reused paths, hard links, and byte-identical train/validation
 files. Every input is hashed before optimization so a run cannot silently change
@@ -210,6 +221,12 @@ manual scheduler position, Python/NumPy/Torch RNG states, validation history, an
 dataset fingerprints. Set `training.resume_checkpoint` in a copied configuration
 to resume an interrupted run.
 
+Whenever validation improves, training also atomically writes
+`model.best.partial.npz` beside the requested final model. This is a complete
+format-3 runtime export of the best epoch so far. It can be copied into a V11
+challenger and tested while later epochs continue; the `.pt` file remains the
+artifact used to resume optimization.
+
 `training.init_model` accepts our format-v2 KingNet as an optional accumulator
 warm start. The V11 pairwise material heads are new and remain freshly initialized.
 Use warm-start and from-scratch runs as separate experiments.
@@ -241,6 +258,13 @@ An offline loss improvement is necessary but insufficient:
 4. Measure single-process evaluation throughput and full-search NPS.
 5. Run a short paired screen against the search champion, then an untouched split.
 6. Run an official-clock safety pair and packaging inspection before promotion.
+
+The deployed 75% learned / 25% handcrafted blend was selected for the older
+network and is not assumed optimal for V11. After one trained V11 file passes
+the correctness and throughput gates, materialize separate 75% and 100%
+candidates from that exact file. Screen 75% against the current champion first,
+then screen 100% against the winning V11 candidate. No retraining is required;
+the pure learned candidate also avoids the handcrafted evaluation call.
 
 Training artifacts remain under ignored `benchmarks/runs/`. Preserve the manifest
 and run-specific configuration beside every candidate model.

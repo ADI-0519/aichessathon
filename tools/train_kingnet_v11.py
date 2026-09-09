@@ -25,6 +25,7 @@ import math
 import os
 import random
 import tempfile
+import time
 from dataclasses import asdict, dataclass
 from pathlib import Path
 from typing import Any, cast
@@ -915,6 +916,11 @@ def _atomic_torch_save(state: dict[str, Any], path: Path) -> None:
         temporary.unlink(missing_ok=True)
 
 
+def best_partial_path(output: Path) -> Path:
+    """Return the deployable checkpoint path written during a training run."""
+    return output.with_name(f"{output.stem}.best.partial{output.suffix}")
+
+
 def train(
     config_path: Path,
     output: Path,
@@ -995,6 +1001,7 @@ def train(
     history: list[dict[str, Any]] = []
     best_state: dict[str, Tensor] | None = None
     first_epoch = 1
+    partial_output = best_partial_path(output)
 
     if settings.resume_checkpoint is not None:
         recovery = cast(
@@ -1049,6 +1056,7 @@ def train(
     print(f"device={device}; components={len(components)}", flush=True)
 
     for epoch in range(first_epoch, settings.epochs + 1):
+        training_started = time.perf_counter()
         model.train()
         running = 0.0
         seen = 0
@@ -1090,6 +1098,8 @@ def train(
             seen += current_batch
             global_step += 1
 
+        training_seconds = time.perf_counter() - training_started
+        validation_started = time.perf_counter()
         validation: dict[str, Any] = {}
         objective_numerator = 0.0
         objective_denominator = 0.0
@@ -1107,19 +1117,24 @@ def train(
             objective_numerator += spec.weight * set_objective
             objective_denominator += spec.weight
 
+        validation_seconds = time.perf_counter() - validation_started
         objective = objective_numerator / objective_denominator
         epoch_record = {
             "epoch": epoch,
             "train_probability_mse": running / seen,
             "validation_objective": objective,
             "learning_rate": optimizer.param_groups[0]["lr"],
+            "training_seconds": training_seconds,
+            "training_samples_per_second": seen / training_seconds,
+            "validation_seconds": validation_seconds,
             "validation": validation,
         }
         history.append(epoch_record)
 
         print(
             f"epoch {epoch:02d}: train={running / seen:.6f} "
-            f"val={objective:.6f} lr={optimizer.param_groups[0]['lr']:.3g}",
+            f"val={objective:.6f} lr={optimizer.param_groups[0]['lr']:.3g} "
+            f"throughput={seen / training_seconds:,.0f} samples/s",
             flush=True,
         )
 
@@ -1130,6 +1145,19 @@ def train(
                 name: value.detach().cpu().clone()
                 for name, value in model.state_dict().items()
             }
+            # This is a complete runtime model, not merely recovery state. It
+            # is exported atomically so an interrupted long run always leaves
+            # its best validated epoch ready for engine testing.
+            export_model(
+                model,
+                partial_output,
+                feature_storage=config.export.feature_storage,
+            )
+            print(
+                f"updated deployable best: {partial_output} "
+                f"(epoch {best_epoch}, objective {best_objective:.6f})",
+                flush=True,
+            )
         if best_state is None:
             raise RuntimeError("best model state was not initialized")
         recovery_state: dict[str, Any] = {
@@ -1162,6 +1190,14 @@ def train(
 
     model.cpu()
     model.load_state_dict(best_state)
+    if not partial_output.is_file():
+        # Covers recovery from a checkpoint created before partial exports were
+        # introduced, or a run directory copied without its partial artifact.
+        export_model(
+            model,
+            partial_output,
+            feature_storage=config.export.feature_storage,
+        )
     export_model(model, output, feature_storage=config.export.feature_storage)
 
     provenance_train = [
@@ -1227,6 +1263,8 @@ def train(
         "history": history,
         "output": output.resolve().as_posix(),
         "output_sha256": _sha256(output),
+        "best_partial_output": partial_output.resolve().as_posix(),
+        "best_partial_output_sha256": _sha256(partial_output),
         "checkpoint": checkpoint.resolve().as_posix(),
         "checkpoint_sha256": _sha256(checkpoint),
     }

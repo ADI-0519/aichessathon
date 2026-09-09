@@ -287,7 +287,23 @@ class TrainKingNetV11Tests(unittest.TestCase):
                 "calibration_slope"
             ]
             self.assertIsInstance(slope, float)
+            self.assertGreater(
+                metadata["history"][0]["training_samples_per_second"], 0.0
+            )
+            self.assertGreaterEqual(metadata["history"][0]["validation_seconds"], 0.0)
             self.assertTrue(output.is_file())
+            partial = root / "model.best.partial.npz"
+            self.assertTrue(partial.is_file())
+            with (
+                np.load(output, allow_pickle=False) as final_archive,
+                np.load(partial, allow_pickle=False) as partial_archive,
+            ):
+                self.assertEqual(int(partial_archive["format_version"]), 3)
+                self.assertEqual(set(partial_archive.files), set(final_archive.files))
+                for name in partial_archive.files:
+                    np.testing.assert_array_equal(
+                        partial_archive[name], final_archive[name]
+                    )
             self.assertTrue(checkpoint.is_file())
             recovery = torch.load(checkpoint, map_location="cpu", weights_only=False)
             self.assertEqual(recovery["completed_epoch"], 1)
