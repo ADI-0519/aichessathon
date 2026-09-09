@@ -8,10 +8,16 @@ king-conditioned sparse accumulator, but replaces the old single dense head with
 - ReLU and clipped-square activation branches;
 - a material-specific output combining both branches.
 
-The architecture is intentionally smaller than a 1024-wide accumulator. A
-16-bucket 1024-wide float32 feature table consumes roughly the entire submission
-allowance before source files and other weights, while also making every
-incremental update substantially slower.
+The documented configuration starts at width 128 as a safe control; it is not a
+preselected winner. A 16-bucket 1024-wide float32 feature table consumes roughly
+the entire submission allowance before source files and other weights. Compact
+storage can make it fit on disk, but every incremental update still scales with
+the in-memory accumulator width and the platform still enforces its init budget.
+
+The exporter can store the folded sparse feature table as float16 while retaining
+float32 training and fixed-point runtime evaluation. This reduces its on-disk size
+by roughly half. Compact storage is a packaging optimization, not a claim that a
+wider network is stronger or fast enough for the competition CPU.
 
 ## Configuration is the experiment contract
 
@@ -90,6 +96,9 @@ The required structure is:
       7, 7
     ]
   },
+  "export": {
+    "feature_storage": "float16"
+  },
   "training": {
     "epochs": 8,
     "samples_per_epoch": 20000000,
@@ -155,6 +164,34 @@ The required structure is:
 
 Paths are resolved relative to the run configuration, so the example assumes
 the JSON file and `kingnet-v11-data/` are both under `benchmarks/runs/`.
+
+## Width-cost benchmark
+
+Before the expensive training run, benchmark 128, 256, 512, and 1024 widths in
+fresh processes. The tool creates zero-valued synthetic models, ensuring every
+width has identical evaluation semantics and a matching fixed-node tree. It
+measures model/candidate size, model loading, JIT warmup, evaluation and update
+throughput, fixed-node NPS, and completed depth under a wall-time limit.
+
+The benchmark reads only the `model` and `export` sections of the run JSON, so
+the referenced datasets do not need to exist yet:
+
+```bash
+PY="./.venv/Scripts/python.exe"
+
+"$PY" -m tools.kingnet_width_benchmark \
+  --config benchmarks/runs/kingnet-v11-mixed20m.json \
+  --widths 128,256,512,1024 \
+  --nodes 100000 \
+  --wall-time-s 1.0 \
+  --output benchmarks/runs/kingnet-v11-width-cost
+```
+
+Run it alone on an idle machine. Each width pays a fresh Numba compilation and
+the complete run can take several minutes. `summary.json` explicitly flags the
+50 MB package and 90-second initialization gates. Width selection should use the
+largest candidate that retains acceptable full-search NPS, timed depth, and init
+headroom; synthetic weights cannot predict Elo.
 
 The recovery checkpoint contains the current and best model states, optimizer,
 manual scheduler position, Python/NumPy/Torch RNG states, validation history, and

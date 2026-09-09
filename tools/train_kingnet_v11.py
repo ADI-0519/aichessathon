@@ -47,6 +47,9 @@ from tools.nnue_features import MAX_PIECES
 from tools.nnue_features import PADDING_INDEX as BASE_PADDING_INDEX
 from tools.pack_nnue_data import PACKED_DTYPE
 
+RUNTIME_INPUT_SCALE = 2_048
+MAX_COMPACT_FEATURE_QUANTIZATION_DRIFT = 1
+
 
 @dataclass(frozen=True, slots=True)
 class PieceBand:
@@ -107,6 +110,11 @@ class ModelConfig:
 
 
 @dataclass(frozen=True, slots=True)
+class ExportConfig:
+    feature_storage: str
+
+
+@dataclass(frozen=True, slots=True)
 class SelectionObjective:
     overall: float
     by_piece_band: tuple[tuple[str, float], ...]
@@ -115,6 +123,7 @@ class SelectionObjective:
 @dataclass(frozen=True, slots=True)
 class ExperimentConfig:
     model: ModelConfig
+    export: ExportConfig
     settings: TrainSettings
     bands: tuple[PieceBand, ...]
     train_shards: tuple[ShardSpec, ...]
@@ -322,11 +331,7 @@ def _parse_bands(raw: list[dict[str, Any]]) -> tuple[PieceBand, ...]:
     return tuple(bands)
 
 
-def load_config(path: Path) -> ExperimentConfig:
-    """Load and validate an experiment config, resolving paths relative to it."""
-    raw = cast(dict[str, Any], json.loads(path.read_text(encoding="utf-8")))
-    base = path.parent.resolve()
-
+def _parse_architecture(raw: dict[str, Any]) -> tuple[ModelConfig, ExportConfig]:
     model_raw = cast(dict[str, Any], raw.get("model", {}))
     raw_head_map = cast(list[Any], model_raw.get("piece_head_map", []))
     if len(raw_head_map) != MAX_PIECES + 1:
@@ -352,6 +357,26 @@ def load_config(path: Path) -> ExperimentConfig:
     )
     if 2 * model.pairwise_width > model.accumulator:
         raise ValueError("2 * pairwise_width cannot exceed accumulator width")
+
+    export_raw = cast(dict[str, Any], raw.get("export", {}))
+    feature_storage = str(export_raw.get("feature_storage", "float32"))
+    if feature_storage not in {"float32", "float16"}:
+        raise ValueError("export.feature_storage must be float32 or float16")
+    return model, ExportConfig(feature_storage=feature_storage)
+
+
+def load_architecture_config(path: Path) -> tuple[ModelConfig, ExportConfig]:
+    """Load model/export settings without requiring the datasets to exist."""
+    raw = cast(dict[str, Any], json.loads(path.read_text(encoding="utf-8")))
+    return _parse_architecture(raw)
+
+
+def load_config(path: Path) -> ExperimentConfig:
+    """Load and validate an experiment config, resolving paths relative to it."""
+    raw = cast(dict[str, Any], json.loads(path.read_text(encoding="utf-8")))
+    base = path.parent.resolve()
+
+    model, export = _parse_architecture(raw)
 
     training = cast(dict[str, Any], raw["training"])
     init_value = training.get("init_model")
@@ -482,6 +507,7 @@ def load_config(path: Path) -> ExperimentConfig:
 
     return ExperimentConfig(
         model=model,
+        export=export,
         settings=settings,
         bands=bands,
         train_shards=tuple(train_specs),
@@ -624,15 +650,45 @@ def _fold_factor(state: dict[str, Tensor]) -> NDArray[np.float32]:
     return folded.reshape(FEATURE_COUNT, accumulator)  # type: ignore[no-any-return]
 
 
-def export_model(model: V11BigEvaluator, path: Path) -> None:
+def export_model(
+    model: V11BigEvaluator,
+    path: Path,
+    *,
+    feature_storage: str = "float32",
+) -> None:
     """Write the complete, self-describing V11 runtime model atomically."""
+    if feature_storage not in {"float32", "float16"}:
+        raise ValueError("feature_storage must be float32 or float16")
     path.parent.mkdir(parents=True, exist_ok=True)
     state = model.state_dict()
+    feature_dtype = np.float16 if feature_storage == "float16" else np.float32
+    feature_weights = _fold_factor(state).astype(np.float32)
+    stored_feature_weights = feature_weights.astype(feature_dtype)
+    reference_quantized = np.rint(feature_weights * RUNTIME_INPUT_SCALE).astype(np.int32)
+    stored_quantized = np.rint(
+        stored_feature_weights.astype(np.float32) * RUNTIME_INPUT_SCALE
+    ).astype(np.int32)
+    quantization_delta = np.abs(reference_quantized - stored_quantized)
+    maximum_quantization_delta = int(np.max(quantization_delta))
+    changed_quantized_values = int(np.count_nonzero(quantization_delta))
+    if maximum_quantization_delta > MAX_COMPACT_FEATURE_QUANTIZATION_DRIFT:
+        raise ValueError(
+            "compact feature storage changes runtime weights by more than "
+            f"{MAX_COMPACT_FEATURE_QUANTIZATION_DRIFT} quantum; use float32"
+        )
     payload = {
         "format_version": np.asarray(3, dtype=np.int32),
         "architecture": np.asarray("kingnet_v11_big_pairwise_dual_material"),
         "cp_scale": np.asarray(model.config.cp_scale, dtype=np.float32),
-        "feature_weights": _fold_factor(state).astype(np.float32),
+        "feature_storage": np.asarray(feature_storage),
+        "feature_weights": stored_feature_weights,
+        "runtime_input_scale": np.asarray(RUNTIME_INPUT_SCALE, dtype=np.int32),
+        "feature_quantization_max_delta": np.asarray(
+            maximum_quantization_delta, dtype=np.int32
+        ),
+        "feature_quantization_changed_values": np.asarray(
+            changed_quantized_values, dtype=np.int64
+        ),
         "accumulator_bias": state["accumulator_bias"].cpu().numpy().astype(np.float32),
         "pairwise_width": np.asarray(model.config.pairwise_width, dtype=np.int32),
         "piece_head_map": np.asarray(model.config.piece_head_map, dtype=np.int32),
@@ -1106,7 +1162,7 @@ def train(
 
     model.cpu()
     model.load_state_dict(best_state)
-    export_model(model, output)
+    export_model(model, output, feature_storage=config.export.feature_storage)
 
     provenance_train = [
         {
@@ -1149,6 +1205,7 @@ def train(
         "trainer_path": Path(__file__).resolve().as_posix(),
         "trainer_sha256": _sha256(Path(__file__).resolve()),
         "model": asdict(config.model),
+        "export": asdict(config.export),
         "training": {
             **asdict(settings),
             "init_model": None if settings.init_model is None else settings.init_model.as_posix(),

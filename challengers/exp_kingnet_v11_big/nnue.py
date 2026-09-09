@@ -56,6 +56,7 @@ def _load_model() -> dict[str, object]:
         if version not in (FORMAT_V2, FORMAT_V3):
             raise RuntimeError(f"unsupported neural model format: {version}")
         cp_scale = float(np.asarray(archive["cp_scale"]).item())
+        stored_feature_dtype = np.asarray(archive["feature_weights"]).dtype
         feature = _array(archive, "feature_weights")
         accumulator_bias = _array(archive, "accumulator_bias")
         hidden = _array(archive, "hidden_weights")
@@ -86,6 +87,17 @@ def _load_model() -> dict[str, object]:
         else:
             if _scalar_text(archive, "architecture") != V11_ARCHITECTURE:
                 raise RuntimeError("unsupported format-v3 neural architecture")
+            feature_storage = _scalar_text(archive, "feature_storage")
+            if feature_storage not in {"float16", "float32"}:
+                raise RuntimeError("unsupported format-v3 feature storage")
+            expected_dtype = np.dtype(feature_storage)
+            if stored_feature_dtype != expected_dtype:
+                raise RuntimeError(
+                    "feature_weights dtype does not match declared feature_storage"
+                )
+            runtime_input_scale = int(np.asarray(archive["runtime_input_scale"]).item())
+            if runtime_input_scale != INPUT_SCALE:
+                raise RuntimeError("format-v3 runtime_input_scale is incompatible")
             pairwise_width = int(np.asarray(archive["pairwise_width"]).item())
             if pairwise_width <= 0 or 2 * pairwise_width > accumulator:
                 raise RuntimeError("invalid pairwise_width for accumulator")

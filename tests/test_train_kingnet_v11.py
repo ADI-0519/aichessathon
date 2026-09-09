@@ -199,6 +199,39 @@ class TrainKingNetV11Tests(unittest.TestCase):
                 )
                 self.assertEqual(archive["hidden_weights"].shape, (2, 4, 8))
 
+    def test_float16_feature_export_has_bounded_runtime_quantization_drift(self) -> None:
+        model = V11BigEvaluator(
+            ModelConfig(
+                accumulator=8,
+                hidden=4,
+                pairwise_width=4,
+                cp_scale=400.0,
+                piece_head_map=tuple(0 for _ in range(33)),
+            )
+        )
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            full = root / "full.npz"
+            compact = root / "compact.npz"
+            export_model(model, full, feature_storage="float32")
+            export_model(model, compact, feature_storage="float16")
+            with np.load(full) as full_archive, np.load(compact) as compact_archive:
+                full_q = np.rint(full_archive["feature_weights"] * 2048).astype(np.int16)
+                compact_q = np.rint(
+                    compact_archive["feature_weights"].astype(np.float32) * 2048
+                ).astype(np.int16)
+                maximum_drift = int(
+                    np.max(np.abs(full_q.astype(np.int32) - compact_q))
+                )
+                self.assertLessEqual(maximum_drift, 1)
+                self.assertEqual(compact_archive["feature_weights"].dtype, np.float16)
+                self.assertEqual(
+                    int(compact_archive["feature_quantization_max_delta"]),
+                    maximum_drift,
+                )
+                self.assertEqual(int(compact_archive["runtime_input_scale"]), 2048)
+            self.assertLess(compact.stat().st_size, full.stat().st_size * 0.55)
+
     def test_tiny_training_writes_resumable_checkpoint_and_manifest(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)

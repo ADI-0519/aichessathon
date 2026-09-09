@@ -72,6 +72,7 @@ files = [
     "tools/king_features.py",
     "tools/train_king_factored.py",
     "tools/train_kingnet_v11.py",
+    "tools/kingnet_width_benchmark.py",
 ]
 
 [[tool.mypy.overrides]]
