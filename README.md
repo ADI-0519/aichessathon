@@ -20,10 +20,11 @@ shortcuts when `make` is available, but none of the commands in this guide requi
 
 ## Current engine
 
-V7 is a Numba-compiled alpha-beta engine with incremental NNUE, handcrafted evaluation, persistent
-search memory, conservative selective search, completed-iteration timeout safety, and continuous
-clock allocation. Packaging places the readable `current/` sources and weights at the submission
-zip root. `agent.py` exposes the required function:
+The current champion is V7 continuous-time search plus the promoted, exact qsearch evaluation
+cache. It is a Numba-compiled alpha-beta engine with incremental NNUE, handcrafted evaluation,
+persistent search memory, conservative selective search, and completed-iteration timeout safety.
+Packaging places the readable `current/` sources and weights at the submission zip root.
+`agent.py` exposes the required function:
 
 ```python
 def get_move(fen: str, time_left_ms: int) -> str:
@@ -32,6 +33,10 @@ def get_move(fen: str, time_left_ms: int) -> str:
 
 Do not edit `current/` during an experiment. Copy the champion into a new challenger, change one
 hypothesis, and compare that immutable candidate against `current/`.
+
+The teammate's king-conditioned evaluator is retained in
+`challengers/v9_kingnet/`. Its README records its exact source commit, model hash, limitations, and
+the staged comparison needed before it can be combined with the current champion.
 
 ```bash
 PY="./.venv/Scripts/python.exe"
