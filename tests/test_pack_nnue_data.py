@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import pathlib
 import tempfile
 import unittest
 from pathlib import Path
@@ -186,3 +187,57 @@ class PackNnueDataTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+def _sample_rows(count: int) -> dict[str, list[object]]:
+    """Build Parquet-shaped rows, some of which the encoder must reject."""
+    board = chess.Board()
+    fens: list[str] = []
+    moves: list[str | None] = []
+    while len(fens) < count:
+        legal = list(board.legal_moves)
+        if not legal or board.is_game_over(claim_draw=False):
+            board = chess.Board()
+            continue
+        move = legal[len(fens) % len(legal)]
+        fens.append(board.fen())
+        moves.append(move.uci())
+        board.push(move)
+    return {
+        "fen": [*fens],
+        "cp": [(index % 401) - 200 for index in range(count)],
+        "mate": [None] * count,
+        "move": [*moves],
+    }
+
+
+try:  # pyarrow is a training-only dependency, so this suite is conditional
+    import pyarrow as pa
+    import pyarrow.parquet as pq
+except ImportError:  # pragma: no cover - exercised only without the training env
+    pa = pq = None
+
+
+@unittest.skipIf(pq is None, "pyarrow is only installed in the training environment")
+class ParallelPackingTests(unittest.TestCase):
+    """The worker pool must not change which positions land in the dataset."""
+
+    def test_parallel_packing_matches_a_serial_scan(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = pathlib.Path(directory)
+            source = root / "rows.parquet"
+            pq.write_table(pa.table(_sample_rows(900)), source, row_group_size=100)
+            groups = list(range(pq.ParquetFile(source).metadata.num_row_groups))
+            self.assertGreater(len(groups), 1)
+
+            serial, serial_stats, _ = pack_groups(
+                source, groups, root / "serial.npy", target=200, min_ply=0, workers=1
+            )
+            parallel, parallel_stats, _ = pack_groups(
+                source, groups, root / "parallel.npy", target=200, min_ply=0, workers=4
+            )
+
+            self.assertEqual(serial, parallel)
+            self.assertEqual(serial_stats, parallel_stats)
+            self.assertEqual(serial, 200, "the fixture must exercise the target cut-off")
+            np.testing.assert_array_equal(
+                np.load(root / "serial.npy"), np.load(root / "parallel.npy")
+            )

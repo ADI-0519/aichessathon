@@ -194,6 +194,7 @@ def train(
     epochs: int,
     batch_size: int,
     learning_rate: float,
+    lr_schedule: str,
     seed: int,
     requested_device: str,
 ) -> None:
@@ -213,6 +214,14 @@ def train(
     validation_records = _load_records(validation_path)
     model = SparseEvaluator(config).to(device)
     optimizer = torch.optim.AdamW(model.parameters(), lr=learning_rate, weight_decay=1e-5)
+    # A longer run spends its final epochs bouncing around the minimum at a fixed
+    # step size; decaying to zero lets it settle. Off by default so existing
+    # results stay reproducible.
+    scheduler = (
+        torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=epochs)
+        if lr_schedule == "cosine"
+        else None
+    )
     generator = np.random.default_rng(seed)
     best_loss = math.inf
     best_state: dict[str, Tensor] | None = None
@@ -239,6 +248,8 @@ def train(
             running_loss += float(loss.detach()) * len(rows)
             seen += len(rows)
 
+        if scheduler is not None:
+            scheduler.step()
         metrics = evaluate_model(
             model,
             validation_records,
@@ -277,6 +288,7 @@ def train(
         "epochs": epochs,
         "batch_size": batch_size,
         "learning_rate": learning_rate,
+        "lr_schedule": lr_schedule,
         "seed": seed,
         "device": str(device),
         "torch_version": torch.__version__,
@@ -307,6 +319,7 @@ def main() -> None:
     parser.add_argument("--epochs", type=positive_int, default=8)
     parser.add_argument("--batch-size", type=positive_int, default=8_192)
     parser.add_argument("--learning-rate", type=_positive_float, default=1e-3)
+    parser.add_argument("--lr-schedule", choices=("none", "cosine"), default="none")
     parser.add_argument("--seed", type=int, default=20260906)
     parser.add_argument("--device", choices=("auto", "cpu", "cuda"), default="auto")
     args = parser.parse_args()
@@ -322,6 +335,7 @@ def main() -> None:
         epochs=args.epochs,
         batch_size=args.batch_size,
         learning_rate=args.learning_rate,
+        lr_schedule=args.lr_schedule,
         seed=args.seed,
         requested_device=args.device,
     )

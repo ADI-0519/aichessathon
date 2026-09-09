@@ -12,3 +12,8 @@ docs/EXTERNAL_OPPONENTS.md
 # The V6 king-conditioned weight is generated locally, then replaced by the
 # trained export only after it passes the promotion gates.
 challengers/v6_halfkp/weights/model.npz
+
+# competitor engine kept for local benchmarking only - never commit, never ship
+benchmarks/opponents/
+.stockfish_path
+filter_commits.sh

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import argparse
+import math
 import random
 from pathlib import Path
 
@@ -26,16 +27,24 @@ FIXED_FENS = (
 )
 
 
-def positions() -> list[str]:
-    result = [chess.STARTING_FEN]
-    for line in OPENING_LINES:
-        board = chess.Board()
-        for uci in line:
-            board.push_uci(uci)
-        result.append(board.fen())
-    result.extend(FIXED_FENS)
+EXTRA_PLIES = (12, 16, 18, 22, 24, 28, 30, 34, 36, 40, 42, 46)
 
-    rng = random.Random(20260904)
+
+def positions(
+    count: int | None = None, seed: int = 20260904, curated: bool = True
+) -> list[str]:
+    # curated=False drops the shared openings for a disjoint set
+    result: list[str] = []
+    if curated:
+        result.append(chess.STARTING_FEN)
+        for line in OPENING_LINES:
+            board = chess.Board()
+            for uci in line:
+                board.push_uci(uci)
+            result.append(board.fen())
+        result.extend(FIXED_FENS)
+
+    rng = random.Random(seed)
     for target_plies in (14, 20, 26, 32, 38, 44):
         board = chess.Board()
         for _ in range(target_plies):
@@ -44,7 +53,50 @@ def positions() -> list[str]:
             board.push(rng.choice(list(board.legal_moves)))
         if not board.is_game_over(claim_draw=True):
             result.append(board.fen())
-    return result
+    if count is None:
+        return result
+
+    index = 0
+    while len(result) < count:
+        board = chess.Board()
+        for _ in range(EXTRA_PLIES[index % len(EXTRA_PLIES)]):
+            if board.is_game_over(claim_draw=True):
+                break
+            board.push(rng.choice(list(board.legal_moves)))
+        index += 1
+        if not board.is_game_over(claim_draw=True):
+            result.append(board.fen())
+    return result[:count]
+
+
+def elo(score: float) -> float:
+    """Convert a score fraction to an Elo difference, clamped at the extremes."""
+    if score <= 0.001:
+        return -800.0
+    if score >= 0.999:
+        return 800.0
+    return -400.0 * math.log10(1.0 / score - 1.0)
+
+
+def report(results: list[float]) -> str:
+    """Score, 95% interval and Elo, so a run says whether it resolved anything."""
+    total = len(results)
+    score = sum(results) / total
+    if total < 2:
+        return f"score {score:.1%} over {total} games"
+    mean = score
+    variance = sum((value - mean) ** 2 for value in results) / (total - 1)
+    error = 1.96 * math.sqrt(variance / total)
+    low, high = max(0.0, score - error), min(1.0, score + error)
+    verdict = (
+        "stronger" if low > 0.5 else "weaker" if high < 0.5 else "NOT RESOLVED at this sample size"
+    )
+    return (
+        f"score {score:.1%} +/- {error:.1%} over {total} games "
+        f"(95% CI {low:.1%} to {high:.1%})\n"
+        f"Elo {elo(score):+.0f} (95% CI {elo(low):+.0f} to {elo(high):+.0f})\n"
+        f"verdict: candidate is {verdict}"
+    )
 
 
 def main() -> None:
@@ -55,21 +107,33 @@ def main() -> None:
     parser.add_argument("--increment-ms", type=int, default=50)
     parser.add_argument("--offset", type=int, default=0)
     parser.add_argument("--limit", type=int)
-    parser.add_argument("--pgn-dir", type=Path)
+    parser.add_argument("--positions", type=int)
+    parser.add_argument("--seed", type=int, default=20260904)
+    parser.add_argument("--no-curated", action="store_true")
+    parser.add_argument(
+        "--pgn-dir",
+        type=Path,
+        help="write each game as a PGN here, for tools/blunder_audit.py",
+    )
     arguments = parser.parse_args()
 
     if arguments.offset < 0:
         parser.error("--offset must be non-negative")
+    if arguments.positions is not None and arguments.positions <= 0:
+        parser.error("--positions must be positive")
+
     if arguments.pgn_dir is not None:
         arguments.pgn_dir.mkdir(parents=True, exist_ok=True)
-
     candidate = arguments.candidate.resolve()
     opponent = arguments.opponent.resolve()
-    suite = positions()[arguments.offset :]
+    suite = positions(arguments.positions, arguments.seed, not arguments.no_curated)[
+        arguments.offset :
+    ]
     suite = suite[: arguments.limit]
     if not suite:
         parser.error("--offset selects no positions")
     wins = draws = losses = 0
+    results: list[float] = []
     failures: dict[str, int] = {}
 
     game_number = 0
@@ -88,12 +152,15 @@ def main() -> None:
             candidate_won = (outcome.result == "white") == candidate_is_white
             if outcome.result in {"draw", "void"}:
                 draws += 1
+                results.append(0.5)
                 marker = "="
             elif candidate_won:
                 wins += 1
+                results.append(1.0)
                 marker = "+"
             else:
                 losses += 1
+                results.append(0.0)
                 marker = "-"
             if outcome.termination in FAILED_TERMINATIONS:
                 failures[outcome.termination] = failures.get(outcome.termination, 0) + 1
@@ -106,9 +173,8 @@ def main() -> None:
                 f"{marker} by {outcome.termination}"
             )
 
-    total = wins + draws + losses
-    score = (wins + draws / 2) / total
-    print(f"\n+{wins} ={draws} -{losses}, score {score:.1%} over {total} paired games")
+    print(f"\n+{wins} ={draws} -{losses}")
+    print(report(results))
     if failures:
         raise SystemExit(
             "candidate failures: " + ", ".join(f"{key} {value}" for key, value in failures.items())

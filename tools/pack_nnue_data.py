@@ -10,7 +10,9 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
-from collections.abc import Collection, Iterable, Sequence
+import os
+from collections.abc import Collection, Iterable, Iterator, Sequence
+from concurrent.futures import ProcessPoolExecutor
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -177,13 +179,70 @@ def _rows(table: Any) -> Iterable[tuple[str, int | None, int | None, str | None]
     return zip(*columns, strict=True)
 
 
+def default_workers() -> int:
+    """Leave one core for the parent so the machine stays usable while packing."""
+    return max(1, (os.cpu_count() or 2) - 1)
+
+
+def pack_group(source: str, group_index: int, min_ply: int) -> tuple[np.ndarray, int, int]:
+    """Encode one row group in a worker process.
+
+    Only the per-position encoding runs here. Deduplication and holdout
+    exclusion compare a position against everything accepted before it, so they
+    depend on the order groups are consumed in and stay with the consumer; doing
+    them here would make the output depend on which worker finished first.
+    """
+    import pyarrow.parquet as pq
+
+    table = pq.ParquetFile(source).read_row_group(
+        group_index, columns=["fen", "cp", "mate", "move"]
+    )
+    packed = np.zeros(table.num_rows, dtype=PACKED_DTYPE)
+    scanned = accepted = rejected = 0
+    for fen, cp, mate, move in _rows(table):
+        scanned += 1
+        record = encode_record(fen, cp, mate, move, min_ply=min_ply)
+        if record is None:
+            rejected += 1
+            continue
+        packed[accepted] = record
+        accepted += 1
+    return packed[:accepted].copy(), scanned, rejected
+
+
+def _encoded_groups(
+    source: Path, groups: Sequence[int], *, min_ply: int, workers: int
+) -> Iterator[tuple[int, np.ndarray, int, int]]:
+    """Yield each group's encoded records in the order ``groups`` gives them."""
+    if workers <= 1 or len(groups) <= 1:
+        for group_index in groups:
+            packed, scanned, rejected = pack_group(
+                source.as_posix(), group_index, min_ply
+            )
+            yield group_index, packed, scanned, rejected
+        return
+    with ProcessPoolExecutor(max_workers=min(workers, len(groups))) as pool:
+        futures = [
+            pool.submit(pack_group, source.as_posix(), group_index, min_ply)
+            for group_index in groups
+        ]
+        try:
+            for group_index, future in zip(groups, futures, strict=True):
+                packed, scanned, rejected = future.result()
+                yield group_index, packed, scanned, rejected
+        finally:
+            for future in futures:
+                future.cancel()
+
+
 def pack_groups(
-    parquet: Any,
+    source: Path,
     groups: Sequence[int],
     output: Path,
     *,
     target: int,
     min_ply: int,
+    workers: int = 1,
     report_bands: Sequence[ReportBand] = (),
     excluded_fingerprints: Collection[bytes] = (),
     deduplicate: bool = False,
@@ -200,18 +259,13 @@ def pack_groups(
     accepted_by_piece_count = [0] * (MAX_PIECES + 1)
     accepted_fingerprints: set[bytes] = set()
     try:
-        for group_index in groups:
-            table = parquet.read_row_group(
-                group_index, columns=["fen", "cp", "mate", "move"]
-            )
-            for fen, cp, mate, move in _rows(table):
-                scanned += 1
-                record = encode_record(
-                    fen, cp, mate, move, min_ply=min_ply
-                )
-                if record is None:
-                    rejected += 1
-                    continue
+        for group_index, packed, group_scanned, group_rejected in _encoded_groups(
+            source, groups, min_ply=min_ply, workers=workers
+        ):
+            scanned += group_scanned
+            rejected += group_rejected
+            for index in range(len(packed)):
+                record = packed[index]
                 fingerprint = position_fingerprint(record)
                 if fingerprint in excluded_fingerprints:
                     rejected += 1
@@ -281,6 +335,7 @@ def pack_dataset(
     group_order_seed: int = 0,
     report_bands: Sequence[ReportBand] = (),
     external_validation: Sequence[Path] = (),
+    workers: int = 1,
 ) -> None:
     """Pack training and row-group-disjoint validation datasets."""
     try:
@@ -309,7 +364,7 @@ def pack_dataset(
     # Reserve validation inputs first. Merely using a different Parquet row
     # group is insufficient because ordinary chess positions recur in games.
     validation_count, validation_stats, validation_fingerprints = pack_groups(
-        parquet,
+        source,
         held_out_groups,
         validation_output,
         target=validation_target,
@@ -317,16 +372,18 @@ def pack_dataset(
         report_bands=report_bands,
         deduplicate=True,
         collect_fingerprints=True,
+        workers=workers,
     )
     reserved_fingerprints = external_fingerprints | validation_fingerprints
     train_count, train_stats, _ = pack_groups(
-        parquet,
+        source,
         train_group_order,
         train_output,
         target=train_target,
         min_ply=min_ply,
         report_bands=report_bands,
         excluded_fingerprints=reserved_fingerprints,
+        workers=workers,
     )
     manifest = {
         "schema_version": 2,
@@ -387,6 +444,12 @@ def main() -> None:
     parser.add_argument("--validation-target", type=positive_int, default=500_000)
     parser.add_argument("--validation-groups", type=positive_int, default=1)
     parser.add_argument("--min-ply", type=nonnegative_int, default=12)
+    parser.add_argument(
+        "--workers",
+        type=positive_int,
+        default=default_workers(),
+        help="row groups to encode concurrently (1 disables the pool)",
+    )
     parser.add_argument("--group-order-seed", type=nonnegative_int, default=0)
     parser.add_argument(
         "--exclude-validation",
