@@ -184,22 +184,18 @@ def default_workers() -> int:
     return max(1, (os.cpu_count() or 2) - 1)
 
 
-def pack_group(source: str, group_index: int, min_ply: int) -> tuple[np.ndarray, int, int]:
-    """Encode one row group in a worker process.
+def encode_table(table: Any, min_ply: int) -> tuple[np.ndarray, int, int]:
+    """Encode one row group's table, returning records, rows seen and rejects.
 
-    Only the per-position encoding runs here. Deduplication and holdout
+    Only the per-position encoding happens here. Deduplication and holdout
     exclusion compare a position against everything accepted before it, so they
-    depend on the order groups are consumed in and stay with the consumer; doing
+    depend on the order groups are consumed in and stay with the caller; doing
     them here would make the output depend on which worker finished first.
     """
-    import pyarrow.parquet as pq
-
-    table = pq.ParquetFile(source).read_row_group(
-        group_index, columns=["fen", "cp", "mate", "move"]
-    )
-    packed = np.zeros(table.num_rows, dtype=PACKED_DTYPE)
+    rows = list(_rows(table))
+    packed = np.zeros(len(rows), dtype=PACKED_DTYPE)
     scanned = accepted = rejected = 0
-    for fen, cp, mate, move in _rows(table):
+    for fen, cp, mate, move in rows:
         scanned += 1
         record = encode_record(fen, cp, mate, move, min_ply=min_ply)
         if record is None:
@@ -210,16 +206,35 @@ def pack_group(source: str, group_index: int, min_ply: int) -> tuple[np.ndarray,
     return packed[:accepted].copy(), scanned, rejected
 
 
+def pack_group(source: str, group_index: int, min_ply: int) -> tuple[np.ndarray, int, int]:
+    """Encode one row group in a worker process, from its own Parquet handle."""
+    import pyarrow.parquet as pq
+
+    table = pq.ParquetFile(source).read_row_group(
+        group_index, columns=["fen", "cp", "mate", "move"]
+    )
+    return encode_table(table, min_ply)
+
+
 def _encoded_groups(
-    source: Path, groups: Sequence[int], *, min_ply: int, workers: int
+    source: Any, groups: Sequence[int], *, min_ply: int, workers: int
 ) -> Iterator[tuple[int, np.ndarray, int, int]]:
-    """Yield each group's encoded records in the order ``groups`` gives them."""
-    if workers <= 1 or len(groups) <= 1:
+    """Yield each group's encoded records in the order ``groups`` gives them.
+
+    A worker pool needs a path it can reopen, so anything else -- a test double
+    exposing ``read_row_group``, or a single group -- is encoded in process.
+    """
+    if workers <= 1 or len(groups) <= 1 or not isinstance(source, Path):
+        parquet = source
+        if isinstance(source, Path):
+            import pyarrow.parquet as pq
+
+            parquet = pq.ParquetFile(source)
         for group_index in groups:
-            packed, scanned, rejected = pack_group(
-                source.as_posix(), group_index, min_ply
+            table = parquet.read_row_group(
+                group_index, columns=["fen", "cp", "mate", "move"]
             )
-            yield group_index, packed, scanned, rejected
+            yield (group_index, *encode_table(table, min_ply))
         return
     with ProcessPoolExecutor(max_workers=min(workers, len(groups))) as pool:
         futures = [
@@ -236,7 +251,7 @@ def _encoded_groups(
 
 
 def pack_groups(
-    source: Path,
+    source: Any,
     groups: Sequence[int],
     output: Path,
     *,
