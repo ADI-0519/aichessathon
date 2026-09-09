@@ -123,3 +123,7 @@ def get_move(fen: str, time_left_ms: int) -> str:
 _warmup_started = time.perf_counter()
 search.warmup()
 _warmup_elapsed_s = time.perf_counter() - _warmup_started
+# stdout reaches the platform's validation log, so this is the only way to learn
+# what the import actually costs on their hardware rather than on ours. The
+# budget is 90s and a build that misses it loses the game outright.
+print(f"import and warmup took {_warmup_elapsed_s:.1f}s of the 90s init budget")
