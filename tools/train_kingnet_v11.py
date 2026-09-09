@@ -1,12 +1,14 @@
 """Train KingNet on a reproducible mixture of packed evaluator shards.
 
-This trainer keeps the deployed V9 KingNet architecture unchanged while fixing the
-training-side limitations of ``tools.train_king_factored``:
+This trainer builds the V11-BIG evaluator while fixing the training-side
+limitations of ``tools.train_king_factored``:
 
 * multiple memory-mapped training shards with explicit sampling weights;
 * explicit material-band sampling instead of implicit corpus frequencies;
 * optional horizontal-mirror augmentation in feature space;
-* separate named validation sets and per-material-band metrics;
+* pairwise accumulator interactions and dual-activation material heads;
+* configurable piece-count-to-head mapping stored inside the export;
+* separate named validation sets, calibration slopes, and material-aware selection;
 * cosine learning-rate decay with warmup;
 * atomic best-checkpoint recovery and complete data/model provenance.
 
@@ -30,21 +32,20 @@ from typing import Any, cast
 import numpy as np
 import torch
 from numpy.typing import NDArray
-from torch import Tensor
+from torch import Tensor, nn
 
 from tools.backtest_core import atomic_write_text
 from tools.king_features import (
     BASE_FEATURE_COUNT,
     FEATURE_COUNT,
     KING_BUCKET_COUNT,
-    PADDING_INDEX as KING_PADDING_INDEX,
+    KING_BUCKETS,
+    OWN_KING_SLOT,
 )
+from tools.king_features import PADDING_INDEX as KING_PADDING_INDEX
 from tools.nnue_features import MAX_PIECES
 from tools.nnue_features import PADDING_INDEX as BASE_PADDING_INDEX
 from tools.pack_nnue_data import PACKED_DTYPE
-from tools.train_king_factored import ModelConfig, SparseEvaluator, export_model
-
-CP_SCALE = 400.0
 
 
 @dataclass(frozen=True, slots=True)
@@ -85,6 +86,30 @@ class TrainSettings:
     device: str
     gradient_clip_norm: float | None
     init_model: Path | None
+    resume_checkpoint: Path | None
+
+
+@dataclass(frozen=True, slots=True)
+class ModelConfig:
+    accumulator: int
+    hidden: int
+    pairwise_width: int
+    cp_scale: float
+    piece_head_map: tuple[int, ...]
+
+    @property
+    def head_count(self) -> int:
+        return max(self.piece_head_map) + 1
+
+    @property
+    def pairwise_inputs(self) -> int:
+        return 2 * self.pairwise_width
+
+
+@dataclass(frozen=True, slots=True)
+class SelectionObjective:
+    overall: float
+    by_piece_band: tuple[tuple[str, float], ...]
 
 
 @dataclass(frozen=True, slots=True)
@@ -94,6 +119,7 @@ class ExperimentConfig:
     bands: tuple[PieceBand, ...]
     train_shards: tuple[ShardSpec, ...]
     validation_sets: tuple[ValidationSpec, ...]
+    selection: SelectionObjective
 
 
 @dataclass(slots=True)
@@ -108,6 +134,133 @@ class SamplingComponent:
     shard_index: int
     band_index: int
     probability: float
+
+
+def black_perspective(canonical: Tensor) -> Tensor:
+    """Orient canonical piece-square indices from Black's perspective."""
+    padding = canonical == BASE_PADDING_INDEX
+    piece_slot = torch.div(canonical, 64, rounding_mode="floor")
+    square = canonical.remainder(64)
+    oriented = (piece_slot + 6).remainder(12) * 64 + torch.bitwise_xor(square, 56)
+    return torch.where(padding, BASE_PADDING_INDEX, oriented)
+
+
+KING_BUCKET_TENSOR = torch.from_numpy(
+    np.asarray(KING_BUCKETS, dtype=np.int64)
+)
+
+
+def apply_king_bucket(oriented: Tensor) -> Tensor:
+    """Apply the bucket selected by the oriented side's king square."""
+    padding = oriented == BASE_PADDING_INDEX
+    piece_slot = torch.div(oriented, 64, rounding_mode="floor")
+    square = oriented.remainder(64)
+    own_king = ((piece_slot == OWN_KING_SLOT) & ~padding).long()
+    king_square = (square * own_king).sum(dim=1)
+    buckets = KING_BUCKET_TENSOR.to(oriented.device)[king_square]
+    shifted = oriented + buckets.unsqueeze(1) * BASE_FEATURE_COUNT
+    return torch.where(padding, KING_PADDING_INDEX, shifted)
+
+
+class V11BigEvaluator(nn.Module):
+    """King-conditioned sparse evaluator with pairwise material heads."""
+
+    piece_head_map: Tensor
+
+    def __init__(self, config: ModelConfig) -> None:
+        super().__init__()
+        self.config = config
+        self.embedding = nn.EmbeddingBag(
+            FEATURE_COUNT + 1,
+            config.accumulator,
+            mode="sum",
+            padding_idx=KING_PADDING_INDEX,
+        )
+        self.factor = nn.EmbeddingBag(
+            BASE_FEATURE_COUNT + 1,
+            config.accumulator,
+            mode="sum",
+            padding_idx=BASE_PADDING_INDEX,
+        )
+        self.accumulator_bias = nn.Parameter(torch.zeros(config.accumulator))
+        self.hidden_weight = nn.Parameter(
+            torch.empty(config.head_count, config.hidden, config.pairwise_inputs)
+        )
+        self.hidden_bias = nn.Parameter(torch.zeros(config.head_count, config.hidden))
+        self.output_relu_weight = nn.Parameter(
+            torch.empty(config.head_count, config.hidden)
+        )
+        self.output_clipped_square_weight = nn.Parameter(
+            torch.empty(config.head_count, config.hidden)
+        )
+        self.output_bias = nn.Parameter(torch.zeros(config.head_count))
+        self.register_buffer(
+            "piece_head_map",
+            torch.tensor(config.piece_head_map, dtype=torch.long),
+            persistent=True,
+        )
+        self.reset_parameters()
+
+    def reset_parameters(self) -> None:
+        nn.init.zeros_(self.embedding.weight)
+        nn.init.normal_(self.factor.weight, mean=0.0, std=0.01)
+        with torch.no_grad():
+            self.embedding.weight[KING_PADDING_INDEX].zero_()
+            self.factor.weight[BASE_PADDING_INDEX].zero_()
+        nn.init.zeros_(self.accumulator_bias)
+        nn.init.kaiming_uniform_(self.hidden_weight, a=math.sqrt(5))
+        nn.init.zeros_(self.hidden_bias)
+        nn.init.uniform_(self.output_relu_weight, -0.05, 0.05)
+        nn.init.uniform_(self.output_clipped_square_weight, -0.05, 0.05)
+        nn.init.zeros_(self.output_bias)
+
+    def _accumulate(self, bucketed: Tensor, base: Tensor) -> Tensor:
+        if bucketed.ndim != 2 or bucketed.shape[1] != MAX_PIECES:
+            raise ValueError(f"indices must have shape (batch, {MAX_PIECES})")
+        offsets = torch.arange(
+            0,
+            bucketed.numel(),
+            MAX_PIECES,
+            dtype=torch.long,
+            device=bucketed.device,
+        )
+        bucket_sum = self.embedding(bucketed.reshape(-1), offsets)
+        shared_sum = self.factor(base.reshape(-1), offsets)
+        return bucket_sum + shared_sum + self.accumulator_bias  # type: ignore[no-any-return]
+
+    def _pairwise(self, accumulator: Tensor) -> Tensor:
+        activated = accumulator.clamp(0.0, 1.0)
+        width = self.config.pairwise_width
+        return activated[:, :width] * activated[:, width : 2 * width]
+
+    def forward(
+        self,
+        canonical: Tensor,
+        white_to_move: Tensor,
+        piece_count: Tensor,
+    ) -> Tensor:
+        black_base = black_perspective(canonical)
+        white = self._accumulate(apply_king_bucket(canonical), canonical)
+        black = self._accumulate(apply_king_bucket(black_base), black_base)
+        selector = white_to_move.bool().unsqueeze(1)
+        own = torch.where(selector, white, black)
+        opponent = torch.where(selector, black, white)
+        pairwise = torch.cat((self._pairwise(own), self._pairwise(opponent)), dim=1)
+
+        head = self.piece_head_map[piece_count.long()]
+        hidden_weight = self.hidden_weight[head]
+        hidden_bias = self.hidden_bias[head]
+        preactivation = torch.bmm(hidden_weight, pairwise.unsqueeze(2)).squeeze(2)
+        preactivation = preactivation + hidden_bias
+        relu = torch.relu(preactivation)
+        clipped_square = preactivation.clamp(0.0, 1.0).square()
+        output = self.output_bias[head]
+        output = output + torch.sum(self.output_relu_weight[head] * relu, dim=1)
+        output = output + torch.sum(
+            self.output_clipped_square_weight[head] * clipped_square,
+            dim=1,
+        )
+        return output
 
 
 def _sha256(path: Path) -> str:
@@ -175,13 +328,34 @@ def load_config(path: Path) -> ExperimentConfig:
     base = path.parent.resolve()
 
     model_raw = cast(dict[str, Any], raw.get("model", {}))
+    raw_head_map = cast(list[Any], model_raw.get("piece_head_map", []))
+    if len(raw_head_map) != MAX_PIECES + 1:
+        raise ValueError(
+            f"model.piece_head_map must contain {MAX_PIECES + 1} entries"
+        )
+    piece_head_map = tuple(int(value) for value in raw_head_map)
+    if any(value < 0 for value in piece_head_map):
+        raise ValueError("model.piece_head_map cannot contain negative head ids")
+    used_heads = sorted(set(piece_head_map[2:]))
+    if used_heads != list(range(len(used_heads))):
+        raise ValueError("piece head ids used for counts 2..32 must be contiguous from zero")
+    required_model_keys = ("accumulator", "hidden", "pairwise_width", "cp_scale")
+    missing_model_keys = [key for key in required_model_keys if key not in model_raw]
+    if missing_model_keys:
+        raise ValueError(f"model configuration is missing: {missing_model_keys}")
     model = ModelConfig(
-        accumulator=_positive_int(model_raw.get("accumulator", 128), "accumulator"),
-        hidden=_positive_int(model_raw.get("hidden", 32), "hidden"),
+        accumulator=_positive_int(model_raw["accumulator"], "accumulator"),
+        hidden=_positive_int(model_raw["hidden"], "hidden"),
+        pairwise_width=_positive_int(model_raw["pairwise_width"], "pairwise_width"),
+        cp_scale=_positive_float(model_raw["cp_scale"], "cp_scale"),
+        piece_head_map=piece_head_map,
     )
+    if 2 * model.pairwise_width > model.accumulator:
+        raise ValueError("2 * pairwise_width cannot exceed accumulator width")
 
     training = cast(dict[str, Any], raw["training"])
     init_value = training.get("init_model")
+    resume_value = training.get("resume_checkpoint")
     settings = TrainSettings(
         epochs=_positive_int(training["epochs"], "epochs"),
         samples_per_epoch=_positive_int(training["samples_per_epoch"], "samples_per_epoch"),
@@ -201,6 +375,9 @@ def load_config(path: Path) -> ExperimentConfig:
             else _positive_float(training["gradient_clip_norm"], "gradient_clip_norm")
         ),
         init_model=None if init_value is None else _resolve(base, str(init_value)),
+        resume_checkpoint=(
+            None if resume_value is None else _resolve(base, str(resume_value))
+        ),
     )
     if not 0.0 <= settings.mirror_probability <= 1.0:
         raise ValueError("mirror_probability must be in [0, 1]")
@@ -212,6 +389,45 @@ def load_config(path: Path) -> ExperimentConfig:
         raise ValueError("device must be one of auto/cpu/cuda")
 
     bands = _parse_bands(cast(list[dict[str, Any]], raw["piece_bands"]))
+    covered = {
+        count
+        for band in bands
+        for count in range(band.min_pieces, band.max_pieces + 1)
+    }
+    missing_counts = sorted(set(range(2, MAX_PIECES + 1)) - covered)
+    if missing_counts:
+        raise ValueError(f"piece bands do not cover legal counts: {missing_counts}")
+
+    selection_raw = cast(dict[str, Any], raw["selection_objective"])
+    overall_weight = _nonnegative_float(
+        selection_raw.get("overall", 0.0), "selection overall weight"
+    )
+    band_weight_raw = cast(
+        dict[str, Any], selection_raw.get("by_piece_band", {})
+    )
+    known_band_names = {band.name for band in bands}
+    unknown_selection_bands = sorted(set(band_weight_raw) - known_band_names)
+    if unknown_selection_bands:
+        raise ValueError(
+            "selection objective references unknown piece bands: "
+            f"{unknown_selection_bands}"
+        )
+    band_weights = tuple(
+        (
+            band.name,
+            _nonnegative_float(
+                band_weight_raw.get(band.name, 0.0),
+                f"selection weight for {band.name}",
+            ),
+        )
+        for band in bands
+    )
+    if overall_weight + sum(weight for _, weight in band_weights) <= 0.0:
+        raise ValueError("selection objective must assign at least one positive weight")
+    selection = SelectionObjective(
+        overall=overall_weight,
+        by_piece_band=band_weights,
+    )
 
     train_specs: list[ShardSpec] = []
     for item in cast(list[dict[str, Any]], raw["train_shards"]):
@@ -243,11 +459,26 @@ def load_config(path: Path) -> ExperimentConfig:
     if len(set(names)) != len(names):
         raise ValueError("training and validation dataset names must be unique")
 
-    for dataset in (*train_specs, *validation_specs):
+    all_specs: tuple[ShardSpec | ValidationSpec, ...] = (
+        *train_specs,
+        *validation_specs,
+    )
+    for dataset in all_specs:
         if not dataset.path.is_file():
             raise ValueError(f"dataset not found: {dataset.path}")
     if settings.init_model is not None and not settings.init_model.is_file():
         raise ValueError(f"init_model not found: {settings.init_model}")
+    if settings.resume_checkpoint is not None and not settings.resume_checkpoint.is_file():
+        raise ValueError(f"resume_checkpoint not found: {settings.resume_checkpoint}")
+    if settings.init_model is not None and settings.resume_checkpoint is not None:
+        raise ValueError("init_model and resume_checkpoint are mutually exclusive")
+
+    for index, left in enumerate(all_specs):
+        for right in all_specs[index + 1 :]:
+            if left.path == right.path or left.path.samefile(right.path):
+                raise ValueError(
+                    f"dataset leakage: {left.name} and {right.name} are the same file"
+                )
 
     return ExperimentConfig(
         model=model,
@@ -255,6 +486,7 @@ def load_config(path: Path) -> ExperimentConfig:
         bands=bands,
         train_shards=tuple(train_specs),
         validation_sets=tuple(validation_specs),
+        selection=selection,
     )
 
 
@@ -320,7 +552,12 @@ def _sample_batch(
     batch_size: int,
     mirror_probability: float,
     rng: np.random.Generator,
-) -> tuple[NDArray[np.int64], NDArray[np.bool_], NDArray[np.float32]]:
+) -> tuple[
+    NDArray[np.int64],
+    NDArray[np.bool_],
+    NDArray[np.float32],
+    NDArray[np.int16],
+]:
     probabilities = np.asarray(
         [component.probability for component in components], dtype=np.float64
     )
@@ -329,6 +566,7 @@ def _sample_batch(
     index_parts: list[NDArray[np.uint16]] = []
     stm_parts: list[NDArray[np.uint8]] = []
     cp_parts: list[NDArray[np.int16]] = []
+    count_parts: list[NDArray[np.uint8]] = []
     for component, count in zip(components, allocations, strict=True):
         if count == 0:
             continue
@@ -339,10 +577,12 @@ def _sample_batch(
         index_parts.append(np.asarray(selected["indices"], dtype=np.uint16))
         stm_parts.append(np.asarray(selected["stm"], dtype=np.uint8))
         cp_parts.append(np.asarray(selected["cp"], dtype=np.int16))
+        count_parts.append(np.asarray(selected["count"], dtype=np.uint8))
 
     indices = np.concatenate(index_parts, axis=0).astype(np.int64, copy=True)
     stm = np.concatenate(stm_parts, axis=0).astype(np.bool_, copy=False)
     cp_white = np.concatenate(cp_parts, axis=0).astype(np.float32, copy=False)
+    piece_count = np.concatenate(count_parts, axis=0).astype(np.int16, copy=False)
     if len(indices) != batch_size:
         raise RuntimeError(f"sampled {len(indices)} rows for requested batch of {batch_size}")
 
@@ -351,56 +591,87 @@ def _sample_batch(
         _horizontal_mirror(indices, mirror_rows)
 
     order = rng.permutation(batch_size)
-    return indices[order], stm[order], cp_white[order]
+    return indices[order], stm[order], cp_white[order], piece_count[order]
 
 
 def _batch_to_device(
     indices: NDArray[np.int64],
     stm: NDArray[np.bool_],
     cp_white: NDArray[np.float32],
+    piece_count: NDArray[np.int16],
     device: torch.device,
-) -> tuple[Tensor, Tensor, Tensor]:
+) -> tuple[Tensor, Tensor, Tensor, Tensor]:
     index_tensor = torch.from_numpy(indices).to(device)
     stm_tensor = torch.from_numpy(stm).to(device)
     cp_tensor = torch.from_numpy(cp_white).to(device)
+    count_tensor = torch.from_numpy(piece_count).to(device)
     cp_side_to_move = torch.where(stm_tensor, cp_tensor, -cp_tensor)
-    return index_tensor, stm_tensor, cp_side_to_move
+    return index_tensor, stm_tensor, cp_side_to_move, count_tensor
 
 
-def _probability_loss(predicted_logit: Tensor, target_cp: Tensor) -> Tensor:
-    target_probability = torch.sigmoid(target_cp / CP_SCALE)
+def _probability_loss(
+    predicted_logit: Tensor, target_cp: Tensor, cp_scale: float
+) -> Tensor:
+    target_probability = torch.sigmoid(target_cp / cp_scale)
     return torch.mean((torch.sigmoid(predicted_logit) - target_probability) ** 2)
 
 
-def _load_exported_model(model: SparseEvaluator, path: Path) -> None:
-    """Exactly lift an exported format-v2 KingNet into the factored training form."""
+def _fold_factor(state: dict[str, Tensor]) -> NDArray[np.float32]:
+    bucketed = state["embedding.weight"][:FEATURE_COUNT].cpu().numpy()
+    shared = state["factor.weight"][:BASE_FEATURE_COUNT].cpu().numpy()
+    accumulator = bucketed.shape[1]
+    folded = bucketed.reshape(-1, BASE_FEATURE_COUNT, accumulator) + shared[None, :, :]
+    return folded.reshape(FEATURE_COUNT, accumulator)  # type: ignore[no-any-return]
+
+
+def export_model(model: V11BigEvaluator, path: Path) -> None:
+    """Write the complete, self-describing V11 runtime model atomically."""
+    path.parent.mkdir(parents=True, exist_ok=True)
+    state = model.state_dict()
+    payload = {
+        "format_version": np.asarray(3, dtype=np.int32),
+        "architecture": np.asarray("kingnet_v11_big_pairwise_dual_material"),
+        "cp_scale": np.asarray(model.config.cp_scale, dtype=np.float32),
+        "feature_weights": _fold_factor(state).astype(np.float32),
+        "accumulator_bias": state["accumulator_bias"].cpu().numpy().astype(np.float32),
+        "pairwise_width": np.asarray(model.config.pairwise_width, dtype=np.int32),
+        "piece_head_map": np.asarray(model.config.piece_head_map, dtype=np.int32),
+        "hidden_weights": state["hidden_weight"].cpu().numpy().astype(np.float32),
+        "hidden_bias": state["hidden_bias"].cpu().numpy().astype(np.float32),
+        "output_relu_weights": state["output_relu_weight"].cpu().numpy().astype(np.float32),
+        "output_clipped_square_weights": state[
+            "output_clipped_square_weight"
+        ].cpu().numpy().astype(np.float32),
+        "output_bias": state["output_bias"].cpu().numpy().astype(np.float32),
+    }
+    fd, temporary_name = tempfile.mkstemp(
+        prefix=f".{path.name}.", suffix=".npz", dir=path.parent
+    )
+    os.close(fd)
+    temporary = Path(temporary_name)
+    try:
+        np.savez(temporary, **payload)
+        os.replace(temporary, path)
+    finally:
+        temporary.unlink(missing_ok=True)
+
+
+def _load_exported_model(model: V11BigEvaluator, path: Path) -> None:
+    """Warm-start the sparse accumulator from a format-v2 KingNet export."""
     with np.load(path, allow_pickle=False) as archive:
         if int(archive["format_version"]) != 2:
             raise ValueError(f"{path} is not a format-v2 KingNet export")
         feature = np.asarray(archive["feature_weights"], dtype=np.float32)
         accumulator_bias = np.asarray(archive["accumulator_bias"], dtype=np.float32)
-        hidden_weights = np.asarray(archive["hidden_weights"], dtype=np.float32)
-        hidden_bias = np.asarray(archive["hidden_bias"], dtype=np.float32)
-        output_weights = np.asarray(archive["output_weights"], dtype=np.float32)
-        output_bias = np.asarray(archive["output_bias"], dtype=np.float32)
 
     accumulator = model.config.accumulator
-    hidden = model.config.hidden
     expected = {
         "feature_weights": (FEATURE_COUNT, accumulator),
         "accumulator_bias": (accumulator,),
-        "hidden_weights": (hidden, 2 * accumulator),
-        "hidden_bias": (hidden,),
-        "output_weights": (1, hidden),
-        "output_bias": (1,),
     }
     actual = {
         "feature_weights": feature.shape,
         "accumulator_bias": accumulator_bias.shape,
-        "hidden_weights": hidden_weights.shape,
-        "hidden_bias": hidden_bias.shape,
-        "output_weights": output_weights.shape,
-        "output_bias": output_bias.shape,
     }
     for name, shape in expected.items():
         if actual[name] != shape:
@@ -418,10 +689,6 @@ def _load_exported_model(model: SparseEvaluator, path: Path) -> None:
         )
         model.factor.weight[:BASE_FEATURE_COUNT].copy_(torch.from_numpy(shared))
         model.accumulator_bias.copy_(torch.from_numpy(accumulator_bias))
-        model.hidden.weight.copy_(torch.from_numpy(hidden_weights))
-        model.hidden.bias.copy_(torch.from_numpy(hidden_bias))
-        model.output.weight.copy_(torch.from_numpy(output_weights))
-        model.output.bias.copy_(torch.from_numpy(output_bias))
         model.embedding.weight[KING_PADDING_INDEX].zero_()
         model.factor.weight[BASE_PADDING_INDEX].zero_()
 
@@ -453,7 +720,7 @@ def _learning_rate(
 
 @torch.no_grad()
 def _evaluate_records(
-    model: SparseEvaluator,
+    model: V11BigEvaluator,
     records: NDArray[np.void],
     *,
     batch_size: int,
@@ -466,9 +733,18 @@ def _evaluate_records(
         "squared_cp": 0.0,
         "absolute_cp": 0.0,
         "probability": 0.0,
+        "prediction_teacher": 0.0,
+        "teacher_squared": 0.0,
     }
     band_acc = {
-        band.name: {"count": 0, "squared_cp": 0.0, "absolute_cp": 0.0, "probability": 0.0}
+        band.name: {
+            "count": 0,
+            "squared_cp": 0.0,
+            "absolute_cp": 0.0,
+            "probability": 0.0,
+            "prediction_teacher": 0.0,
+            "teacher_squared": 0.0,
+        }
         for band in bands
     }
 
@@ -478,21 +754,28 @@ def _evaluate_records(
         stm = np.asarray(selected["stm"], dtype=np.bool_)
         cp_white = np.asarray(selected["cp"], dtype=np.float32)
         piece_count = np.asarray(selected["count"], dtype=np.int16)
-        index_tensor, stm_tensor, target_cp = _batch_to_device(indices, stm, cp_white, device)
-        prediction = model(index_tensor, stm_tensor)
-        predicted_cp = prediction * CP_SCALE
+        index_tensor, stm_tensor, target_cp, count_tensor = _batch_to_device(
+            indices, stm, cp_white, piece_count, device
+        )
+        prediction = model(index_tensor, stm_tensor, count_tensor)
+        predicted_cp = prediction * model.config.cp_scale
         difference = predicted_cp - target_cp
         probability_error = (
-            torch.sigmoid(prediction) - torch.sigmoid(target_cp / CP_SCALE)
+            torch.sigmoid(prediction)
+            - torch.sigmoid(target_cp / model.config.cp_scale)
         ) ** 2
 
         squared = (difference * difference).detach().cpu().numpy()
         absolute = torch.abs(difference).detach().cpu().numpy()
         probability = probability_error.detach().cpu().numpy()
+        predicted = predicted_cp.detach().cpu().numpy()
+        teacher = target_cp.detach().cpu().numpy()
         aggregate["count"] += len(selected)
         aggregate["squared_cp"] += float(np.sum(squared))
         aggregate["absolute_cp"] += float(np.sum(absolute))
         aggregate["probability"] += float(np.sum(probability))
+        aggregate["prediction_teacher"] += float(np.sum(predicted * teacher))
+        aggregate["teacher_squared"] += float(np.sum(teacher * teacher))
 
         for band in bands:
             mask = (piece_count >= band.min_pieces) & (piece_count <= band.max_pieces)
@@ -503,16 +786,32 @@ def _evaluate_records(
             stats["squared_cp"] += float(np.sum(squared[mask]))
             stats["absolute_cp"] += float(np.sum(absolute[mask]))
             stats["probability"] += float(np.sum(probability[mask]))
+            stats["prediction_teacher"] += float(
+                np.sum(predicted[mask] * teacher[mask])
+            )
+            stats["teacher_squared"] += float(np.sum(teacher[mask] * teacher[mask]))
 
     def finish(stats: dict[str, float | int]) -> dict[str, float | int | None]:
         count = int(stats["count"])
         if count == 0:
-            return {"count": 0, "rmse_cp": None, "mae_cp": None, "probability_mse": None}
+            return {
+                "count": 0,
+                "rmse_cp": None,
+                "mae_cp": None,
+                "probability_mse": None,
+                "calibration_slope": None,
+            }
+        teacher_squared = float(stats["teacher_squared"])
         return {
             "count": count,
             "rmse_cp": math.sqrt(float(stats["squared_cp"]) / count),
             "mae_cp": float(stats["absolute_cp"]) / count,
             "probability_mse": float(stats["probability"]) / count,
+            "calibration_slope": (
+                None
+                if teacher_squared <= 0.0
+                else float(stats["prediction_teacher"]) / teacher_squared
+            ),
         }
 
     return {
@@ -521,7 +820,34 @@ def _evaluate_records(
     }
 
 
-def _atomic_torch_save(state: dict[str, Tensor], path: Path) -> None:
+def _selection_score(
+    metrics: dict[str, Any], selection: SelectionObjective
+) -> float:
+    """Calculate the configured material-aware checkpoint objective."""
+    numerator = 0.0
+    denominator = 0.0
+    if selection.overall > 0.0:
+        value = metrics["overall"]["probability_mse"]
+        if value is None:
+            raise RuntimeError("overall validation metric is empty")
+        numerator += selection.overall * float(value)
+        denominator += selection.overall
+    for name, weight in selection.by_piece_band:
+        if weight <= 0.0:
+            continue
+        value = metrics["by_piece_band"][name]["probability_mse"]
+        if value is None:
+            raise RuntimeError(
+                f"selection objective requires non-empty piece band {name!r}"
+            )
+        numerator += weight * float(value)
+        denominator += weight
+    if denominator <= 0.0:
+        raise RuntimeError("selection objective has no positive components")
+    return numerator / denominator
+
+
+def _atomic_torch_save(state: dict[str, Any], path: Path) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     fd, temporary_name = tempfile.mkstemp(prefix=f".{path.name}.", suffix=".tmp", dir=path.parent)
     os.close(fd)
@@ -542,6 +868,21 @@ def train(
     config = load_config(config_path)
     settings = config.settings
 
+    dataset_specs: tuple[ShardSpec | ValidationSpec, ...] = (
+        *config.train_shards,
+        *config.validation_sets,
+    )
+    dataset_hashes = {spec.name: _sha256(spec.path) for spec in dataset_specs}
+    seen_digests: dict[str, str] = {}
+    for spec in dataset_specs:
+        digest = dataset_hashes[spec.name]
+        previous = seen_digests.get(digest)
+        if previous is not None:
+            raise ValueError(
+                f"dataset leakage: {previous} and {spec.name} have identical content"
+            )
+        seen_digests[digest] = spec.name
+
     random.seed(settings.seed)
     np.random.seed(settings.seed)
     torch.manual_seed(settings.seed)
@@ -561,7 +902,7 @@ def train(
         spec.name: _load_records(spec.path) for spec in config.validation_sets
     }
 
-    model = SparseEvaluator(config.model)
+    model = V11BigEvaluator(config.model)
     if settings.init_model is not None:
         _load_exported_model(model, settings.init_model)
     model.to(device)
@@ -575,12 +916,64 @@ def train(
 
     steps_per_epoch = math.ceil(settings.samples_per_epoch / settings.batch_size)
     total_steps = settings.epochs * steps_per_epoch
-    warmup_steps = int(round(settings.warmup_fraction * total_steps))
+    warmup_steps = round(settings.warmup_fraction * total_steps)
+    training_signature = {
+        "epochs": settings.epochs,
+        "samples_per_epoch": settings.samples_per_epoch,
+        "batch_size": settings.batch_size,
+        "learning_rate": settings.learning_rate,
+        "min_learning_rate": settings.min_learning_rate,
+        "warmup_fraction": settings.warmup_fraction,
+        "weight_decay": settings.weight_decay,
+        "mirror_probability": settings.mirror_probability,
+        "seed": settings.seed,
+        "device": settings.device,
+        "gradient_clip_norm": settings.gradient_clip_norm,
+        "selection_objective": asdict(config.selection),
+        "piece_bands": [asdict(band) for band in config.bands],
+    }
     global_step = 0
 
     best_objective = math.inf
     best_epoch = 0
     history: list[dict[str, Any]] = []
+    best_state: dict[str, Tensor] | None = None
+    first_epoch = 1
+
+    if settings.resume_checkpoint is not None:
+        recovery = cast(
+            dict[str, Any],
+            torch.load(
+                settings.resume_checkpoint,
+                map_location=device,
+                weights_only=False,
+            ),
+        )
+        if recovery.get("schema_version") != 1:
+            raise ValueError("unsupported V11 recovery checkpoint")
+        if recovery.get("model") != asdict(config.model):
+            raise ValueError("resume checkpoint model configuration differs")
+        if recovery.get("dataset_hashes") != dataset_hashes:
+            raise ValueError("resume checkpoint dataset fingerprints differ")
+        if recovery.get("training_signature") != training_signature:
+            raise ValueError("resume checkpoint training configuration differs")
+        model.load_state_dict(cast(dict[str, Tensor], recovery["model_state"]))
+        optimizer.load_state_dict(cast(dict[str, Any], recovery["optimizer_state"]))
+        global_step = int(recovery["global_step"])
+        best_objective = float(recovery["best_objective"])
+        best_epoch = int(recovery["best_epoch"])
+        history = cast(list[dict[str, Any]], recovery["history"])
+        best_state = cast(dict[str, Tensor], recovery["best_model_state"])
+        rng.bit_generator.state = cast(dict[str, Any], recovery["numpy_rng_state"])
+        random.setstate(recovery["python_rng_state"])
+        torch.set_rng_state(cast(Tensor, recovery["torch_rng_state"]).cpu())
+        if device.type == "cuda" and recovery.get("cuda_rng_state") is not None:
+            torch.cuda.set_rng_state_all(
+                cast(list[Tensor], recovery["cuda_rng_state"])
+            )
+        first_epoch = int(recovery["completed_epoch"]) + 1
+        if first_epoch > settings.epochs:
+            raise ValueError("resume checkpoint has already completed all configured epochs")
 
     component_manifest = [
         {
@@ -593,13 +986,13 @@ def train(
     ]
 
     print(
-        f"KingNet V11: {settings.epochs} epochs, "
+        f"KingNet V11-BIG: {settings.epochs} epochs, "
         f"{settings.samples_per_epoch:,} samples/epoch, {steps_per_epoch:,} steps/epoch",
         flush=True,
     )
     print(f"device={device}; components={len(components)}", flush=True)
 
-    for epoch in range(1, settings.epochs + 1):
+    for epoch in range(first_epoch, settings.epochs + 1):
         model.train()
         running = 0.0
         seen = 0
@@ -607,15 +1000,15 @@ def train(
             current_batch = min(settings.batch_size, settings.samples_per_epoch - seen)
             if current_batch <= 0:
                 break
-            indices, stm, cp_white = _sample_batch(
+            indices, stm, cp_white, piece_count = _sample_batch(
                 shards,
                 components,
                 current_batch,
                 settings.mirror_probability,
                 rng,
             )
-            index_tensor, stm_tensor, target_cp = _batch_to_device(
-                indices, stm, cp_white, device
+            index_tensor, stm_tensor, target_cp, count_tensor = _batch_to_device(
+                indices, stm, cp_white, piece_count, device
             )
             learning_rate = _learning_rate(
                 global_step,
@@ -628,8 +1021,8 @@ def train(
                 group["lr"] = learning_rate
 
             optimizer.zero_grad(set_to_none=True)
-            prediction = model(index_tensor, stm_tensor)
-            loss = _probability_loss(prediction, target_cp)
+            prediction = model(index_tensor, stm_tensor, count_tensor)
+            loss = _probability_loss(prediction, target_cp, config.model.cp_scale)
             loss.backward()  # type: ignore[no-untyped-call]
             if settings.gradient_clip_norm is not None:
                 torch.nn.utils.clip_grad_norm_(
@@ -653,10 +1046,9 @@ def train(
                 bands=config.bands,
             )
             validation[spec.name] = metrics
-            probability_mse = metrics["overall"]["probability_mse"]
-            if probability_mse is None:
-                raise RuntimeError(f"validation set {spec.name} is empty")
-            objective_numerator += spec.weight * float(probability_mse)
+            set_objective = _selection_score(metrics, config.selection)
+            validation[spec.name]["selection_objective"] = set_objective
+            objective_numerator += spec.weight * set_objective
             objective_denominator += spec.weight
 
         objective = objective_numerator / objective_denominator
@@ -682,21 +1074,45 @@ def train(
                 name: value.detach().cpu().clone()
                 for name, value in model.state_dict().items()
             }
-            _atomic_torch_save(best_state, checkpoint)
+        if best_state is None:
+            raise RuntimeError("best model state was not initialized")
+        recovery_state: dict[str, Any] = {
+            "schema_version": 1,
+            "completed_epoch": epoch,
+            "global_step": global_step,
+            "model": asdict(config.model),
+            "dataset_hashes": dataset_hashes,
+            "training_signature": training_signature,
+            "model_state": {
+                name: value.detach().cpu().clone()
+                for name, value in model.state_dict().items()
+            },
+            "best_model_state": best_state,
+            "optimizer_state": optimizer.state_dict(),
+            "best_objective": best_objective,
+            "best_epoch": best_epoch,
+            "history": history,
+            "numpy_rng_state": rng.bit_generator.state,
+            "python_rng_state": random.getstate(),
+            "torch_rng_state": torch.get_rng_state(),
+            "cuda_rng_state": (
+                torch.cuda.get_rng_state_all() if device.type == "cuda" else None
+            ),
+        }
+        _atomic_torch_save(recovery_state, checkpoint)
 
-    if best_epoch == 0 or not checkpoint.is_file():
+    if best_epoch == 0 or best_state is None or not checkpoint.is_file():
         raise RuntimeError("training completed without a best checkpoint")
 
-    state = cast(dict[str, Tensor], torch.load(checkpoint, map_location="cpu", weights_only=True))
     model.cpu()
-    model.load_state_dict(state)
+    model.load_state_dict(best_state)
     export_model(model, output)
 
     provenance_train = [
         {
             **asdict(spec),
             "path": spec.path.as_posix(),
-            "sha256": _sha256(spec.path),
+            "sha256": dataset_hashes[spec.name],
             "rows": len(shards[index].records),
         }
         for index, spec in enumerate(config.train_shards)
@@ -705,7 +1121,7 @@ def train(
         {
             **asdict(spec),
             "path": spec.path.as_posix(),
-            "sha256": _sha256(spec.path),
+            "sha256": dataset_hashes[spec.name],
             "rows": len(validation_records[spec.name]),
         }
         for spec in config.validation_sets
@@ -720,8 +1136,14 @@ def train(
     )
 
     metadata = {
-        "schema_version": 2,
-        "architecture": "king_bucket_factored_16x768_acc128_head32",
+        "schema_version": 3,
+        "architecture": (
+            "kingnet_v11_big_"
+            f"acc{config.model.accumulator}_"
+            f"pair{config.model.pairwise_width}_"
+            f"hidden{config.model.hidden}_"
+            f"heads{config.model.head_count}_dual"
+        ),
         "config_path": config_path.resolve().as_posix(),
         "config_sha256": _sha256(config_path),
         "trainer_path": Path(__file__).resolve().as_posix(),
@@ -738,6 +1160,7 @@ def train(
             "warmup_steps": warmup_steps,
         },
         "piece_bands": [asdict(band) for band in config.bands],
+        "selection_objective": asdict(config.selection),
         "sampling_components": component_manifest,
         "train_shards": provenance_train,
         "validation_sets": provenance_validation,

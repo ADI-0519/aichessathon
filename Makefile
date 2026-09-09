@@ -31,4 +31,6 @@ gate:
 	tests.test_qs_lazy_accumulator \
 	tests.test_adaptive_time \
 	tests.test_v9_kingnet \
-	tests.test_train_king_factored
+	tests.test_train_king_factored \
+	tests.test_train_kingnet_v11 \
+	tests.test_kingnet_v11_runtime

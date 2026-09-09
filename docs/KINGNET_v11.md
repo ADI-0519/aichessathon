@@ -1,150 +1,197 @@
-KingNet V11 training lane
+# KingNet V11-BIG
 
-This directory keeps the deployed KingNet architecture unchanged and improves the
-training pipeline instead.  The goal is to get a submission-compatible model with
-complete provenance and much broader coverage before experimenting with a larger
-runtime architecture.
+KingNet V11-BIG is the next evaluator experiment. It keeps the proven 128-wide
+king-conditioned sparse accumulator, but replaces the old single dense head with:
 
-What the current KingNet evidence actually proves
+- pairwise interactions between the accumulator's two halves;
+- independently selected material heads;
+- ReLU and clipped-square activation branches;
+- a material-specific output combining both branches.
 
-The shipped V9/current model has SHA-256
+The architecture is intentionally smaller than a 1024-wide accumulator. A
+16-bucket 1024-wide float32 feature table consumes roughly the entire submission
+allowance before source files and other weights, while also making every
+incremental update substantially slower.
 
-9348d4e0ca5e2ee10c11003e7363953316e721df16db3bdafc272451e7550087.
+## Configuration is the experiment contract
 
-The repository retained the associated factored trainer, but not the manifest
-that links that exact export to exact dataset hashes, hyperparameters, and best
-validation epoch.  The retained V9 README points at the old NNUE V1 packed corpus
-(train-4m.npy / validation-500k.npy), so that is the intended/reconstructed
-training route, not auditable proof for the exact bytes above.
+Create a run-specific JSON file under ignored `benchmarks/runs/`. Dataset paths,
+sampling weights, material bands, training parameters, selection weights, and
+the complete piece-count-to-head mapping live in that file rather than Python.
 
-The NNUE V1 corpus is produced from Lichess fishnet-evals human-game positions.
-The checked-in V1 script used standard_rated_2014_09.parquet, packed 4,000,000
-training rows and 500,000 row-group-disjoint validation rows.  Packing removes
-early positions before ply 12, illegal/terminal/check positions, and positions
-whose provided teacher move is a capture; centipawn labels are clamped to ±2000.
+`model.piece_head_map` contains exactly 33 entries. Entry `n` selects the head
+for a position containing `n` pieces. The exporter stores this array in the model;
+the runtime must load and validate it instead of embedding material thresholds.
 
-Why V11 is a data/training experiment first
+The example uses eight heads, but neither the trainer nor export format assumes
+that number. Head identifiers used for legal piece counts must be contiguous from
+zero.
 
-The current runtime is already cheap enough to search.  Increasing the accumulator
-from 128 to 1024 would make the exported 16-bucket float32 feature table about
-50 MiB by itself, before the rest of the agent, so directly imitating a much wider
-network is incompatible with the competition's 50 MiB unpacked budget without a
-separate compression/runtime project.
+## Data
 
-V11 therefore keeps:
+Use multiple source-disjoint human/Fishnet shards and keep at least one entire
+source validation-only. The first serious run should target 20–50 million diverse
+positions rather than repeatedly sampling one old four-million-position shard.
+Engine-labelled positions can be included as a minority distribution, not as a
+replacement for human-game positions.
 
-16 king buckets;
+The configured material sampler should deliberately cover the weak 9–16-piece
+range. Horizontal reflection is training-only and costs nothing during search.
 
-128-wide factored accumulator;
+Prepare each source with the audited packer:
 
-32-wide dense hidden layer;
-
-the exact format-v2 export consumed by current/nnue.py.
-
-It changes the training distribution and training quality:
-
-any number of memory-mapped packed shards;
-
-explicit per-shard weights;
-
-explicit piece-count mixture;
-
-optional horizontal mirror augmentation;
-
-cosine LR decay with warmup;
-
-named independent validation sets;
-
-per-material-band validation metrics;
-
-atomic best checkpoints;
-
-complete SHA-256 provenance for every input and output.
-
-No month, file path, material band, or sampling ratio is embedded in Python code.
-Those choices live in a JSON experiment config.
-
-Recommended first serious run
-
-Prefer several different human-game/Fishnet months rather than taking 20M adjacent
-rows from one month.  Keep at least one separate month completely validation-only.
-A sensible first target is 20M unique packed training rows across ~5 source shards,
-then sample 20M examples per epoch for 8-10 epochs.  The example config deliberately
-upweights the 9-12 and 13-16 piece bands because the platform post-mortems identified
-those as weak bands; treat those weights as an experiment config, not engine logic.
-
-Horizontal mirroring is training-only.  The packed feature representation contains
-piece-square features but no castling-right/en-passant feature, so file reflection
-is a symmetry of what this evaluator can observe.  It costs nothing at inference.
-
-Do not make a pure self-play/engine-position corpus the only source.  If a
-self-play-labelled shard is available, add it as another explicitly weighted source
-and keep human-position validation separate.
-
-Preparing shards
-
-Use the existing audited packer once per source Parquet.  Example:
-
+```bash
 PY="./.venv-training/Scripts/python.exe"
 
 "$PY" -m tools.pack_nnue_data \
-  --source benchmarks/suites/sources/<month>.parquet \
-  --train-output benchmarks/runs/kingnet-v11-data/<month>_train.npy \
-  --validation-output benchmarks/runs/kingnet-v11-data/<month>_validation.npy \
-  --manifest benchmarks/runs/kingnet-v11-data/<month>_pack_manifest.json \
+  --source benchmarks/suites/sources/<source>.parquet \
+  --train-output benchmarks/runs/kingnet-v11-data/<source>_train.npy \
+  --validation-output benchmarks/runs/kingnet-v11-data/<source>_validation.npy \
+  --manifest benchmarks/runs/kingnet-v11-data/<source>_pack_manifest.json \
   --train-target 4000000 \
   --validation-target 500000 \
   --validation-groups 1 \
   --min-ply 12
+```
 
-For training months, leave their validation output unused or use it only for
-diagnostics.  The final model-selection validation sets should be source-disjoint
-from the training months.
+The trainer rejects reused paths, hard links, and byte-identical train/validation
+files. Every input is hashed before optimization so a run cannot silently change
+its data halfway through its provenance record.
 
-Copy configs/kingnet_v11.example.json to a run-specific config and point it at
-the packed files that actually exist.
+## Training
 
-Training
+Create `benchmarks/runs/kingnet-v11-mixed20m.json` using the example below and
+replace its dataset paths with the packed, source-disjoint shards for the run.
+Do not commit this machine-specific configuration.
 
-PY="./.venv-training/Scripts/python.exe"
-RUN="benchmarks/runs/kingnet-v11-mixed20m"
+```bash
+./scripts/train_kingnet_v11.sh \
+  benchmarks/runs/kingnet-v11-mixed20m.json \
+  benchmarks/runs/kingnet-v11-mixed20m
+```
 
-mkdir -p "$RUN"
+The required structure is:
 
-"$PY" -m tools.train_kingnet_v11 \
-  --config configs/kingnet_v11.json \
-  --output "$RUN/model.npz" \
-  --manifest "$RUN/manifest.json" \
-  --checkpoint "$RUN/best.pt"
+```json
+{
+  "model": {
+    "accumulator": 128,
+    "hidden": 32,
+    "pairwise_width": 64,
+    "cp_scale": 400.0,
+    "piece_head_map": [
+      0, 0, 0, 0, 0, 0, 0, 0, 0,
+      1, 1, 1, 1,
+      2, 2, 2, 2,
+      3, 3, 3, 3,
+      4, 4, 4, 4,
+      5, 5, 5,
+      6, 6, 6,
+      7, 7
+    ]
+  },
+  "training": {
+    "epochs": 8,
+    "samples_per_epoch": 20000000,
+    "batch_size": 8192,
+    "learning_rate": 0.0003,
+    "min_learning_rate": 0.00001,
+    "warmup_fraction": 0.05,
+    "weight_decay": 0.00001,
+    "mirror_probability": 0.5,
+    "gradient_clip_norm": 1.0,
+    "seed": 20260909,
+    "device": "cuda",
+    "init_model": null,
+    "resume_checkpoint": null
+  },
+  "piece_bands": [
+    {"name": "2_8", "min_pieces": 2, "max_pieces": 8, "weight": 0.10},
+    {"name": "9_12", "min_pieces": 9, "max_pieces": 12, "weight": 0.225},
+    {"name": "13_16", "min_pieces": 13, "max_pieces": 16, "weight": 0.20},
+    {"name": "17_24", "min_pieces": 17, "max_pieces": 24, "weight": 0.25},
+    {"name": "25_32", "min_pieces": 25, "max_pieces": 32, "weight": 0.225}
+  ],
+  "selection_objective": {
+    "overall": 0.35,
+    "by_piece_band": {
+      "2_8": 0.05,
+      "9_12": 0.20,
+      "13_16": 0.20,
+      "17_24": 0.10,
+      "25_32": 0.10
+    }
+  },
+  "train_shards": [
+    {
+      "name": "human_train",
+      "path": "kingnet-v11-data/human_train.npy",
+      "weight": 1.0,
+      "kind": "human_fishnet"
+    },
+    {
+      "name": "engine_train",
+      "path": "kingnet-v11-data/engine_train.npy",
+      "weight": 0.35,
+      "kind": "strong_engine_labelled"
+    }
+  ],
+  "validation_sets": [
+    {
+      "name": "human_holdout",
+      "path": "kingnet-v11-data/human_validation.npy",
+      "weight": 1.0,
+      "kind": "human_fishnet_holdout"
+    },
+    {
+      "name": "engine_holdout",
+      "path": "kingnet-v11-data/engine_validation.npy",
+      "weight": 0.5,
+      "kind": "strong_engine_labelled_holdout"
+    }
+  ]
+}
+```
 
-For a clean-provenance candidate, leave training.init_model as null.  The
-trainer also supports a format-v2 KingNet warm start; it exactly decomposes the
-exported bucket table into a shared factor plus residuals.  Use that only as a
-separate experiment because it inherits the provenance of the starting model.
+Paths are resolved relative to the run configuration, so the example assumes
+the JSON file and `kingnet-v11-data/` are both under `benchmarks/runs/`.
 
-Promotion gates
+The recovery checkpoint contains the current and best model states, optimizer,
+manual scheduler position, Python/NumPy/Torch RNG states, validation history, and
+dataset fingerprints. Set `training.resume_checkpoint` in a copied configuration
+to resume an interrupted run.
 
-A better validation loss is not enough.  Before any game test:
+`training.init_model` accepts our format-v2 KingNet as an optional accumulator
+warm start. The V11 pairwise material heads are new and remain freshly initialized.
+Use warm-start and from-scratch runs as separate experiments.
 
-tools.verify_kingnet must pass against a challenger containing the new model.
+## Model selection
 
-Report validation MSE/MAE separately for:
+Every validation set reports overall and per-material-band:
 
-the untouched human holdout;
+- probability MSE;
+- centipawn MAE and RMSE;
+- prediction-to-teacher calibration slope.
 
-9-12 pieces;
+`selection_objective` controls checkpoint selection. It combines overall and
+per-band probability MSE using explicit JSON weights, then combines independent
+validation sets using their own weights. This prevents a large opening population
+from concealing a regression in the 9–16-piece bands.
 
-13-16 pieces;
+The architecture name in the manifest is derived from the configured accumulator,
+pairwise width, hidden width, and head count. It is not a fixed label.
 
-17-24 pieces;
+## Promotion gates
 
-25-32 pieces.
+An offline loss improvement is necessary but insufficient:
 
-Compare evaluator calibration/slope against the current model.
+1. Validate the exported format, array shapes, head map, finite values, and
+   fixed-point/runtime parity.
+2. Compare calibration against the deployed model overall and by material band.
+3. Run the rated critical-position suite as a regression veto.
+4. Measure single-process evaluation throughput and full-search NPS.
+5. Run a short paired screen against the search champion, then an untouched split.
+6. Run an official-clock safety pair and packaging inspection before promotion.
 
-Run the rated critical-position suite as a regression veto, not as a tuning set.
-
-Only then run a short paired game screen against the current search champion.
-
-The manifest written by tools.train_kingnet_v11 is the provenance record that
-the current V9 model is missing.  Preserve it beside every candidate.
+Training artifacts remain under ignored `benchmarks/runs/`. Preserve the manifest
+and run-specific configuration beside every candidate model.
