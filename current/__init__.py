@@ -1,1 +1,1 @@
-"""Canonical deployable V7 engine with qsearch evaluation caching."""
+"""Canonical KingNet75 engine with qsearch evaluation caching."""

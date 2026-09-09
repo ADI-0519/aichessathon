@@ -8,17 +8,19 @@ Updated: 9 September 2026
 diagnostic, type-checking, and packaging commands all target it. Packaging copies the contents of
 that directory to the archive root, where the platform imports `agent.py`.
 
-- Engine generation: V7 continuous time plus exact qsearch evaluation caching
-- Frozen source ancestor: `challengers/v7_continuous_time/`
+- Engine generation: KingNet75 plus V7 continuous time and exact qsearch evaluation caching
+- Exact promotion candidate: `challengers/exp_kingnet75_qcache/`
+- Frozen search ancestor: `challengers/v7_continuous_time/`
 - Rollback artifact: `submission_v7.zip`
 - Fresh local artifact: `submission.zip` (gitignored and rebuilt with `make zip`)
-- Lineage: V5 NNUE -> V6 stable completed-depth timeout -> V7 continuous allocation -> qsearch evaluation cache
+- Lineage: V5 NNUE -> V6 stable timeout -> V7 continuous allocation -> qcache -> KingNet75
 
-The current source adds the independently implemented, fixed-node-equivalent qsearch evaluation
-cache to the frozen V7 engine. The model weights are byte-identical. Engine files no longer live
-at the repository root, and the repository root must not be packaged as an agent.
+The current source is the exact executable promotion candidate, apart from descriptive package
+metadata. It combines V7's reliability fixes and qsearch cache with the team-trained KingNet
+evaluator. Engine files no longer live at the repository root, and the repository root must not be
+packaged as an agent.
 
-## Active evaluator challenger
+## Promoted evaluator
 
 `challengers/v9_kingnet/` is an exact import of the executable V9 files from teammate branch
 `dev` at commit `576348b`, with an added local README and verifier. It uses a 16-bucket,
@@ -26,15 +28,19 @@ king-conditioned 128-wide learned accumulator at a 75% blend. Its incremental an
 checks pass, including king moves across bucket boundaries, and a one-move smoke test completed
 with a 44.5-second Numba warmup and a legal move.
 
-V9 is based on frozen V7, so it does not contain the champion's qsearch evaluation cache. Test it
-against frozen V7 first to isolate the new evaluator. If it wins, port the evaluator into a fresh
-copy of `current/` and test that combined challenger against `current/`. Do not promote raw V9.
-The teammate branch also lacks a retained training manifest for the exact bundled model hash; that
-provenance must be recovered before the weights are considered submission-ready.
+Raw V9 scored 62.5% over 20 development pairs against frozen V7. The combined KingNet75/qcache
+candidate then scored 54.0% over 100 pairs against raw V9, with zero failures. Most importantly,
+it scored 72.54% over 61 pairs against the prior canonical V7/qcache champion and crossed the
+integrated 0-versus-20 Elo pentanomial SPRT upper boundary. It is therefore promoted over raw V9.
 
-## What V7 contains
+The teammate branch lacks a retained training manifest for the exact bundled model hash. Recover
+the dataset, trainer, command/configuration, checkpoint-selection, and model-hash provenance before
+the weights are considered submission-ready.
 
-- Team-trained, incrementally updated 768-input NNUE blended 50:50 with the handcrafted evaluator.
+## What the current champion contains
+
+- Team-trained, incrementally updated 16-bucket king-conditioned NNUE with a 128-wide accumulator
+  and 32-wide hidden layer, blended 75:25 with the handcrafted evaluator.
 - Numba-compiled board and alpha-beta search with iterative deepening and principal-variation
   search.
 - A fixed-size array transposition table, aspiration windows, quiescence search, SEE move scoring,
@@ -58,10 +64,13 @@ code/model assets copied from another engine.
 | V7 vs submitted V5, validation, 10 pairs | 50.0% | No measured regression or superiority. |
 | Qsearch evaluation cache, clean fixed-node suite | Exact parity over 90 probes; +7.50%, +4.49%, and +5.49% median NPS at 100k, 300k, and 1M nodes | Repeatable semantic-preserving throughput gain. |
 | Qsearch evaluation cache vs prior V7, development, 20 pairs | 51.25%, zero technical failures | Passed the timed gross-regression and reliability screen; too few games to claim Elo. |
+| Raw V9 KingNet vs frozen V7, development, 20 pairs | 62.5%, about +89 Elo, zero failures | Strong directional evidence for the king-conditioned evaluator. |
+| KingNet75/qcache vs raw V9, development, 100 pairs | 54.0%, about +28 Elo, zero failures | Qcache was non-regressive and directionally positive with KingNet. |
+| KingNet75/qcache vs prior `current/`, development SPRT | 71W 35D 16L, 72.54%, about +169 Elo over 61 pairs | Accepted H1 in the 0-versus-20 Elo pentanomial SPRT; promote. |
 
-V7 is therefore a reliability champion, not a proven large Elo improvement. Ladder losses from V5
-remain useful diagnostics because V7 changes timeout handling and allocation rather than the core
-evaluation/search blind spots.
+KingNet75/qcache is now the strength champion. Historical ladder losses remain useful as position-
+distribution diagnostics, but they came from the older submitted lineage and are not direct
+measurements of this engine.
 
 ## Completed experiments
 
@@ -77,6 +86,8 @@ The full evidence ledger is in `docs/EXPERIMENT_LEDGER.md`. The most important d
   the completed six-profile V7 mechanism matrix.
 - Exact qsearch evaluation caching was promoted after deterministic parity, clean throughput, and
   timed reliability gates.
+- The team-trained KingNet75 evaluator and qcache combination was promoted after its direct SPRT
+  against the previous champion accepted the positive hypothesis with zero failures.
 
 ## What the mechanism matrix established
 
@@ -94,8 +105,11 @@ NNUE-only, no-LMR, no-null, and no-LMR/no-null searches on six rated-error posit
 
 ## Next development decision
 
-Do not start another broad neural-network run or combine fashionable search features. Qsearch
-evaluation caching completed the first exact-throughput experiment. The next candidate should:
+First recover the promoted model's complete training provenance and run independent validation,
+official-clock smoke games, `make gate`, and packaging inspection. Do not delay a safe release for
+another speculative feature.
+
+After that release is secure, the next candidate should:
 
 1. The six-position profile retained exact parity across all 18 probes and found wasted qsearch
    accumulator-update rates of 49.33%, 50.28%, and 49.47% at 100k, 300k, and 1M nodes.
