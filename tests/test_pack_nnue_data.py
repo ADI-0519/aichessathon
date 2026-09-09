@@ -1,15 +1,55 @@
 from __future__ import annotations
 
+import json
+import tempfile
 import unittest
+from pathlib import Path
 
 import chess
 import numpy as np
 
 from tools.nnue_features import PADDING_INDEX
-from tools.pack_nnue_data import CP_CLAMP, encode_record, position_ply
+from tools.pack_nnue_data import (
+    CP_CLAMP,
+    encode_record,
+    load_report_bands,
+    position_ply,
+    shuffled_groups,
+)
 
 
 class PackNnueDataTests(unittest.TestCase):
+    def test_group_order_is_seeded_and_preserves_membership(self) -> None:
+        groups = list(range(20))
+        first = shuffled_groups(groups, 17)
+
+        self.assertEqual(first, shuffled_groups(groups, 17))
+        self.assertNotEqual(first, shuffled_groups(groups, 18))
+        self.assertEqual(sorted(first), groups)
+        self.assertEqual(groups, list(range(20)))
+
+    def test_report_bands_come_from_experiment_config(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            path = Path(temporary) / "experiment.json"
+            path.write_text(
+                json.dumps(
+                    {
+                        "piece_bands": [
+                            {"name": "ending", "min_pieces": 2, "max_pieces": 12},
+                            {"name": "rest", "min_pieces": 13, "max_pieces": 32},
+                        ]
+                    }
+                ),
+                encoding="utf-8",
+            )
+
+            bands = load_report_bands(path)
+
+        self.assertEqual(
+            [(band.name, band.min_pieces, band.max_pieces) for band in bands],
+            [("ending", 2, 12), ("rest", 13, 32)],
+        )
+
     def test_position_ply_uses_side_and_fullmove(self) -> None:
         self.assertEqual(position_ply(chess.STARTING_FEN), 0)
         self.assertEqual(position_ply("8/8/8/8/8/8/4K3/7k b - - 0 9"), 17)

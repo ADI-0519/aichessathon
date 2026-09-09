@@ -57,8 +57,17 @@ PY="./.venv-training/Scripts/python.exe"
   --train-target 4000000 \
   --validation-target 500000 \
   --validation-groups 1 \
-  --min-ply 12
+  --min-ply 12 \
+  --group-order-seed 20260909 \
+  --report-config benchmarks/runs/<experiment-config>.json
 ```
+
+Training row groups are visited in a deterministic seeded order, while held-out
+validation groups remain separate. This prevents a capped pack from taking only
+the beginning of a large monthly file. When `--report-config` is supplied, the
+manifest records accepted counts for the exact material bands used by training.
+Fishnet's `move` column is the next human move, not the teacher's best move; the
+capture filter therefore acts only as a cheap quiet-position heuristic.
 
 The trainer rejects reused paths, hard links, and byte-identical train/validation
 files. Every input is hashed before optimization so a run cannot silently change
