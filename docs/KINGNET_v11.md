@@ -189,9 +189,11 @@ PY="./.venv/Scripts/python.exe"
 
 Run it alone on an idle machine. Each width pays a fresh Numba compilation and
 the complete run can take several minutes. `summary.json` explicitly flags the
-50 MB package and 90-second initialization gates. Width selection should use the
-largest candidate that retains acceptable full-search NPS, timed depth, and init
-headroom; synthetic weights cannot predict Elo.
+50 MB package limit and the configured local initialization ceiling, while
+labelling initialization as a local measurement rather than an official-hardware
+prediction. Width selection should require comfortable init headroom and retain
+acceptable full-search NPS and timed depth; synthetic weights cannot predict Elo.
+Completed widths are also checkpointed in `summary.partial.json`.
 
 The recovery checkpoint contains the current and best model states, optimizer,
 manual scheduler position, Python/NumPy/Torch RNG states, validation history, and
