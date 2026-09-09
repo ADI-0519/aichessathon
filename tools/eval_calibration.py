@@ -8,9 +8,19 @@ Two questions, both of which decide real things:
   error  -- where is the evaluation actually wrong? If the endgame is far worse
             than the middlegame, no amount of search depth fixes it.
 """
-import json, pathlib, sys, chess, chess.engine
+import json
+import pathlib
+import sys
+
+import chess
+import chess.engine
+import numpy as np
+
 sys.path.insert(0, sys.argv[1])
-import engine, nnue, search
+import engine
+import nnue
+import search
+
 search.warmup()
 
 cases = json.loads(pathlib.Path("benchmarks/suites/eval_calibration.json").read_text())
@@ -19,9 +29,8 @@ rows = []
 for bucket, fen in cases:
     board = chess.Board(fen)
     pos = engine.position_from_board(board)
-    acc = nnue.new_accumulator() if hasattr(nnue, "new_accumulator") else None
-    import numpy as np
-    acc = np.empty((2, nnue.ACCUMULATOR_ROW if hasattr(nnue, "ACCUMULATOR_ROW") else nnue.ACCUMULATOR_SIZE), dtype=np.int32)
+    width = getattr(nnue, "ACCUMULATOR_ROW", nnue.ACCUMULATOR_SIZE)
+    acc = np.empty((2, width), dtype=np.int32)
     nnue.rebuild(pos.pieces, acc)
     ours = int(search.evaluate(pos.pieces, pos.state, acc))
     info = sf.analyse(board, chess.engine.Limit(nodes=200_000))
