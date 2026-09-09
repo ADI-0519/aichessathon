@@ -23,6 +23,22 @@ the search differs.
 Correcting for init failures, which fall almost entirely on the side carrying
 the larger weights, `v10` vs V7 becomes 55.7% and `v10` vs `v8_search` 53.8%.
 
+## What the search is worth on top of the team's build
+
+`v11_full` is Adi's `current` -- king-bucketed evaluation and quiescence
+evaluation cache -- plus this branch's seven selectivity techniques, and nothing
+else. Over 240 paired games at 4000ms+100ms:
+
+| | |
+| --- | --- |
+| score | 54.8% (+117 =29 -94) |
+| paired 95% interval | 51.2% to 58.4% |
+| Elo | about +33 |
+| failed terminations | none |
+
+Resolved. This is the cleanest single-variable measurement in the project: same
+evaluation, same cache, same clock, only the search differs.
+
 ## The gains are partly additive, not fully
 
 The search is worth about +25 over V7 on its own. The evaluation adds about
