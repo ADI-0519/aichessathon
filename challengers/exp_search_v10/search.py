@@ -79,7 +79,7 @@ V10_QF_MARGIN_PER_DEPTH = 125
 V10_LMP_MAX_DEPTH = 3
 V10_SEE_MAX_DEPTH = 5
 V10_SEE_MARGIN_PER_DEPTH = 70
-V10_NMP_VERIFY_DEPTH = 10
+V10_NMP_VERIFY_DEPTH = 8
 V10_NMP_EVAL_DIVISOR = 220
 V10_NMP_MAX_EVAL_BONUS = 2
 V10_GOOD_HISTORY_THRESHOLD = 170
@@ -957,7 +957,22 @@ def _negamax(
     # paying KingNet repeatedly for transposed positions.
     static_eval = 0
     have_static_eval = False
-    non_pv = beta - alpha == 1
+    v10_selective_enabled = (
+        ENABLE_V10_DYNAMIC_NMP
+        or ENABLE_V10_REVERSE_FUTILITY
+        or ENABLE_V10_LATE_MOVE_PRUNING
+        or ENABLE_V10_QUIET_FUTILITY
+        or ENABLE_V10_SEE_PRUNING
+        or ENABLE_V10_CONTEXTUAL_LMR
+    )
+    # V10 classifies node type from the entry window, before a TT bound can
+    # narrow a PV window to width one. The all-off profile deliberately keeps
+    # the frozen champion's historical behaviour for exact parity diagnostics.
+    non_pv = (
+        original_beta - original_alpha == 1
+        if v10_selective_enabled
+        else beta - alpha == 1
+    )
     null_move_candidate = (
         allow_null
         and depth >= 3
@@ -972,6 +987,7 @@ def _negamax(
         and non_pv
         and (
             (ENABLE_V10_REVERSE_FUTILITY and depth <= V10_RFP_MAX_DEPTH)
+            or (ENABLE_V10_QUIET_FUTILITY and depth <= V10_QF_MAX_DEPTH)
             or (ENABLE_V10_DYNAMIC_NMP and null_move_candidate)
         )
     ):
@@ -1130,6 +1146,17 @@ def _negamax(
         move = int(legal_stack[ply, index])
         flags = engine.move_flags(move)
         quiet = flags & (engine.FLAG_CAPTURE | engine.FLAG_PROMOTION) == 0
+        quiet_hist = 0
+        is_killer = False
+        if quiet:
+            quiet_from = engine.move_from(move)
+            quiet_to = engine.move_to(move)
+            quiet_hist = int(quiet_history[side, quiet_from, quiet_to])
+            if ply < MAX_PLY:
+                is_killer = (
+                    move == int(killers[ply, 0])
+                    or move == int(killers[ply, 1])
+                )
         capture_see = 0
         if (
             ENABLE_V10_SEE_PRUNING
@@ -1163,10 +1190,14 @@ def _negamax(
             if quiet:
                 if ENABLE_V10_LATE_MOVE_PRUNING and depth <= V10_LMP_MAX_DEPTH:
                     # More moves survive as depth grows. With zero-based index,
-                    # this begins pruning only after 4/7/12 searched moves at
+                    # this begins pruning only after 4/8/14 ordered moves at
                     # depths 1/2/3 respectively.
                     lmp_limit = 2 + depth * depth + depth
-                    if index >= lmp_limit:
+                    if (
+                        index >= lmp_limit
+                        and not is_killer
+                        and quiet_hist < V10_GOOD_HISTORY_THRESHOLD
+                    ):
                         prune_move = True
                 if (
                     not prune_move
@@ -1176,7 +1207,11 @@ def _negamax(
                     and index >= 2
                 ):
                     qf_margin = V10_QF_MARGIN_BASE + V10_QF_MARGIN_PER_DEPTH * depth
-                    if static_eval + qf_margin <= alpha:
+                    if (
+                        static_eval + qf_margin <= alpha
+                        and not is_killer
+                        and quiet_hist < V10_GOOD_HISTORY_THRESHOLD
+                    ):
                         prune_move = True
             elif (
                 ENABLE_V10_SEE_PRUNING
@@ -1212,16 +1247,13 @@ def _negamax(
                     reduction += 1
                 if not non_pv:
                     reduction -= 1
-                from_sq = engine.move_from(move)
-                to_sq = engine.move_to(move)
-                hist = int(quiet_history[side, from_sq, to_sq])
-                if hist >= V10_GOOD_HISTORY_THRESHOLD:
+                if quiet_hist >= V10_GOOD_HISTORY_THRESHOLD:
                     reduction -= 1
-                if ply < MAX_PLY and (
-                    move == int(killers[ply, 0]) or move == int(killers[ply, 1])
-                ):
+                if is_killer:
                     reduction -= 1
-            reduction = max(1, min(reduction, depth - 2))
+                reduction = max(0, min(reduction, depth - 2))
+            else:
+                reduction = max(1, min(reduction, depth - 2))
 
         reduced = reduction > 0
         child_depth = depth - 1 - reduction if reduced else depth - 1
