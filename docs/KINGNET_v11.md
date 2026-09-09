@@ -168,8 +168,9 @@ the JSON file and `kingnet-v11-data/` are both under `benchmarks/runs/`.
 ## Width-cost benchmark
 
 Before the expensive training run, benchmark 128, 256, 512, and 1024 widths in
-fresh processes. The tool creates zero-valued synthetic models, ensuring every
-width has identical evaluation semantics and a matching fixed-node tree. It
+fresh processes. The tool creates nonzero synthetic models whose paired hidden
+units cancel exactly, ensuring every width has identical evaluation semantics
+and a matching fixed-node tree while the neural loops still execute. It
 measures model/candidate size, model loading, JIT warmup, evaluation and update
 throughput, fixed-node NPS, and completed depth under a wall-time limit.
 
