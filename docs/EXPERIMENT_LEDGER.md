@@ -1,6 +1,6 @@
 # Experiment ledger
 
-Updated: 8 September 2026
+Updated: 9 September 2026
 
 This is the compact decision record for engine experiments. Detailed analysis remains in the
 dated research documents and machine-readable benchmark files. A development score is evidence
@@ -29,6 +29,8 @@ for choosing what to validate next, not proof of Elo; technical smokes establish
 | Lazy qsearch accumulator V8 | Post-move update shares the eager feature-delta implementation and matches full rebuilds across special moves plus 200+ deterministic random positions; two-colour smoke passed | Candidate implemented; fixed-node parity and clean throughput remain mandatory before promotion. |
 | Raw V9 KingNet | 18W 14D 8L against frozen V7 over 20 development pairs: 62.5%, about +89 Elo, zero failures | Strong evaluator candidate; retained as the no-qcache control. |
 | KingNet75 plus qcache | 54.0% over 100 pairs against raw V9; then 71W 35D 16L against prior `current/` over 61 pairs (72.54%, about +169 Elo), accepting the 0-vs-20 Elo pentanomial SPRT with zero failures | Promote as canonical champion; recover the exact training manifest before upload. |
+| Dedicated qsearch tactical generator | Exact move, score, depth, node, qnode, and qcache-stat parity across 12 critical probes; ordered tactical sets matched the champion and python-chess across special cases and 400 deterministic positions. First clean 300k-node comparison produced a mixed six-position geometric-mean NPS gain of about 1.9%. | Retain as a correct experiment, but do not promote below the predeclared 5% throughput threshold. |
+| Adaptive iterative-deepening time | Separate challenger with reserve-safe soft/normal/hard deadlines, root move/score stability, aspiration-failure response, and iteration-cost gating. Deployment-style fresh replay chose the stable teacher moves `17...Qe5` and `18...Nf6` in round 78; two-colour smoke passed. A two-pair technical match against `current/` scored 50% with zero failures. | Promising but not promoted; requires a meaningful paired sample against the uploaded KingNet75/qcache champion and long-clock safety validation. |
 
 ## Reliability and infrastructure completed
 
