@@ -71,6 +71,7 @@ files = [
     "tools/verify_kingnet.py",
     "tools/king_features.py",
     "tools/train_king_factored.py",
+    "tools/train_kingnet_v11.py",
 ]
 
 [[tool.mypy.overrides]]
