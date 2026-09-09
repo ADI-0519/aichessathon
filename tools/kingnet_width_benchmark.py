@@ -27,14 +27,11 @@ for _variable in (
 ):
     os.environ[_variable] = "1"
 
-import chess  # noqa: E402 - thread limits must precede native-library imports
-import numpy as np  # noqa: E402
 import torch  # noqa: E402
 
 from harness.rules import MAX_UNZIPPED_BYTES  # noqa: E402
 from tools.backtest_core import atomic_write_json  # noqa: E402
 from tools.cli import positive_int  # noqa: E402
-from tools.search_diagnostics import load_engine_modules  # noqa: E402
 from tools.train_kingnet_v11 import (  # noqa: E402
     ModelConfig,
     V11BigEvaluator,
@@ -101,93 +98,6 @@ def materialize_width(
     )
 
 
-def _packed_move(engine: Any, position: Any) -> int:
-    moves = engine.legal_moves(position)
-    if len(moves) == 0:
-        raise RuntimeError("benchmark position has no legal moves")
-    return int(moves[0])
-
-
-def run_worker(
-    engine_root: Path,
-    fen: str,
-    node_limit: int,
-    evaluation_iterations: int,
-    update_iterations: int,
-    wall_time_s: float,
-) -> dict[str, Any]:
-    module_started = time.perf_counter()
-    engine, search = load_engine_modules(engine_root)
-    module_load_s = time.perf_counter() - module_started
-    nnue = search.nnue
-
-    warmup_started = time.perf_counter()
-    search.warmup()
-    jit_warmup_s = time.perf_counter() - warmup_started
-
-    board = chess.Board(fen)
-    position = engine.position_from_board(board)
-    accumulator = np.empty((2, nnue.ACCUMULATOR_ROW), dtype=np.int32)
-    child = np.empty_like(accumulator)
-    nnue.rebuild(position.pieces, accumulator)
-    nnue.benchmark_evaluations(position.pieces, accumulator, 1)
-    evaluation_started = time.perf_counter()
-    evaluation_checksum = nnue.benchmark_evaluations(
-        position.pieces, accumulator, evaluation_iterations
-    )
-    evaluation_s = time.perf_counter() - evaluation_started
-
-    move = _packed_move(engine, position)
-    nnue.update_for_move(position.pieces, position.state, move, accumulator, child)
-    update_started = time.perf_counter()
-    for _ in range(update_iterations):
-        nnue.update_for_move(position.pieces, position.state, move, accumulator, child)
-    update_s = time.perf_counter() - update_started
-
-    fixed = search.search_position(
-        position,
-        search.SearchMemory.create(),
-        node_limit=node_limit,
-    )
-    timed = search.search_position(
-        position,
-        search.SearchMemory.create(),
-        time_limit_s=wall_time_s,
-    )
-    return {
-        "format_version": int(nnue.FORMAT_VERSION),
-        "accumulator": int(nnue.ACCUMULATOR_SIZE),
-        "pairwise_width": int(nnue.PAIRWISE_WIDTH),
-        "module_load_s": module_load_s,
-        "jit_warmup_s": jit_warmup_s,
-        "total_init_s": module_load_s + jit_warmup_s,
-        "evaluation_iterations": evaluation_iterations,
-        "evaluation_checksum": int(evaluation_checksum),
-        "evaluation_s": evaluation_s,
-        "evaluations_per_s": evaluation_iterations / evaluation_s,
-        "update_iterations": update_iterations,
-        "update_s": update_s,
-        "updates_per_s": update_iterations / update_s,
-        "fixed_search": {
-            "move": engine.move_to_uci(fixed.move),
-            "score": fixed.score,
-            "depth": fixed.depth,
-            "nodes": fixed.nodes,
-            "qnodes": fixed.qnodes,
-            "elapsed_s": fixed.elapsed_s,
-            "nps": fixed.nodes / fixed.elapsed_s,
-        },
-        "timed_search": {
-            "move": engine.move_to_uci(timed.move),
-            "score": timed.score,
-            "completed_depth": timed.depth,
-            "nodes": timed.nodes,
-            "qnodes": timed.qnodes,
-            "elapsed_s": timed.elapsed_s,
-        },
-    }
-
-
 def _candidate_bytes(root: Path) -> int:
     return sum(path.stat().st_size for path in root.rglob("*") if path.is_file())
 
@@ -210,8 +120,8 @@ def run_benchmark(arguments: argparse.Namespace) -> None:
         command = [
             sys.executable,
             "-m",
-            "tools.kingnet_width_benchmark",
-            "--worker-engine-root",
+            "tools.kingnet_width_worker",
+            "--engine-root",
             str(candidate),
             "--fen",
             arguments.fen,
@@ -240,7 +150,9 @@ def run_benchmark(arguments: argparse.Namespace) -> None:
         report["process_s"] = process_s
         report["candidate_bytes"] = _candidate_bytes(candidate)
         report["within_submission_limit"] = report["candidate_bytes"] <= MAX_UNZIPPED_BYTES
-        report["within_init_budget"] = report["total_init_s"] <= arguments.init_budget_s
+        report["within_configured_local_init_ceiling"] = (
+            report["total_init_s"] <= arguments.init_budget_s
+        )
         fixed = report["fixed_search"]
         signature = (
             fixed["move"],
@@ -257,6 +169,14 @@ def run_benchmark(arguments: argparse.Namespace) -> None:
                 f"!= {reference_signature}"
             )
         reports.append(report)
+        atomic_write_json(
+            output / "summary.partial.json",
+            {
+                "schema_version": 1,
+                "purpose": "incomplete cost-only width comparison",
+                "reports": reports,
+            },
+        )
         timed_depth = report["timed_search"]["completed_depth"]
         print(
             f"width {width}: init={report['total_init_s']:.2f}s, "
@@ -282,6 +202,10 @@ def run_benchmark(arguments: argparse.Namespace) -> None:
         "fen": arguments.fen,
         "node_limit": arguments.nodes,
         "wall_time_s": arguments.wall_time_s,
+        "configured_local_init_ceiling_s": arguments.init_budget_s,
+        "init_measurement": (
+            "fresh local import of candidate agent.py; not a prediction of official hardware"
+        ),
         "widths": list(arguments.widths),
         "reports": reports,
     }
@@ -302,7 +226,6 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--update-iterations", type=positive_int, default=100_000)
     parser.add_argument("--wall-time-s", type=float, default=1.0)
     parser.add_argument("--init-budget-s", type=float, default=90.0)
-    parser.add_argument("--worker-engine-root", type=Path, help=argparse.SUPPRESS)
     return parser
 
 
@@ -311,17 +234,6 @@ def main() -> None:
     arguments = parser.parse_args()
     if arguments.wall_time_s <= 0.0 or arguments.init_budget_s <= 0.0:
         parser.error("time limits must be positive")
-    if arguments.worker_engine_root is not None:
-        result = run_worker(
-            arguments.worker_engine_root.resolve(),
-            arguments.fen,
-            arguments.nodes,
-            arguments.evaluation_iterations,
-            arguments.update_iterations,
-            arguments.wall_time_s,
-        )
-        print(json.dumps(result))
-        return
     if arguments.config is None or arguments.output is None:
         parser.error("--config and --output are required")
     try:
