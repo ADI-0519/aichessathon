@@ -52,14 +52,15 @@ This launches a clean interpreter for the baseline, no-LMR, no-qsearch-pruning, 
 extension, and persistent-memory trials. A clean process is required because Numba freezes the
 profile flags when it compiles the recursive search.
 
-For V7, generate an isolated lab rather than modifying the frozen challenger:
+Generate an isolated lab from the canonical engine rather than modifying `current/`:
 
 ```bash
 ./.venv/Scripts/python.exe -m tools.materialize_search_lab \
-  --output benchmarks/runs/candidates/v7_search_lab
+  --source current \
+  --output benchmarks/runs/candidates/current_search_lab
 
 ./.venv/Scripts/python.exe -m tools.search_ablations \
-  --engine-root benchmarks/runs/candidates/v7_search_lab \
+  --engine-root benchmarks/runs/candidates/current_search_lab \
   --suite benchmarks/suites/v5_priority_losses.json \
   --trials baseline,hce-only,nnue-only,no-lmr,no-null,no-lmr-no-null \
   --nodes 25000,100000,300000,1000000 \
@@ -67,9 +68,12 @@ For V7, generate an isolated lab rather than modifying the frozen challenger:
   --output benchmarks/diagnostics/v7-priority-mechanisms.json
 ```
 
-The generated baseline has the same evaluator and search path as frozen V7. The other profiles
-change exactly one axis except `no-lmr-no-null`, which is an explicit interaction check. These
-positions diagnose mechanisms; they do not estimate Elo.
+The generator reads the source engine's `NNUE_BLEND` assignment. Its baseline, no-LMR and no-null
+profiles retain that exact blend; HCE-only and NNUE-only explicitly select 0 and 100. The generated
+baseline therefore has the same evaluator and search path as its source rather than assuming a
+particular historical blend. The other profiles change exactly one axis except
+`no-lmr-no-null`, which is an explicit interaction check. These positions diagnose mechanisms;
+they do not estimate Elo.
 
 ### Completed V7 result
 

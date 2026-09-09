@@ -1,9 +1,10 @@
-"""Create an isolated V7 build with compile-time search ablation profiles."""
+"""Create an isolated engine build with compile-time search ablation profiles."""
 
 from __future__ import annotations
 
 import argparse
 import json
+import re
 import shutil
 import uuid
 from pathlib import Path
@@ -11,24 +12,30 @@ from pathlib import Path
 from tools.backtest_core import fingerprint_agent, git_state
 from tools.search_diagnostics import REPOSITORY
 
-DEFAULT_SOURCE = REPOSITORY / "challengers" / "v7_continuous_time"
-DEFAULT_OUTPUT = REPOSITORY / "benchmarks" / "runs" / "candidates" / "v7_search_lab"
+DEFAULT_SOURCE = REPOSITORY / "current"
+DEFAULT_OUTPUT = (
+    REPOSITORY / "benchmarks" / "runs" / "candidates" / "current_search_lab"
+)
+BLEND_ASSIGNMENT = re.compile(r"^NNUE_BLEND\s*=\s*(\d+)\s*$", re.MULTILINE)
 
-PROFILE_SOURCE = '''
+
+def _profile_source(baseline_blend: int) -> str:
+    """Build profiles around the source engine's configured evaluation blend."""
+    return f'''
 
 # Development-lab switches. Numba treats these globals as compile-time
 # constants, so configure_experiment() must run before warmup.
 ENABLE_LMR = True
 ENABLE_NULL_MOVE = True
 ACTIVE_PROFILE = "baseline"
-_EXPERIMENT_PROFILES = {
-    "baseline": (50, True, True),
+_EXPERIMENT_PROFILES = {{
+    "baseline": ({baseline_blend}, True, True),
     "hce-only": (0, True, True),
     "nnue-only": (100, True, True),
-    "no-lmr": (50, False, True),
-    "no-null": (50, True, False),
-    "no-lmr-no-null": (50, False, False),
-}
+    "no-lmr": ({baseline_blend}, False, True),
+    "no-null": ({baseline_blend}, True, False),
+    "no-lmr-no-null": ({baseline_blend}, False, False),
+}}
 '''
 
 CONFIGURE_SOURCE = '''
@@ -58,13 +65,28 @@ def _replace_once(source: str, old: str, new: str, label: str) -> str:
     return source.replace(old, new, 1)
 
 
+def _baseline_blend(source: str) -> tuple[int, re.Match[str]]:
+    """Read and validate the source engine's single blend assignment."""
+    assignments = list(BLEND_ASSIGNMENT.finditer(source))
+    if len(assignments) != 1:
+        raise ValueError(
+            "expected one integer NNUE blend assignment, "
+            f"found {len(assignments)}"
+        )
+    assignment = assignments[0]
+    baseline_blend = int(assignment.group(1))
+    if not 0 <= baseline_blend <= 100:
+        raise ValueError("NNUE blend must be between 0 and 100")
+    return baseline_blend, assignment
+
+
 def instrument_search(source: str) -> str:
     """Add profile constants without changing baseline search semantics."""
-    source = _replace_once(
-        source,
-        "NNUE_BLEND = 50\n",
-        "NNUE_BLEND = 50\n" + PROFILE_SOURCE,
-        "NNUE blend",
+    baseline_blend, assignment = _baseline_blend(source)
+    source = (
+        source[: assignment.end()]
+        + _profile_source(baseline_blend)
+        + source[assignment.end() :]
     )
     source = _replace_once(
         source,
@@ -120,11 +142,13 @@ def materialize(source: Path, output: Path) -> None:
                 )
         search_path = temporary / "search.py"
         original = search_path.read_text(encoding="utf-8")
+        baseline_blend, _ = _baseline_blend(original)
         search_path.write_text(instrument_search(original), encoding="utf-8")
         manifest = {
             "schema_version": 1,
-            "purpose": "development-only V7 search/evaluator ablation lab",
+            "purpose": "development-only search/evaluator ablation lab",
             "source": fingerprint_agent(source),
+            "baseline_nnue_blend": baseline_blend,
             "profiles": [
                 "baseline",
                 "hce-only",

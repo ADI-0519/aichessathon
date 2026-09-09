@@ -136,6 +136,25 @@ def load_engine_modules(root: Path) -> tuple[Any, Any]:
     return cast(Any, engine_module), cast(Any, search_module)
 
 
+def accumulator_row_size(nnue_module: Any) -> int:
+    """Return the complete accumulator row width required by an evaluator.
+
+    King-conditioned evaluators append metadata (currently the active king
+    bucket) after the neural values.  Older evaluators expose only
+    ``ACCUMULATOR_SIZE`` and have no metadata columns.
+    """
+    size = int(
+        getattr(
+            nnue_module,
+            "ACCUMULATOR_ROW",
+            getattr(nnue_module, "ACCUMULATOR_SIZE", 0),
+        )
+    )
+    if size <= 0:
+        raise ValueError("NNUE module does not expose a positive accumulator row size")
+    return size
+
+
 def load_critical_positions(path: Path) -> list[CriticalPosition]:
     """Read and validate a critical-position suite."""
     payload = json.loads(path.read_text(encoding="utf-8"))
@@ -327,7 +346,7 @@ def analyze_root_moves(
                 (
                     search_module.MAX_PLY,
                     2,
-                    search_module.nnue.ACCUMULATOR_SIZE,
+                    accumulator_row_size(search_module.nnue),
                 ),
                 dtype=np.int32,
             )

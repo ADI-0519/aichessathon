@@ -5,12 +5,14 @@ import tempfile
 import unittest
 from dataclasses import asdict
 from pathlib import Path
+from types import SimpleNamespace
 
 import chess
 
 from challengers.numba_v1 import engine, search
 from tools.search_diagnostics import (
     DEFAULT_SUITE,
+    accumulator_row_size,
     analyze_root_moves,
     load_critical_positions,
     probe_node_limits,
@@ -32,6 +34,15 @@ class SearchDiagnosticsTests(unittest.TestCase):
             self.assertIn(position.played_move, legal)
             self.assertIn(position.baseline_move, legal)
             self.assertIn(position.reference_move, legal)
+
+    def test_accumulator_row_size_includes_optional_metadata(self) -> None:
+        legacy = SimpleNamespace(ACCUMULATOR_SIZE=128)
+        king_bucketed = SimpleNamespace(ACCUMULATOR_SIZE=128, ACCUMULATOR_ROW=129)
+        self.assertEqual(accumulator_row_size(legacy), 128)
+        self.assertEqual(accumulator_row_size(king_bucketed), 129)
+
+        with self.assertRaisesRegex(ValueError, "positive accumulator row size"):
+            accumulator_row_size(SimpleNamespace(ACCUMULATOR_SIZE=0))
 
     def test_invalid_suite_move_is_rejected(self) -> None:
         source = load_critical_positions(DEFAULT_SUITE)[0]

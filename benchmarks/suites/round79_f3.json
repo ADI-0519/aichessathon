@@ -1,0 +1,15 @@
+{
+  "schema_version": 1,
+  "description": "Search regressions selected from machine-readable rated-PGN analysis; minimum loss 70 cp, teacher node limits [500000].",
+  "positions": [
+    {
+      "id": "aichessathon-round-79-zugzwang-ply-34",
+      "label": "aichessathon-round-79-zugzwang, ply 34 (f3)",
+      "fen": "1r2r3/1p1k2pp/p1p1b3/3p1p2/5RnP/1PN3PB/P1PR1P2/2K5 w - - 0 23",
+      "played_move": "f2f3",
+      "reference_move": "c3a4",
+      "baseline_move": "f2f3",
+      "diagnosis": "Focused player chose f3 (f2f3); the 500000 node teacher preferred c3a4, with an estimated loss of 71 cp."
+    }
+  ]
+}
