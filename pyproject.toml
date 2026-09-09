@@ -68,6 +68,9 @@ files = [
     "tools/prune_halfkp.py",
     "tools/materialize_nnue_blend.py",
     "tools/verify_v5_nnue.py",
+    "tools/verify_kingnet.py",
+    "tools/king_features.py",
+    "tools/train_king_factored.py",
 ]
 
 [[tool.mypy.overrides]]

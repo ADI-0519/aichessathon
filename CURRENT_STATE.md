@@ -1,6 +1,6 @@
 # Current engine state
 
-Updated: 8 September 2026
+Updated: 9 September 2026
 
 ## Deployable champion
 
@@ -17,6 +17,20 @@ that directory to the archive root, where the platform imports `agent.py`.
 The current source adds the independently implemented, fixed-node-equivalent qsearch evaluation
 cache to the frozen V7 engine. The model weights are byte-identical. Engine files no longer live
 at the repository root, and the repository root must not be packaged as an agent.
+
+## Active evaluator challenger
+
+`challengers/v9_kingnet/` is an exact import of the executable V9 files from teammate branch
+`dev` at commit `576348b`, with an added local README and verifier. It uses a 16-bucket,
+king-conditioned 128-wide learned accumulator at a 75% blend. Its incremental and fixed-point
+checks pass, including king moves across bucket boundaries, and a one-move smoke test completed
+with a 44.5-second Numba warmup and a legal move.
+
+V9 is based on frozen V7, so it does not contain the champion's qsearch evaluation cache. Test it
+against frozen V7 first to isolate the new evaluator. If it wins, port the evaluator into a fresh
+copy of `current/` and test that combined challenger against `current/`. Do not promote raw V9.
+The teammate branch also lacks a retained training manifest for the exact bundled model hash; that
+provenance must be recovered before the weights are considered submission-ready.
 
 ## What V7 contains
 

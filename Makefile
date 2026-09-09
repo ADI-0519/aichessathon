@@ -27,4 +27,6 @@ gate:
 	tests.test_numba_search_scaling \
 	tests.test_qs_eval_cache \
 	tests.test_qs_lazy_profile \
-	tests.test_qs_lazy_accumulator
+	tests.test_qs_lazy_accumulator \
+	tests.test_v9_kingnet \
+	tests.test_train_king_factored
