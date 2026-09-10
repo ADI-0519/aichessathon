@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import argparse
 import unittest
+from dataclasses import asdict
 
 from tools.numba_search_scaling import Probe, assert_deterministic, positive_int_list
 
@@ -52,6 +53,21 @@ class NumbaSearchScalingTests(unittest.TestCase):
             assert_deterministic([probe(), probe(move="d2d4")])
         with self.assertRaisesRegex(RuntimeError, "not deterministic"):
             assert_deterministic([probe(), probe(score=13)])
+
+    def test_probe_serialization_contains_search_and_qtt_counters(self) -> None:
+        serialized = asdict(probe())
+        expected = {
+            "tt_hits",
+            "tt_cutoffs",
+            "beta_cutoffs",
+            "lmr_reductions",
+            "lmr_researches",
+            "qtt_probes",
+            "qtt_hits",
+            "qtt_cutoffs",
+            "qtt_stores",
+        }
+        self.assertTrue(expected.issubset(serialized))
 
 
 if __name__ == "__main__":
