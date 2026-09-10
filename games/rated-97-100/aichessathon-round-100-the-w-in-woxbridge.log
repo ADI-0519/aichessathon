@@ -1,0 +1,89 @@
+AI CHESSATHON MATCH LOG
+=======================
+
+MATCH
+  Round          Rated 100
+  Team           AIY
+  Colour         Black
+  Opponent       The W in Woxbridge
+  Opening        Queen's Gambit Declined
+  Start FEN      r1bq1rk1/pppnbpp1/4pn1p/3p4/2PP3B/2N1PN2/PP3PPP/R2QKB1R w KQ - 2 8
+  You moved      Second
+  Machine        w-aac959
+  Finished       2026-09-10 16:14:32 UTC
+  Match ID       30215dd9-3747-45c6-bc32-a2ea0cf27c3d
+
+INIT
+  Ready in       77.0 s
+  Budget         90.0 s
+  Used           86 percent
+
+CLOCK
+  Base           120.0 s plus 0.5 s per move
+  Moves          49
+  Time used      136.3 s
+  Slowest        6.1 s on move 11
+  Fastest        0.0 s on move 49
+  Average        2.8 s
+  Left at end    8.2 s
+
+RESULT
+  Won by checkmate
+  Game lasted 263.7 s
+
+MOVES
+    #  move          time     clock left
+    1  c5            3.4 s      117.1 s
+    2  cxd4          3.3 s      114.3 s
+    3  Nb6           3.6 s      111.1 s
+    4  Bd7           6.0 s      105.6 s
+    5  Bxf6          5.9 s      100.2 s
+    6  Nc8           5.8 s       94.9 s
+    7  b6            4.5 s       91.0 s
+    8  Bxd4          3.5 s       87.9 s
+    9  exd5          5.1 s       83.3 s
+   10  Be5           5.3 s       78.5 s
+   11  Bd6           6.1 s       72.9 s
+   12  Qf6           5.6 s       67.8 s
+   13  Raxc8         3.2 s       65.1 s
+   14  Rfd8          5.3 s       60.3 s
+   15  Rc1           4.7 s       56.1 s
+   16  Bf8           4.0 s       52.6 s
+   17  Qxd8          4.5 s       48.6 s
+   18  Bb4           4.4 s       44.7 s
+   19  Re1+          2.7 s       42.6 s
+   20  Qa8+          3.3 s       39.7 s
+   21  Qc8+          2.5 s       37.7 s
+   22  Qb7+          2.4 s       35.8 s
+   23  Qd7+          1.9 s       34.4 s
+   24  Qd5+          2.0 s       32.9 s
+   25  Qd7+          3.3 s       30.1 s
+   26  Qd5+          2.2 s       28.4 s
+   27  g5            2.0 s       26.9 s
+   28  f5+           1.9 s       25.5 s
+   29  Qf7+          2.9 s       23.1 s
+   30  Qg7+          0.0 s       23.6 s
+   31  Kh7           0.0 s       24.1 s
+   32  Qxa7          2.4 s       22.2 s
+   33  Qa1           2.3 s       20.3 s
+   34  Rxf1          2.7 s       18.2 s
+   35  Qxf1          2.4 s       16.3 s
+   36  Qxb5+         1.2 s       15.6 s
+   37  Qxb4+         2.2 s       13.8 s
+   38  Qc5+          1.2 s       13.1 s
+   39  b5            1.4 s       12.2 s
+   40  b4            1.0 s       11.7 s
+   41  b3            1.2 s       11.0 s
+   42  Kxg6          1.9 s        9.6 s
+   43  Qxf5+         1.8 s        8.4 s
+   44  b2            1.6 s        7.3 s
+   45  Qe6           1.4 s        6.4 s
+   46  b1=Q          0.2 s        6.7 s
+   47  Qe1+          0.0 s        7.2 s
+   48  Qb6+          0.0 s        7.7 s
+   49  Qea5#         0.0 s        8.2 s
+
+OUTPUT
+  Nothing written to stderr
+
+Email hello@aichessathon.com with this file if anything here is unclear.

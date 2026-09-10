@@ -259,8 +259,8 @@ MODEL="$RUN_DIR/model.npz"
 MODEL_MANIFEST="$RUN_DIR/model-manifest.json"
 CONFIG="$RUN_DIR/config.json"
 
-"$PY" - "$CONFIG" "$TRAIN_NPY" "$VAL_NPY" "$ACCUMULATOR" "$HIDDEN"       "$EPOCHS" "$BATCH_SIZE" "$SAMPLES_PER_EPOCH" <<'PYCONF'
-import json, sys
+RESUME_CHECKPOINT="${RESUME_CHECKPOINT:-}" FEATURE_STORAGE="${FEATURE_STORAGE:-float32}" "$PY" - "$CONFIG" "$TRAIN_NPY" "$VAL_NPY" "$ACCUMULATOR" "$HIDDEN"       "$EPOCHS" "$BATCH_SIZE" "$SAMPLES_PER_EPOCH" <<'PYCONF'
+import json, os, sys
 config_path, train_npy, val_npy, acc, hidden, epochs, batch, spe = sys.argv[1:9]
 # Sampling and selection lean towards the endings, where our static evaluation
 # is worst: measured against Stockfish it errs by 94 cp with 26 or more pieces
@@ -273,7 +273,11 @@ config = {
         "cp_scale": 400.0,
         "piece_head_map": [0]*9 + [1]*4 + [2]*4 + [3]*4 + [4]*4 + [5]*3 + [6]*3 + [7]*2,
     },
-    "export": {"feature_storage": "float16"},
+    # float16 storage is fine for a 128-wide net and not for this one: at 256
+    # the exporter measured the compact form shifting runtime weights by more
+    # than a quantisation step and refused, which is the guard working. float32
+    # doubles the weight file to about 12 MB, well inside the 50 MB package.
+    "export": {"feature_storage": os.environ.get("FEATURE_STORAGE", "float32")},
     "training": {
         "epochs": int(epochs),
         "samples_per_epoch": int(spe),
@@ -287,7 +291,7 @@ config = {
         "seed": 20260910,
         "device": "cuda",
         "init_model": None,
-        "resume_checkpoint": None,
+        "resume_checkpoint": os.environ.get("RESUME_CHECKPOINT") or None,
     },
     "piece_bands": [
         {"name": "2_8",   "min_pieces": 2,  "max_pieces": 8,  "weight": 0.10},

@@ -1,0 +1,63 @@
+AI CHESSATHON MATCH LOG
+=======================
+
+MATCH
+  Round          Rated 97
+  Team           AIY
+  Colour         White
+  Opponent       m8in41
+  Opening        Sicilian Sveshnikov
+  Start FEN      r2qkb1r/1p3ppp/p1np1n2/4p3/P3P1b1/N1N5/1PP2PPP/R1BQKB1R w KQkq - 2 9
+  You moved      First
+  Machine        w-909a54
+  Finished       2026-09-10 13:17:31 UTC
+  Match ID       85ee81ef-e4ee-40b6-8e80-b5625aaf79e3
+
+INIT
+  Ready in       70.1 s
+  Budget         90.0 s
+  Used           78 percent
+
+CLOCK
+  Base           120.0 s plus 0.5 s per move
+  Moves          23
+  Time used      82.6 s
+  Slowest        4.4 s on move 2
+  Fastest        2.8 s on move 23
+  Average        3.6 s
+  Left at end    48.9 s
+
+RESULT
+  Drawn by threefold repetition
+  Game lasted 154.8 s
+
+MOVES
+    #  move          time     clock left
+    1  f3            4.4 s      116.1 s
+    2  Bc4           4.4 s      112.2 s
+    3  Bxe6          4.3 s      108.4 s
+    4  Qe2           4.1 s      104.8 s
+    5  Bg5           4.1 s      101.1 s
+    6  O-O-O         4.0 s       97.6 s
+    7  Kb1           4.0 s       94.1 s
+    8  h4            3.9 s       90.7 s
+    9  hxg5          3.8 s       87.5 s
+   10  f4            3.8 s       84.2 s
+   11  f5            3.6 s       81.1 s
+   12  exf5          3.6 s       77.9 s
+   13  Nc4           3.5 s       74.9 s
+   14  g4            3.4 s       72.1 s
+   15  Qh2           3.4 s       69.2 s
+   16  Nxd5          3.3 s       66.4 s
+   17  g5            3.3 s       63.7 s
+   18  Nxf6+         3.1 s       61.0 s
+   19  Qh7+          3.0 s       58.5 s
+   20  Qg6+          3.0 s       56.0 s
+   21  Qh7+          2.9 s       53.6 s
+   22  Qg6+          2.9 s       51.2 s
+   23  Qh7+          2.8 s       48.9 s
+
+OUTPUT
+  Nothing written to stderr
+
+Email hello@aichessathon.com with this file if anything here is unclear.

@@ -1,0 +1,110 @@
+AI CHESSATHON MATCH LOG
+=======================
+
+MATCH
+  Round          Rated 98
+  Team           AIY
+  Colour         Black
+  Opponent       The big horse
+  Opening        King's Indian Classical
+  Start FEN      rnbq1rk1/ppp2pbp/3p1np1/4p3/2PPP3/P1N2N2/1P2BPPP/R1BQK2R b KQ - 0 7
+  You moved      First
+  Machine        w-cd200a
+  Finished       2026-09-10 14:18:59 UTC
+  Match ID       36b707f5-efa5-4259-ab9c-e35e193c37f2
+
+INIT
+  Ready in       88.5 s
+  Budget         90.0 s
+  Used           98 percent
+
+CLOCK
+  Base           120.0 s plus 0.5 s per move
+  Moves          70
+  Time used      151.3 s
+  Slowest        6.7 s on move 8
+  Fastest        0.4 s on move 69
+  Average        2.2 s
+  Left at end    3.7 s
+
+RESULT
+  Drawn by threefold repetition
+  Game lasted 271.8 s
+
+MOVES
+    #  move          time     clock left
+    1  exd4          3.9 s      116.6 s
+    2  Nc6           3.8 s      113.3 s
+    3  bxc6          6.5 s      107.3 s
+    4  Nd7           4.8 s      103.0 s
+    5  Nc5           5.1 s       98.3 s
+    6  Qe7           3.4 s       95.4 s
+    7  dxc5          2.9 s       93.0 s
+    8  Bd7           6.7 s       86.8 s
+    9  Rfd8          6.5 s       80.9 s
+   10  Be5           4.0 s       77.4 s
+   11  g5            3.5 s       74.4 s
+   12  Qf6           2.9 s       72.1 s
+   13  Qf4           3.6 s       68.9 s
+   14  a5            3.2 s       66.2 s
+   15  Bxh3          3.8 s       62.9 s
+   16  Be6           2.9 s       60.5 s
+   17  Bd6           3.0 s       58.0 s
+   18  Qxe5          3.6 s       54.9 s
+   19  Qh2+          4.9 s       50.5 s
+   20  Qh1+          4.5 s       46.5 s
+   21  Qh6           2.6 s       44.4 s
+   22  cxd6          2.3 s       42.6 s
+   23  Re8           3.1 s       40.0 s
+   24  Rac8          2.3 s       38.2 s
+   25  Bf5+          3.0 s       35.7 s
+   26  Qg7           2.1 s       34.1 s
+   27  Qb2+          2.3 s       32.3 s
+   28  Qxb3+         2.3 s       30.5 s
+   29  Qb2+          2.7 s       28.2 s
+   30  Qxa3+         1.6 s       27.1 s
+   31  Rxc6          2.6 s       25.0 s
+   32  Kf8           1.3 s       24.2 s
+   33  Qa4+          1.3 s       23.4 s
+   34  Qxc6          1.9 s       22.0 s
+   35  Qb6           2.5 s       19.9 s
+   36  Re1+          1.3 s       19.1 s
+   37  Qb2+          2.6 s       17.0 s
+   38  Qxd4          1.7 s       15.8 s
+   39  Qe4+          1.4 s       14.9 s
+   40  Qc6           1.5 s       14.0 s
+   41  a4            1.0 s       13.5 s
+   42  f6            1.4 s       12.7 s
+   43  h5            1.1 s       12.0 s
+   44  Kg7           1.9 s       10.6 s
+   45  Kf7           1.9 s        9.2 s
+   46  Qb5           1.3 s        8.4 s
+   47  Qb3           0.9 s        8.0 s
+   48  a3            1.1 s        7.4 s
+   49  Qb2           1.1 s        6.8 s
+   50  axb2          1.1 s        6.1 s
+   51  b1=Q          1.2 s        5.4 s
+   52  Qb2+          0.5 s        5.4 s
+   53  Qd4+          0.5 s        5.5 s
+   54  Qd2+          1.0 s        5.0 s
+   55  Qd1           0.6 s        4.9 s
+   56  Kf8           0.7 s        4.7 s
+   57  Kg7           0.7 s        4.5 s
+   58  Kh6           0.4 s        4.6 s
+   59  Qe2+          0.7 s        4.4 s
+   60  Qf1+          0.4 s        4.5 s
+   61  Qf2+          0.7 s        4.3 s
+   62  Qf1+          0.6 s        4.2 s
+   63  Qe2+          0.8 s        3.9 s
+   64  Qd1           0.4 s        3.9 s
+   65  Qd2+          0.7 s        3.7 s
+   66  Qc1           0.8 s        3.4 s
+   67  Qc2+          0.5 s        3.4 s
+   68  Qc1           0.4 s        3.5 s
+   69  Qd2+          0.4 s        3.6 s
+   70  Qc1           0.5 s        3.7 s
+
+OUTPUT
+  Nothing written to stderr
+
+Email hello@aichessathon.com with this file if anything here is unclear.
