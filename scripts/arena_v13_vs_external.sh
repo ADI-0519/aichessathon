@@ -7,6 +7,12 @@
 # Real tournament control: that opponent defers Numba compilation past import
 # (cold: import 72.7s, first move 32.4s) and simply flags at a fast control.
 #
+# Four shards, so four games run at once. Only one side thinks per game, so
+# that is four busy threads of sixteen plus compile bursts at each game start;
+# the opponent finishes its kernel during its first move and needs a core to do
+# it, which is why this is four and not twelve. Twelve shards alongside another
+# job exhausted memory and lost a whole run earlier this week.
+#
 # This is the right opponent for this feature. Contempt-when-behind only fires
 # in positions we are losing, which is most of them against something 200 Elo
 # stronger, so if it is worth anything it should show here first.
@@ -19,6 +25,6 @@ uv run python -m tools.paired_arena_shards \
   --candidate benchmarks/opponents/v13_contempt \
   --opponent benchmarks/opponents/external_a \
   --base-ms 120000 --increment-ms 500 \
-  --positions 24 --shards 2 \
+  --positions 24 --shards 4 \
   --log-dir "$log_dir" > "$log_dir/arena.log" 2> "$log_dir/arena.err"
 echo "v13 contempt vs external complete $(date -Iseconds)"
