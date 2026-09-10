@@ -1,3 +1,5 @@
+"""Train and export the factored king-bucket network used by V9 KingNet."""
+
 from __future__ import annotations
 
 import argparse
@@ -11,18 +13,18 @@ from typing import cast
 
 import numpy as np
 import torch
-from king_features import (
+from numpy.typing import NDArray
+from torch import Tensor, nn
+
+from tools.backtest_core import atomic_write_text
+from tools.cli import positive_int
+from tools.king_features import (
     BASE_FEATURE_COUNT,
     FEATURE_COUNT,
     KING_BUCKETS,
     OWN_KING_SLOT,
     PADDING_INDEX,
 )
-from numpy.typing import NDArray
-from torch import Tensor, nn
-
-from tools.backtest_core import atomic_write_text
-from tools.cli import positive_int
 from tools.nnue_features import MAX_PIECES
 from tools.nnue_features import PADDING_INDEX as BASE_PADDING_INDEX
 from tools.pack_nnue_data import PACKED_DTYPE
@@ -37,7 +39,6 @@ class ModelConfig:
 
 
 class SparseEvaluator(nn.Module):
-
     def __init__(self, config: ModelConfig) -> None:
         super().__init__()
         self.config = config

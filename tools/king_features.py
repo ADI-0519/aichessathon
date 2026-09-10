@@ -1,3 +1,5 @@
+"""Shared feature constants for the factored king-bucket evaluator."""
+
 from __future__ import annotations
 
 import numpy as np
@@ -9,7 +11,7 @@ KING_BUCKET_COUNT = 16
 FEATURE_COUNT = KING_BUCKET_COUNT * BASE_FEATURE_COUNT
 PADDING_INDEX = FEATURE_COUNT
 
-# after perspective flip the own king is always slot 5, white or black
+# After perspective normalisation, the moving side's king is always slot 5.
 OWN_KING_SLOT = 5
 
 
