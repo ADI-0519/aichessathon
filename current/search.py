@@ -754,8 +754,10 @@ def _quiescence(
         state,
         side,
         legal_stack[ply],
+        # np.int64(0), not 0 -- see the note in _search_root.  This is the
+        # "no TT move" sentinel and a bare 0 specialises _order_moves on it.
         count,
-        0,
+        np.int64(0),  # type: ignore[arg-type]
         ply,
         killers,
         quiet_history,
@@ -1507,6 +1509,16 @@ def _search_root(
         engine.make_move(pieces, state, key, move, undo_stack[0], undo_key_stack[0])
         history[history_count] = key[0]
         if index == 0:
+            # np.int64(1), not 1: a python int reaches numba as Literal[int](1)
+            # and stays literal the whole way down, so this one constant forked
+            # _negamax, and through it _quiescence and _order_moves, into extra
+            # compilations -- 63 signatures for 32 functions.  ply is an index
+            # into the ply-indexed stacks and specialising on its value buys
+            # nothing, while every extra signature is LLVM time inside the 90s
+            # init budget.  allow_null stays a literal on purpose: that one does
+            # let numba drop the null-move block from half the copies.
+            # mypy reads the dispatcher's annotation and wants a plain int;
+            # the value is identical, only its numba type differs.
             child_score, aborted = _negamax(
                 pieces,
                 state,
@@ -1514,7 +1526,7 @@ def _search_root(
                 depth - 1,
                 -beta,
                 -alpha,
-                1,
+                np.int64(1),  # type: ignore[arg-type]
                 True,
                 history,
                 history_count + 1,
@@ -1546,7 +1558,7 @@ def _search_root(
                 depth - 1,
                 -alpha - 1,
                 -alpha,
-                1,
+                np.int64(1),  # type: ignore[arg-type]
                 True,
                 history,
                 history_count + 1,
@@ -1578,7 +1590,7 @@ def _search_root(
                     depth - 1,
                     -beta,
                     -alpha,
-                    1,
+                    np.int64(1),  # type: ignore[arg-type]
                     True,
                     history,
                     history_count + 1,

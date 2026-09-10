@@ -263,7 +263,11 @@ def piece_at(
     return NO_PIECE
 
 
-@njit(cache=False)
+# Pinned signature, deliberately.  Twelve of the call sites below pass a
+# constant castling square (E1, G8, ...), and numba specialises on each
+# literal value: this compiled thirteen times and cost 6.2s of the 90s
+# init budget.  One signature coerces every call site to int64.
+@njit("boolean(uint64[::1], int64, int64)", cache=False)
 def is_square_attacked(pieces: NDArray[np.uint64], square: int, by_color: int) -> bool:
     """Return whether ``square`` is attacked, including pinned attackers."""
     pawn_origins = PAWN_ATTACKS[BLACK if by_color == WHITE else WHITE, square]
