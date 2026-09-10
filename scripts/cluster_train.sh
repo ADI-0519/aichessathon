@@ -27,8 +27,12 @@ VALIDATION_TARGET="${VALIDATION_TARGET:-1000000}"
 LR_SCHEDULE="${LR_SCHEDULE:-cosine}"
 
 # Politeness. 64 cores exist; other people are using them.
-WORKERS="${WORKERS:-12}"                # packing processes
-THREADS="${THREADS:-4}"                 # native threads per process
+# nproc reports the CPUs this process may actually use, which on a scheduled
+# node is often far fewer than the machine has. Oversubscribing here would
+# thrash our own packing and everyone else's jobs with it.
+VISIBLE_CPUS="$(nproc)"
+WORKERS="${WORKERS:-$(( VISIBLE_CPUS > 4 ? VISIBLE_CPUS - 2 : 2 ))}"
+THREADS="${THREADS:-$(( VISIBLE_CPUS > 8 ? 4 : 1 ))}"
 NICE="${NICE:-15}"
 GPU_FREE_MB="${GPU_FREE_MB:-40000}"     # a GPU must have at least this free
 GPU_MAX_UTIL="${GPU_MAX_UTIL:-10}"      # ...and be no busier than this percent
@@ -121,7 +125,10 @@ for pool in OMP_NUM_THREADS OPENBLAS_NUM_THREADS MKL_NUM_THREADS \
   export "$pool=$THREADS"
 done
 export PYTHONUNBUFFERED=1
-say "threads per process capped at $THREADS; packing workers $WORKERS of $(nproc)"
+say "visible CPUs: $VISIBLE_CPUS; packing workers: $WORKERS; threads each: $THREADS"
+if (( WORKERS * THREADS > VISIBLE_CPUS * 2 )); then
+  say "WARNING: workers x threads exceeds twice the visible CPUs; lower WORKERS"
+fi
 
 # ------------------------------------------------------------------ environment
 stage "preparing the python environment"
@@ -130,7 +137,30 @@ if [[ ! -x "$VENV/bin/python" ]]; then
 fi
 PY="$VENV/bin/python"
 "$PY" -m pip install --quiet --upgrade pip
-"$PY" -m pip install --quiet "numpy>=2" pyarrow "chess==1.11.2" torch
+"$PY" -m pip install --quiet "numpy>=2" pyarrow "chess==1.11.2"
+
+# pip's default torch is built against the newest CUDA, which a slightly older
+# driver cannot load: the first run here installed cu130 against a 12.8 driver
+# and reported no CUDA at all. Ask the driver what it supports and take the
+# matching wheel index.
+DRIVER_CUDA="$(nvidia-smi --query-gpu=driver_version --format=csv,noheader   | head -1 | awk -F. '{print $1}')"
+CUDA_TAG="${CUDA_TAG:-}"
+if [[ -z "$CUDA_TAG" ]]; then
+  RUNTIME="$(nvidia-smi | awk -F'CUDA Version: ' '/CUDA Version/ {print $2}'     | awk '{print $1}' | head -1)"
+  case "$RUNTIME" in
+    13.*) CUDA_TAG=cu130 ;;
+    12.8|12.9) CUDA_TAG=cu128 ;;
+    12.6|12.7) CUDA_TAG=cu126 ;;
+    12.[0-5]) CUDA_TAG=cu121 ;;
+    11.*) CUDA_TAG=cu118 ;;
+    *) CUDA_TAG=cu128 ;;
+  esac
+  say "driver $DRIVER_CUDA reports CUDA $RUNTIME, using torch wheels for $CUDA_TAG"
+fi
+if ! "$PY" -c "import torch, sys; sys.exit(0 if torch.cuda.is_available() else 1)"      2>/dev/null; then
+  say "installing torch for $CUDA_TAG (this takes a few minutes)"
+  "$PY" -m pip install --quiet --force-reinstall     --index-url "https://download.pytorch.org/whl/$CUDA_TAG" torch
+fi
 "$PY" - <<'PYCHECK'
 import torch
 print(f"torch {torch.__version__}, cuda available: {torch.cuda.is_available()}")
