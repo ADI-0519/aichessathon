@@ -47,6 +47,7 @@ TT_BOUND = 3
 TT_GENERATION = 4
 TT_HALFMOVE = 5
 TT_FIELD_COUNT = 6
+TT_HALFMOVE_LIMIT = 100
 DEFAULT_TT_BITS = 22
 TT_BUCKET_SIZE = 2
 Q_EVAL_BITS = 16
@@ -1110,6 +1111,29 @@ def _reverse_futility_allowed(
 
 
 @njit(cache=False, inline="always")
+def _singular_candidate_allowed(
+    excluded_move: int,
+    depth: int,
+    tt_move: int,
+    tt_depth: int,
+    tt_bound: int,
+    tt_score: int,
+    tt_halfmove_ok: bool,
+) -> bool:
+    """Validate every score-dependent precondition for singular verification."""
+    return bool(
+        ENABLE_SINGULAR_EXTENSIONS
+        and excluded_move == 0
+        and depth >= SINGULAR_MIN_DEPTH
+        and tt_move != 0
+        and tt_depth >= depth - SINGULAR_TT_DEPTH_SLACK
+        and tt_bound in (TT_EXACT, TT_LOWER)
+        and abs(tt_score) < MATE_BOUND
+        and tt_halfmove_ok
+    )
+
+
+@njit(cache=False, inline="always")
 def _tt_bucket_start(key: np.uint64, table_size: int) -> int:
     index = int(key & np.uint64(table_size - 1))
     return index & ~(TT_BUCKET_SIZE - 1) if ENABLE_TT2 else index
@@ -1277,6 +1301,7 @@ def _negamax(
     tt_score = 0
     tt_bound = TT_EMPTY
     tt_depth = -1
+    tt_halfmove_ok = False
     stats[STAT_TT_PROBES] += 1
     if excluded_move == 0 and tt_index >= 0:
         stats[STAT_TT_HITS] += 1
@@ -1284,12 +1309,10 @@ def _negamax(
         tt_score = _score_from_table(int(tt_data[tt_index, TT_SCORE]), ply)
         tt_bound = int(tt_data[tt_index, TT_BOUND])
         tt_depth = int(tt_data[tt_index, TT_DEPTH])
-        if (
-            tt_depth >= depth
-            and int(tt_data[tt_index, TT_HALFMOVE]) == min(
-                100, int(state[engine.STATE_HALFMOVE])
-            )
-        ):
+        tt_halfmove_ok = int(tt_data[tt_index, TT_HALFMOVE]) == min(
+            TT_HALFMOVE_LIMIT, int(state[engine.STATE_HALFMOVE])
+        )
+        if tt_depth >= depth and tt_halfmove_ok:
             if tt_bound == TT_EXACT:
                 return tt_score, False
             if tt_bound == TT_LOWER and tt_score > alpha:
@@ -1301,14 +1324,14 @@ def _negamax(
                 return tt_score, False
 
     singular_move = 0
-    if (
-        ENABLE_SINGULAR_EXTENSIONS
-        and excluded_move == 0
-        and depth >= SINGULAR_MIN_DEPTH
-        and tt_move != 0
-        and tt_depth >= depth - SINGULAR_TT_DEPTH_SLACK
-        and tt_bound in (TT_EXACT, TT_LOWER)
-        and abs(tt_score) < MATE_BOUND
+    if _singular_candidate_allowed(
+        excluded_move,
+        depth,
+        tt_move,
+        tt_depth,
+        tt_bound,
+        tt_score,
+        tt_halfmove_ok,
     ):
         stats[STAT_SINGULAR_ATTEMPTS] += 1
         singular_beta = tt_score - SINGULAR_MARGIN_PER_DEPTH * depth
@@ -1961,7 +1984,7 @@ def _negamax(
         tt_data[tt_index, TT_BOUND] = np.int32(bound)
         tt_data[tt_index, TT_GENERATION] = np.int32(generation)
         tt_data[tt_index, TT_HALFMOVE] = np.int32(
-            min(100, int(state[engine.STATE_HALFMOVE]))
+            min(TT_HALFMOVE_LIMIT, int(state[engine.STATE_HALFMOVE]))
         )
     return best, False
 

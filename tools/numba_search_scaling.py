@@ -229,7 +229,7 @@ def main() -> None:
     print(f"cold_warmup={warmup_s:.3f}s, repeats={arguments.repeats}")
     print(
         "limit      d      nodes    q% median nps      range move     score "
-        "qeval-hit qacc-waste"
+        "qeval-hit qacc-waste caphist   sing"
     )
 
     all_probes: list[Probe] = []
@@ -326,7 +326,9 @@ def main() -> None:
             print(
                 f"{node_limit:>8,} {first.depth:>6} {first.nodes:>10,} {qshare:>5.1%} "
                 f"{median_nps:>10,.0f} {min(nps_values):>8,.0f}..{max(nps_values):<8,.0f} "
-                f"{first.move:<8} {first.score:>6} {hit_text} {waste_text}"
+                f"{first.move:<8} {first.score:>6} {hit_text} {waste_text} "
+                f"{first.capture_history_updates:>7,} "
+                f"{first.singular_attempts:>4,}/{first.singular_extensions:<4,}"
             )
 
     overall: list[dict[str, object]] = []

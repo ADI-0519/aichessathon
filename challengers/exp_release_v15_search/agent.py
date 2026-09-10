@@ -35,12 +35,13 @@ def _key_for(board: chess.Board) -> np.uint64:
     return np.uint64(engine.position_from_board(board).key[0])
 
 
-def _reset_game(board: chess.Board) -> chess.Board:
+def _reset_game(board: chess.Board, *, clear_memory: bool = True) -> chess.Board:
     global _game_board
     _game_board = board
     _position_history.clear()
     _position_history.append(_key_for(board))
-    _memory.clear()
+    if clear_memory:
+        _memory.clear()
     return board
 
 
@@ -50,7 +51,9 @@ def _sync_board(fen: str) -> chess.Board:
     incoming = chess.Board(fen)
     incoming_fen = _canonical_fen(incoming)
     if _game_board is None:
-        return _reset_game(incoming)
+        # SearchMemory.create() is already zero-initialized. Avoid touching the
+        # complete TT again on the first clocked move of a fresh process.
+        return _reset_game(incoming, clear_memory=False)
     if _canonical_fen(_game_board) == incoming_fen:
         return _game_board
 

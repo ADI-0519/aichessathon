@@ -9,9 +9,11 @@ one coherent depth-and-ordering generation:
 - a countermove hint below killers and above losing captures;
 - conservative single-ply singular extensions from trustworthy TT bounds.
 
-Singular verification disables null move, late-move pruning and LMR, does not
-update ordering histories, and cannot write a TT result for an excluded-move
-node. Double extensions and singular multicut are intentionally absent.
+Singular verification disables null move, reverse futility, late-move pruning
+and LMR, does not update ordering histories, and cannot write a TT result for
+an excluded-move node. Its TT score and bound are trusted only when the stored
+halfmove-clock signature matches the node. Double extensions and singular
+multicut are intentionally absent.
 
 This is not deployable until it beats `current/` in paired games and passes the
 platform-clock release gate. No third-party engine source, weights, opening

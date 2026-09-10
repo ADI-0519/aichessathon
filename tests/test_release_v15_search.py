@@ -37,6 +37,36 @@ class ReleaseV15SearchTests(unittest.TestCase):
         self.assertFalse(allowed(0, True, self.search.V10_RFP_MAX_DEPTH + 1, True))
         self.assertFalse(allowed(0, True, self.search.V10_RFP_MAX_DEPTH, False))
 
+    def test_singular_candidate_requires_matching_halfmove_clock(self) -> None:
+        allowed = self.search._singular_candidate_allowed
+        depth = self.search.SINGULAR_MIN_DEPTH
+        tt_depth = depth - self.search.SINGULAR_TT_DEPTH_SLACK
+        arguments = (
+            0,
+            depth,
+            self.engine.pack_move(0, 1, 0, 0),
+            tt_depth,
+            self.search.TT_LOWER,
+            25,
+        )
+        self.assertTrue(allowed(*arguments, True))
+        self.assertFalse(allowed(*arguments, False))
+
+    def test_singular_candidate_rejects_excluded_and_untrusted_entries(self) -> None:
+        allowed = self.search._singular_candidate_allowed
+        depth = self.search.SINGULAR_MIN_DEPTH
+        move = self.engine.pack_move(0, 1, 0, 0)
+        tt_depth = depth - self.search.SINGULAR_TT_DEPTH_SLACK
+        self.assertFalse(
+            allowed(1, depth, move, tt_depth, self.search.TT_LOWER, 25, True)
+        )
+        self.assertFalse(
+            allowed(0, depth, move, tt_depth, self.search.TT_UPPER, 25, True)
+        )
+        self.assertFalse(
+            allowed(0, depth, move, tt_depth - 1, self.search.TT_LOWER, 25, True)
+        )
+
     def _entry(self, index: int, key: int, depth: int, generation: int) -> None:
         self.keys[index] = np.uint64(key)
         self.data[index, self.search.TT_DEPTH] = np.int32(depth)
