@@ -224,20 +224,71 @@ fi
 say "packed training set: $(du -h "$TRAIN_NPY" | cut -f1)"
 
 # -------------------------------------------------------------------- training
+# The engine loads a format-2 king-bucketed network with 16 * 768 features.
+# tools/train_nnue.py builds the retired 768-feature format-1 evaluator, whose
+# output current/nnue.py refuses to load, so training goes through the KingNet
+# trainer and its JSON contract.
 MODEL="$RUN_DIR/model.npz"
 MODEL_MANIFEST="$RUN_DIR/model-manifest.json"
-stage "training ${ACCUMULATOR}x${HIDDEN} for $EPOCHS epochs on GPU $GPU_ID"
-nice -n "$NICE" "$PY" -m tools.train_nnue \
-  --train "$TRAIN_NPY" \
-  --validation "$VAL_NPY" \
-  --output "$MODEL" \
-  --manifest "$MODEL_MANIFEST" \
-  --accumulator "$ACCUMULATOR" \
-  --hidden "$HIDDEN" \
-  --epochs "$EPOCHS" \
-  --batch-size "$BATCH_SIZE" \
-  --lr-schedule "$LR_SCHEDULE" \
-  --device cuda &
+CONFIG="$RUN_DIR/config.json"
+
+"$PY" - "$CONFIG" "$TRAIN_NPY" "$VAL_NPY" "$ACCUMULATOR" "$HIDDEN"       "$EPOCHS" "$BATCH_SIZE" <<'PYCONF'
+import json, sys
+config_path, train_npy, val_npy, acc, hidden, epochs, batch = sys.argv[1:8]
+# Sampling and selection lean towards the endings, where our static evaluation
+# is worst: measured against Stockfish it errs by 94 cp with 26 or more pieces
+# and 346 cp with seven or fewer, and both long rated losses were endgames.
+config = {
+    "model": {
+        "accumulator": int(acc),
+        "hidden": int(hidden),
+        "pairwise_width": int(acc) // 2,
+        "cp_scale": 400.0,
+        "piece_head_map": [0]*9 + [1]*4 + [2]*4 + [3]*4 + [4]*4 + [5]*3 + [6]*3 + [7]*2,
+    },
+    "export": {"feature_storage": "float16"},
+    "training": {
+        "epochs": int(epochs),
+        "samples_per_epoch": 20_000_000,
+        "batch_size": int(batch),
+        "learning_rate": 0.0003,
+        "min_learning_rate": 0.00001,
+        "warmup_fraction": 0.05,
+        "weight_decay": 0.00001,
+        "mirror_probability": 0.5,
+        "gradient_clip_norm": 1.0,
+        "seed": 20260910,
+        "device": "cuda",
+        "init_model": None,
+        "resume_checkpoint": None,
+    },
+    "piece_bands": [
+        {"name": "2_8",   "min_pieces": 2,  "max_pieces": 8,  "weight": 0.10},
+        {"name": "9_12",  "min_pieces": 9,  "max_pieces": 12, "weight": 0.225},
+        {"name": "13_16", "min_pieces": 13, "max_pieces": 16, "weight": 0.20},
+        {"name": "17_24", "min_pieces": 17, "max_pieces": 24, "weight": 0.25},
+        {"name": "25_32", "min_pieces": 25, "max_pieces": 32, "weight": 0.225},
+    ],
+    "selection_objective": {
+        "overall": 0.35,
+        "by_piece_band": {"2_8": 0.05, "9_12": 0.20, "13_16": 0.20,
+                          "17_24": 0.10, "25_32": 0.10},
+    },
+    "train_shards": [
+        {"name": "human_train", "path": train_npy, "weight": 1.0,
+         "kind": "human_fishnet"}
+    ],
+    "validation_sets": [
+        {"name": "human_validation", "path": val_npy, "kind": "human_fishnet"}
+    ],
+}
+with open(config_path, "w", encoding="utf-8") as handle:
+    json.dump(config, handle, indent=2)
+print(f"wrote {config_path}")
+PYCONF
+
+stage "training KingNet ${ACCUMULATOR}/pair$((ACCUMULATOR / 2))/${HIDDEN} for $EPOCHS epochs on GPU $GPU_ID"
+nice -n "$NICE" "$PY" -m tools.train_kingnet_v11   --config "$CONFIG"   --output "$MODEL"   --manifest "$MODEL_MANIFEST" &
 TRAIN_PID=$!
 wait "$TRAIN_PID"
 TRAIN_PID=""
@@ -245,4 +296,5 @@ TRAIN_PID=""
 stage "complete"
 say "model:    $MODEL"
 say "manifest: $MODEL_MANIFEST"
+say "config:   $CONFIG"
 say "log:      $LOG"
