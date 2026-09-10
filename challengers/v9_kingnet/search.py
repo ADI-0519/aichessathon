@@ -7,6 +7,7 @@ pruning.  More aggressive features belong in separately measured changes.
 
 from __future__ import annotations
 
+import math
 import threading
 import time
 from dataclasses import dataclass
@@ -28,6 +29,8 @@ MAX_HISTORY = 512
 STOP_POLL_MASK = 255
 SEE_MAX_EXCHANGES = 32
 DELTA_MARGIN = 120
+RFP_MAX_DEPTH = 6
+RFP_MARGIN = 85
 
 # Percentage of the static evaluation supplied by the learned model.  Keep this
 # as a source constant so every packaged challenger is reproducible.
@@ -55,6 +58,15 @@ STAT_BETA_CUTOFFS = 5
 STAT_LMR_REDUCTIONS = 6
 STAT_LMR_RESEARCHES = 7
 STAT_COUNT = 8
+
+LMR_MAX = 64
+# reduction grows with depth and with how late the move is; the fail-high
+# re-search below is what makes deeper cuts safe
+LMR_TABLE = np.zeros((LMR_MAX, LMR_MAX), dtype=np.int32)
+for _d in range(1, LMR_MAX):
+    for _i in range(1, LMR_MAX):
+        _r = int(0.75 + math.log(_d) * math.log(_i) / 2.25)
+        LMR_TABLE[_d, _i] = max(1, _r)
 
 MG_VALUE = np.array((100, 320, 330, 500, 900, 0), dtype=np.int32)
 EG_VALUE = np.array((120, 310, 335, 525, 900, 0), dtype=np.int32)
@@ -844,15 +856,20 @@ def _negamax(
                 stats[STAT_TT_CUTOFFS] += 1
                 return tt_score, False
 
+    pruning_allowed = not in_check and beta - alpha == 1 and abs(beta) < MATE_BOUND
+    static_eval = 0
+    if pruning_allowed:
+        static_eval = evaluate(pieces, state, accumulator_stack[ply])
+        if depth <= RFP_MAX_DEPTH and static_eval - RFP_MARGIN * depth >= beta:
+            return static_eval, False
+
     # null-move pruning, R=2; the material test is the zugzwang guard
     if (
         allow_null
         and depth >= 3
-        and not in_check
-        and beta - alpha == 1
-        and abs(beta) < MATE_BOUND
+        and pruning_allowed
         and _has_non_pawn_material(pieces, side)
-        and evaluate(pieces, state, accumulator_stack[ply]) >= beta
+        and static_eval >= beta
     ):
         for perspective in range(2):
             for column in range(nnue.ACCUMULATOR_ROW):
@@ -935,7 +952,13 @@ def _negamax(
             and not in_check
             and not gives_check
         )
-        child_depth = depth - 2 if reduced else depth - 1
+        if reduced:
+            reduction = LMR_TABLE[
+                min(depth, LMR_MAX - 1), min(index, LMR_MAX - 1)
+            ]
+            child_depth = max(1, depth - 1 - reduction)
+        else:
+            child_depth = depth - 1
         if reduced:
             stats[STAT_LMR_REDUCTIONS] += 1
         if index == 0:
