@@ -17,12 +17,14 @@ ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$ROOT"
 
 # ---------------------------------------------------------------- configuration
-MONTHS="${MONTHS:-12}"                  # Parquet months to download; the last is held out
+# Months to fetch; the last is held out for validation. Recent months are huge,
+# so three is already far more data than every net we have shipped.
+MONTHS="${MONTHS:-3}"
 ACCUMULATOR="${ACCUMULATOR:-256}"
 HIDDEN="${HIDDEN:-32}"
 EPOCHS="${EPOCHS:-12}"
 BATCH_SIZE="${BATCH_SIZE:-16384}"
-TRAIN_TARGET="${TRAIN_TARGET:-60000000}"
+TRAIN_TARGET="${TRAIN_TARGET:-200000000}"
 VALIDATION_TARGET="${VALIDATION_TARGET:-1000000}"
 LR_SCHEDULE="${LR_SCHEDULE:-cosine}"
 
@@ -177,7 +179,10 @@ stage "fetching $MONTHS Parquet months into $SOURCE_DIR"
 BASE="https://huggingface.co/datasets/Lichess/fishnet-evals/resolve/main"
 SOURCES=()
 fetched=0
-for year in 2014 2015 2016 2017 2018 2019 2020; do
+# Newest first. The corpus runs 2013 to 2025 and grows enormously: a 2014 month
+# is 25-200 MB where a 2024 month is 6-7 GB, so one recent month carries more
+# positions than two years of early ones. YEARS overrides the order.
+for year in ${YEARS:-2024 2023 2022 2021 2020 2019 2018 2017 2016 2015 2014}; do
   for month in 01 02 03 04 05 06 07 08 09 10 11 12; do
     (( fetched >= MONTHS )) && break 2
     name="standard_rated_${year}_${month}.parquet"
