@@ -38,9 +38,10 @@ SAMPLES_PER_EPOCH="${SAMPLES_PER_EPOCH:-$TRAIN_TARGET}"
 # node is often far fewer than the machine has. Oversubscribing here would
 # thrash our own packing and everyone else's jobs with it.
 VISIBLE_CPUS="$(nproc)"
-# Half the visible cores, capped at 16. Taking nearly all of them starves the
-# other jobs on this node, which need CPU to feed their own GPUs.
-WORKERS="${WORKERS:-$(( VISIBLE_CPUS > 4 ? (VISIBLE_CPUS / 2 > 16 ? 16 : VISIBLE_CPUS / 2) : 2 ))}"
+# Half the visible cores, capped at 24. Taking nearly all of them starves the
+# other jobs on this node, which need CPU to feed their own GPUs; on a 64-core
+# box this leaves forty for everyone else.
+WORKERS="${WORKERS:-$(( VISIBLE_CPUS > 4 ? (VISIBLE_CPUS / 2 > 24 ? 24 : VISIBLE_CPUS / 2) : 2 ))}"
 THREADS="${THREADS:-1}"   # packing is pure Python; native threads only contend
 NICE="${NICE:-15}"
 GPU_FREE_MB="${GPU_FREE_MB:-40000}"     # a GPU must have at least this free
