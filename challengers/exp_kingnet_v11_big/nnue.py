@@ -190,13 +190,20 @@ if FORMAT_VERSION == FORMAT_V2:
     )
 else:
     HIDDEN_BIAS_Q = _quantize(
-        HIDDEN_BIAS, INPUT_SCALE * INPUT_SCALE * WEIGHT_SCALE, np.int64
+        HIDDEN_BIAS, INPUT_SCALE * WEIGHT_SCALE, np.int64
     )
 OUTPUT_RELU_WEIGHTS_Q = _quantize(OUTPUT_RELU_WEIGHTS, WEIGHT_SCALE, np.int16)
 OUTPUT_SQUARE_WEIGHTS_Q = _quantize(OUTPUT_SQUARE_WEIGHTS, WEIGHT_SCALE, np.int16)
 OUTPUT_BIAS_Q = _quantize(
     OUTPUT_BIAS, ACTIVATION_SCALE * WEIGHT_SCALE, np.int64
 )
+# (head, column, unit) so the hidden loop's innermost index is contiguous.
+# Format 2 keeps a two-dimensional weight matrix and never reads this; numba
+# still needs a concretely typed array to compile the module against.
+if FORMAT_VERSION == FORMAT_V3:
+    HIDDEN_WEIGHTS_T_Q = np.ascontiguousarray(HIDDEN_WEIGHTS_Q.transpose(0, 2, 1))
+else:
+    HIDDEN_WEIGHTS_T_Q = np.zeros((1, 1, 1), dtype=np.int16)
 
 
 @njit(cache=False, inline="always")
@@ -395,12 +402,19 @@ def _evaluate_v2(accumulators: NDArray[np.int32], side: int) -> int:
 
 @njit(cache=False, inline="always")
 def _pair_value(accumulators: NDArray[np.int32], perspective: int, column: int) -> int:
+    # Two clipped activations, each at INPUT_SCALE, multiplied. Their raw
+    # product carries INPUT_SCALE squared -- up to 4.2 million -- which forces
+    # every downstream multiply-accumulate into int64 and stops LLVM
+    # vectorising the hidden layer at all. Dividing back to INPUT_SCALE keeps
+    # the pair in [0, 2048], so the products stay narrow and the inner loop
+    # vectorises like the format-2 path does. The rounding this costs is a
+    # quantum of the same size the accumulator already carries.
     left = min(INPUT_SCALE, max(0, int(accumulators[perspective, column])))
     right = min(
         INPUT_SCALE,
         max(0, int(accumulators[perspective, PAIRWISE_WIDTH + column])),
     )
-    return left * right
+    return _round_divide(left * right, INPUT_SCALE)
 
 
 @njit(cache=False)
@@ -408,22 +422,26 @@ def _evaluate_v3(accumulators: NDArray[np.int32], side: int) -> int:
     opponent = engine.BLACK if side == engine.WHITE else engine.WHITE
     count = min(32, max(2, int(accumulators[0, COUNT_SLOT])))
     head = int(PIECE_HEAD_MAP[count])
-    output = int(OUTPUT_BIAS_Q[head])
-    preactivation_divisor = INPUT_SCALE * WEIGHT_SCALE
 
+    # Column-outer, unit-inner. The pair values do not depend on the hidden
+    # unit, so the original unit-outer order recomputed all 256 of them 32
+    # times over. Weights are pre-transposed to (head, column, unit) so this
+    # inner loop walks memory contiguously.
+    values = np.empty(HIDDEN_SIZE, dtype=np.int64)
     for unit in range(HIDDEN_SIZE):
-        value = int(HIDDEN_BIAS_Q[head, unit])
-        for column in range(PAIRWISE_WIDTH):
-            value += (
-                int(HIDDEN_WEIGHTS_Q[head, unit, column])
-                * _pair_value(accumulators, side, column)
-            )
-            value += (
-                int(HIDDEN_WEIGHTS_Q[head, unit, PAIRWISE_WIDTH + column])
-                * _pair_value(accumulators, opponent, column)
+        values[unit] = int(HIDDEN_BIAS_Q[head, unit])
+    for column in range(PAIRWISE_WIDTH):
+        own = _pair_value(accumulators, side, column)
+        other = _pair_value(accumulators, opponent, column)
+        for unit in range(HIDDEN_SIZE):
+            values[unit] += int(HIDDEN_WEIGHTS_T_Q[head, column, unit]) * own
+            values[unit] += (
+                int(HIDDEN_WEIGHTS_T_Q[head, PAIRWISE_WIDTH + column, unit]) * other
             )
 
-        preactivation = _round_divide(value, preactivation_divisor)
+    output = int(OUTPUT_BIAS_Q[head])
+    for unit in range(HIDDEN_SIZE):
+        preactivation = _round_divide(values[unit], WEIGHT_SCALE)
         relu = max(0, preactivation)
         clipped = min(ACTIVATION_SCALE, relu)
         clipped_square = _round_divide(clipped * clipped, ACTIVATION_SCALE)
