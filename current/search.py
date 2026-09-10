@@ -27,6 +27,10 @@ MAX_HISTORY = 512
 STOP_POLL_MASK = 255
 SEE_MAX_EXCHANGES = 32
 DELTA_MARGIN = 120
+STABLE_ITERATIONS_REQUIRED = 2
+STABLE_SCORE_DELTA = 30
+UNSTABLE_SCORE_DELTA = 75
+NEXT_ITERATION_COST_MULTIPLIER = 1.5
 
 # Percentage of the static evaluation supplied by the learned model.  Keep this
 # as a source constant so every packaged challenger is reproducible.
@@ -46,25 +50,23 @@ TT_FIELD_COUNT = 6
 DEFAULT_TT_BITS = 18
 Q_EVAL_BITS = 16
 
-# Search V10 bundle. These are deliberately named feature switches so a
-# mechanism can be disabled independently during the final regression gate.
+# Search V10 plus the independently switchable S1 move-ordering layer.
 ENABLE_V10_DYNAMIC_NMP = True
 ENABLE_V10_REVERSE_FUTILITY = True
 ENABLE_V10_LATE_MOVE_PRUNING = True
 ENABLE_V10_QUIET_FUTILITY = True
 ENABLE_V10_SEE_PRUNING = True
 ENABLE_V10_CONTEXTUAL_LMR = True
+ENABLE_HISTORY_V2 = True
+ENABLE_QUIET_SEE_PRUNING = True
 ACTIVE_PROFILE = "baseline"
 
-_V10_PROFILES = {
-    "baseline": (True, True, True, True, True, True),
-    "current": (False, False, False, False, False, False),
-    "no-dynamic-nmp": (False, True, True, True, True, True),
-    "no-reverse-futility": (True, False, True, True, True, True),
-    "no-late-move-pruning": (True, True, False, True, True, True),
-    "no-quiet-futility": (True, True, True, False, True, True),
-    "no-see-pruning": (True, True, True, True, False, True),
-    "no-contextual-lmr": (True, True, True, True, True, False),
+_S1_PROFILES = {
+    "baseline": (True, True, True, True, True, True, True, True),
+    "v10": (True, True, True, True, True, True, False, False),
+    "history-v2": (True, True, True, True, True, True, True, False),
+    "quiet-see": (True, True, True, True, True, True, False, True),
+    "current": (False, False, False, False, False, False, False, False),
 }
 
 # Conservative selective-search parameters. Values are intentionally modest:
@@ -83,6 +85,20 @@ V10_NMP_VERIFY_DEPTH = 8
 V10_NMP_EVAL_DIVISOR = 220
 V10_NMP_MAX_EVAL_BONUS = 2
 V10_GOOD_HISTORY_THRESHOLD = 170
+
+# Signed butterfly history uses a bounded gravity update, so recent evidence
+# can move an old entry in either direction without clearing the table. The
+# values are deliberately separate from the frozen V10 scale.
+HISTORY_V2_LIMIT = 16_384
+HISTORY_V2_DEPTH_SCALE = 16
+HISTORY_V2_UPDATE_CAP = 2_048
+HISTORY_V2_GOOD_THRESHOLD = 512
+HISTORY_V2_BAD_THRESHOLD = -512
+
+# Quiet SEE is a conservative shallow non-PV pruning rule. Checks, killers,
+# high-history moves and the first ordered move are always preserved.
+QUIET_SEE_MAX_DEPTH = 6
+QUIET_SEE_MARGIN_PER_DEPTH_SQUARED = 30
 
 STAT_NODES = 0
 STAT_QNODES = 1
@@ -636,6 +652,29 @@ def _order_moves(
 
 
 @njit(cache=False, inline="always")
+def _bounded_history_update(
+    side: int,
+    move: int,
+    delta: int,
+    quiet_history: NDArray[np.int32],
+) -> None:
+    """Apply a signed gravity update while keeping history in fixed bounds."""
+    from_square = engine.move_from(move)
+    to_square = engine.move_to(move)
+    bounded_delta = max(
+        -HISTORY_V2_UPDATE_CAP,
+        min(HISTORY_V2_UPDATE_CAP, delta),
+    )
+    previous = int(quiet_history[side, from_square, to_square])
+    update = bounded_delta - (
+        previous * abs(bounded_delta) // HISTORY_V2_LIMIT
+    )
+    quiet_history[side, from_square, to_square] = np.int32(
+        max(-HISTORY_V2_LIMIT, min(HISTORY_V2_LIMIT, previous + update))
+    )
+
+
+@njit(cache=False, inline="always")
 def _record_quiet_cutoff(
     side: int,
     move: int,
@@ -647,11 +686,33 @@ def _record_quiet_cutoff(
     if ply < MAX_PLY and move != int(killers[ply, 0]):
         killers[ply, 1] = killers[ply, 0]
         killers[ply, 0] = np.int32(move)
-    from_square = engine.move_from(move)
-    to_square = engine.move_to(move)
-    bonus = depth * depth
-    previous = int(quiet_history[side, from_square, to_square])
-    quiet_history[side, from_square, to_square] = min(1_000_000, previous + bonus)
+    if ENABLE_HISTORY_V2:
+        bonus = HISTORY_V2_DEPTH_SCALE * depth * depth
+        _bounded_history_update(side, move, bonus, quiet_history)
+    else:
+        from_square = engine.move_from(move)
+        to_square = engine.move_to(move)
+        bonus = depth * depth
+        previous = int(quiet_history[side, from_square, to_square])
+        quiet_history[side, from_square, to_square] = min(
+            1_000_000, previous + bonus
+        )
+
+
+@njit(cache=False, inline="always")
+def _record_quiet_failures(
+    side: int,
+    depth: int,
+    moves: NDArray[np.int32],
+    searched_quiet: NDArray[np.int32],
+    cutoff_index: int,
+    quiet_history: NDArray[np.int32],
+) -> None:
+    """Penalize quiet alternatives actually searched before a quiet cutoff."""
+    malus = -(HISTORY_V2_DEPTH_SCALE * depth * depth)
+    for index in range(cutoff_index):
+        if searched_quiet[index] != 0:
+            _bounded_history_update(side, int(moves[index]), malus, quiet_history)
 
 
 @njit(cache=False)
@@ -768,13 +829,10 @@ def _quiescence(
         material_gain = 0
         if not in_check:
             material_gain = _immediate_material_gain(pieces, state, move)
-        nnue.update_for_move(
-            pieces,
-            state,
-            move,
-            accumulator_stack[ply],
-            accumulator_stack[ply + 1],
-        )
+        # A qeval-cache hit can bypass NNUE evaluation and leave a row stale
+        # after a king-bucket transition. Refresh before mutating the board so
+        # a subsequently searched child always derives from the right parent.
+        nnue.refresh(pieces, accumulator_stack[ply])
         engine.make_move(
             pieces, state, key, move, undo_stack[ply], undo_key_stack[ply]
         )
@@ -793,6 +851,14 @@ def _quiescence(
                     pieces, state, key, move, undo_stack[ply], undo_key_stack[ply]
                 )
                 continue
+        # Roughly half of ordered qsearch moves fail the checks above. Delay
+        # the feature deltas until we know the child will actually be searched.
+        nnue.update_after_move(
+            move,
+            undo_stack[ply],
+            accumulator_stack[ply],
+            accumulator_stack[ply + 1],
+        )
         history[history_count] = key[0]
         child_score, aborted = _quiescence(
             pieces,
@@ -964,6 +1030,8 @@ def _negamax(
         or ENABLE_V10_QUIET_FUTILITY
         or ENABLE_V10_SEE_PRUNING
         or ENABLE_V10_CONTEXTUAL_LMR
+        or ENABLE_HISTORY_V2
+        or ENABLE_QUIET_SEE_PRUNING
     )
     # V10 classifies node type from the entry window, before a TT bound can
     # narrow a PV window to width one. The all-off profile deliberately keeps
@@ -1140,6 +1208,12 @@ def _negamax(
         score_stack[ply],
         see_gain_stack[ply],
     )
+    if ENABLE_HISTORY_V2:
+        # The ordering scores are dead after sorting. Reuse this per-ply row as
+        # an exact record of quiet moves that were actually searched, excluding
+        # moves skipped by a pruning rule.
+        for index in range(count):
+            score_stack[ply, index] = 0
     best = -INFINITY
     best_move = 0
     for index in range(count):
@@ -1148,6 +1222,7 @@ def _negamax(
         quiet = flags & (engine.FLAG_CAPTURE | engine.FLAG_PROMOTION) == 0
         quiet_hist = 0
         is_killer = False
+        good_history_threshold = V10_GOOD_HISTORY_THRESHOLD
         if quiet:
             quiet_from = engine.move_from(move)
             quiet_to = engine.move_to(move)
@@ -1157,6 +1232,8 @@ def _negamax(
                     move == int(killers[ply, 0])
                     or move == int(killers[ply, 1])
                 )
+            if ENABLE_HISTORY_V2:
+                good_history_threshold = HISTORY_V2_GOOD_THRESHOLD
         capture_see = 0
         if (
             ENABLE_V10_SEE_PRUNING
@@ -1167,6 +1244,22 @@ def _negamax(
         ):
             # SEE must be evaluated on the pre-move position.
             capture_see = static_exchange_eval(
+                pieces, state, move, see_gain_stack[ply]
+            )
+        quiet_see = 0
+        if (
+            ENABLE_QUIET_SEE_PRUNING
+            and quiet
+            and flags & engine.FLAG_CASTLING == 0
+            and not in_check
+            and not is_killer
+            and quiet_hist < good_history_threshold
+            and depth <= QUIET_SEE_MAX_DEPTH
+            and index > 0
+        ):
+            # Like capture SEE, quiet SEE must inspect the pre-move position.
+            # It measures whether the moved piece can survive on its destination.
+            quiet_see = static_exchange_eval(
                 pieces, state, move, see_gain_stack[ply]
             )
         nnue.update_for_move(
@@ -1196,7 +1289,7 @@ def _negamax(
                     if (
                         index >= lmp_limit
                         and not is_killer
-                        and quiet_hist < V10_GOOD_HISTORY_THRESHOLD
+                        and quiet_hist < good_history_threshold
                     ):
                         prune_move = True
                 if (
@@ -1210,9 +1303,20 @@ def _negamax(
                     if (
                         static_eval + qf_margin <= alpha
                         and not is_killer
-                        and quiet_hist < V10_GOOD_HISTORY_THRESHOLD
+                        and quiet_hist < good_history_threshold
                     ):
                         prune_move = True
+                if (
+                    not prune_move
+                    and ENABLE_QUIET_SEE_PRUNING
+                    and depth <= QUIET_SEE_MAX_DEPTH
+                    and index > 0
+                    and not is_killer
+                    and quiet_hist < good_history_threshold
+                    and quiet_see
+                    < -QUIET_SEE_MARGIN_PER_DEPTH_SQUARED * depth * depth
+                ):
+                    prune_move = True
             elif (
                 ENABLE_V10_SEE_PRUNING
                 and depth <= V10_SEE_MAX_DEPTH
@@ -1247,8 +1351,10 @@ def _negamax(
                     reduction += 1
                 if not non_pv:
                     reduction -= 1
-                if quiet_hist >= V10_GOOD_HISTORY_THRESHOLD:
+                if quiet_hist >= good_history_threshold:
                     reduction -= 1
+                elif ENABLE_HISTORY_V2 and quiet_hist <= HISTORY_V2_BAD_THRESHOLD:
+                    reduction += 1
                 if is_killer:
                     reduction -= 1
                 reduction = max(0, min(reduction, depth - 2))
@@ -1393,6 +1499,8 @@ def _negamax(
         )
         if aborted:
             return 0, True
+        if ENABLE_HISTORY_V2 and quiet:
+            score_stack[ply, index] = 1
         score = -child_score
         if score > best:
             best = score
@@ -1405,6 +1513,15 @@ def _negamax(
                 _record_quiet_cutoff(
                     side, move, ply, depth, killers, quiet_history
                 )
+                if ENABLE_HISTORY_V2:
+                    _record_quiet_failures(
+                        side,
+                        depth,
+                        legal_stack[ply],
+                        score_stack[ply],
+                        index,
+                        quiet_history,
+                    )
             break
 
     bound = TT_UPPER if best <= original_alpha else TT_LOWER if best >= original_beta else TT_EXACT
@@ -1635,10 +1752,34 @@ def _history_buffer(
     return history, count
 
 
+def _should_stop_after_iteration(
+    *,
+    elapsed_s: float,
+    soft_limit_s: float,
+    normal_limit_s: float,
+    hard_limit_s: float,
+    stable_iterations: int,
+    unstable: bool,
+    last_iteration_s: float,
+) -> bool:
+    """Stop only between completed iterations while preserving the hard limit."""
+    if (
+        elapsed_s >= soft_limit_s
+        and stable_iterations >= STABLE_ITERATIONS_REQUIRED
+    ):
+        return True
+    if elapsed_s >= normal_limit_s and not unstable:
+        return True
+    predicted_next_s = last_iteration_s * NEXT_ITERATION_COST_MULTIPLIER
+    return hard_limit_s - elapsed_s <= predicted_next_s
+
+
 def search_position(
     position: engine.Position,
     memory: SearchMemory,
     *,
+    soft_time_limit_s: float | None = None,
+    normal_time_limit_s: float | None = None,
     time_limit_s: float | None = None,
     node_limit: int = 0,
     max_depth: int = MAX_DEPTH,
@@ -1648,6 +1789,13 @@ def search_position(
         raise ValueError("a positive time or node limit is required")
     if time_limit_s is not None and time_limit_s <= 0:
         raise ValueError("time_limit_s must be positive")
+    if (soft_time_limit_s is None) != (normal_time_limit_s is None):
+        raise ValueError("soft and normal time limits must be provided together")
+    if soft_time_limit_s is not None and normal_time_limit_s is not None:
+        if time_limit_s is None:
+            raise ValueError("adaptive time limits require a hard time limit")
+        if not 0 < soft_time_limit_s <= normal_time_limit_s <= time_limit_s:
+            raise ValueError("time limits must satisfy 0 < soft <= normal <= hard")
     if not 1 <= max_depth <= MAX_DEPTH:
         raise ValueError(f"max_depth must be between 1 and {MAX_DEPTH}")
 
@@ -1687,11 +1835,14 @@ def search_position(
     best_score = 0
     completed_depth = 0
     stopped = False
+    stable_iterations = 0
+    last_iteration_s = 0.0
     try:
         for depth in range(1, max_depth + 1):
             if time_limit_s is not None and time.perf_counter() - started >= time_limit_s:
                 stopped = True
                 break
+            iteration_started = time.perf_counter()
             window = 45
             alpha = -INFINITY if depth <= 2 else best_score - window
             beta = INFINITY if depth <= 2 else best_score + window
@@ -1731,7 +1882,8 @@ def search_position(
                 # from the last fully completed depth instead.
                 stopped = True
                 break
-            if score <= alpha or score >= beta:
+            aspiration_failed = score <= alpha or score >= beta
+            if aspiration_failed:
                 score, move, aborted, _partial_move = _search_root(
                     working.pieces,
                     working.state,
@@ -1765,11 +1917,47 @@ def search_position(
                 if aborted:
                     stopped = True
                     break
+            previous_move = best_move
+            previous_score = best_score
+            had_previous_iteration = completed_depth > 0
+            move_changed = had_previous_iteration and move != previous_move
+            score_delta = abs(score - previous_score) if had_previous_iteration else 0
+            if (
+                had_previous_iteration
+                and not move_changed
+                and score_delta <= STABLE_SCORE_DELTA
+                and not aspiration_failed
+            ):
+                stable_iterations += 1
+            else:
+                stable_iterations = 0
             best_move = move
             best_score = score
             completed_depth = depth
+            last_iteration_s = time.perf_counter() - iteration_started
             if abs(score) >= MATE_BOUND:
                 break
+            if (
+                soft_time_limit_s is not None
+                and normal_time_limit_s is not None
+                and time_limit_s is not None
+            ):
+                elapsed_s = time.perf_counter() - started
+                unstable = (
+                    move_changed
+                    or score_delta >= UNSTABLE_SCORE_DELTA
+                    or aspiration_failed
+                )
+                if _should_stop_after_iteration(
+                    elapsed_s=elapsed_s,
+                    soft_limit_s=soft_time_limit_s,
+                    normal_limit_s=normal_time_limit_s,
+                    hard_limit_s=time_limit_s,
+                    stable_iterations=stable_iterations,
+                    unstable=unstable,
+                    last_iteration_s=last_iteration_s,
+                ):
+                    break
     finally:
         stop[0] = np.uint8(1)
         if timer is not None:
@@ -1797,11 +1985,11 @@ def search_position(
 
 def available_profiles() -> tuple[str, ...]:
     """Return the compile-time profiles supported by this challenger."""
-    return tuple(_V10_PROFILES)
+    return tuple(_S1_PROFILES)
 
 
 def configure_experiment(name: str) -> None:
-    """Select a V10 profile before Numba compiles the recursive search."""
+    """Select an S1 profile before Numba compiles the recursive search."""
     global ACTIVE_PROFILE
     global ENABLE_V10_CONTEXTUAL_LMR
     global ENABLE_V10_DYNAMIC_NMP
@@ -1809,8 +1997,10 @@ def configure_experiment(name: str) -> None:
     global ENABLE_V10_QUIET_FUTILITY
     global ENABLE_V10_REVERSE_FUTILITY
     global ENABLE_V10_SEE_PRUNING
+    global ENABLE_HISTORY_V2
+    global ENABLE_QUIET_SEE_PRUNING
 
-    if name not in _V10_PROFILES:
+    if name not in _S1_PROFILES:
         choices = ", ".join(available_profiles())
         raise ValueError(f"unknown search profile {name!r}; choose from {choices}")
     if _negamax.signatures or _quiescence.signatures:
@@ -1822,7 +2012,9 @@ def configure_experiment(name: str) -> None:
         ENABLE_V10_QUIET_FUTILITY,
         ENABLE_V10_SEE_PRUNING,
         ENABLE_V10_CONTEXTUAL_LMR,
-    ) = _V10_PROFILES[name]
+        ENABLE_HISTORY_V2,
+        ENABLE_QUIET_SEE_PRUNING,
+    ) = _S1_PROFILES[name]
     ACTIVE_PROFILE = name
 
 

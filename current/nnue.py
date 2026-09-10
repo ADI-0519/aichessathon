@@ -184,13 +184,15 @@ def rebuild(pieces: NDArray[np.uint64], accumulators: NDArray[np.int32]) -> None
 
 
 @njit(cache=False)
-def update_for_move(
-    pieces: NDArray[np.uint64],
-    state: NDArray[np.int64],
+def _update_from_metadata(
     move: int,
+    moving_piece: int,
+    captured_piece: int,
+    captured_square: int,
     parent: NDArray[np.int32],
     child: NDArray[np.int32],
 ) -> None:
+    """Apply one move to a known-fresh accumulator using board undo metadata."""
     for perspective in range(2):
         for column in range(ACCUMULATOR_ROW):
             child[perspective, column] = parent[perspective, column]
@@ -198,17 +200,10 @@ def update_for_move(
     white_bucket = int(parent[0, BUCKET_SLOT])
     black_bucket = int(parent[1, BUCKET_SLOT])
 
-    side = int(state[engine.STATE_SIDE])
-    enemy = engine.BLACK if side == engine.WHITE else engine.WHITE
+    side = moving_piece // engine.PIECE_KIND_COUNT
     from_square = engine.move_from(move)
     to_square = engine.move_to(move)
     flags = engine.move_flags(move)
-    moving_piece = engine.piece_at(
-        pieces,
-        from_square,
-        side * engine.PIECE_KIND_COUNT,
-        (side + 1) * engine.PIECE_KIND_COUNT,
-    )
     _apply_feature(child, moving_piece, from_square, -1, white_bucket, black_bucket)
 
     placed_piece = moving_piece
@@ -216,15 +211,6 @@ def update_for_move(
         placed_piece = engine.piece_index(side, engine.move_promotion(move))
     _apply_feature(child, placed_piece, to_square, 1, white_bucket, black_bucket)
 
-    captured_square = to_square
-    if flags & engine.FLAG_EN_PASSANT:
-        captured_square = to_square - 8 if side == engine.WHITE else to_square + 8
-    captured_piece = engine.piece_at(
-        pieces,
-        captured_square,
-        enemy * engine.PIECE_KIND_COUNT,
-        (enemy + 1) * engine.PIECE_KIND_COUNT,
-    )
     if captured_piece != engine.NO_PIECE:
         _apply_feature(
             child, captured_piece, captured_square, -1, white_bucket, black_bucket
@@ -251,6 +237,67 @@ def update_for_move(
         else:
             if int(KING_BUCKETS[to_square ^ 56]) != black_bucket:
                 child[1, BUCKET_SLOT] = STALE
+
+
+@njit(cache=False)
+def update_for_move(
+    pieces: NDArray[np.uint64],
+    state: NDArray[np.int64],
+    move: int,
+    parent: NDArray[np.int32],
+    child: NDArray[np.int32],
+) -> None:
+    """Build a child accumulator before making ``move`` on the board."""
+    # A TT return or qeval-cache hit can skip evaluation after a king crosses
+    # a bucket. Incremental deltas are valid only relative to a fresh parent.
+    refresh(pieces, parent)
+
+    side = int(state[engine.STATE_SIDE])
+    enemy = engine.BLACK if side == engine.WHITE else engine.WHITE
+    from_square = engine.move_from(move)
+    to_square = engine.move_to(move)
+    flags = engine.move_flags(move)
+    moving_piece = engine.piece_at(
+        pieces,
+        from_square,
+        side * engine.PIECE_KIND_COUNT,
+        (side + 1) * engine.PIECE_KIND_COUNT,
+    )
+    captured_square = to_square
+    if flags & engine.FLAG_EN_PASSANT:
+        captured_square = to_square - 8 if side == engine.WHITE else to_square + 8
+    captured_piece = engine.piece_at(
+        pieces,
+        captured_square,
+        enemy * engine.PIECE_KIND_COUNT,
+        (enemy + 1) * engine.PIECE_KIND_COUNT,
+    )
+    _update_from_metadata(
+        move,
+        moving_piece,
+        captured_piece,
+        captured_square,
+        parent,
+        child,
+    )
+
+
+@njit(cache=False)
+def update_after_move(
+    move: int,
+    undo: NDArray[np.int64],
+    parent: NDArray[np.int32],
+    child: NDArray[np.int32],
+) -> None:
+    """Build a child accumulator after ``move`` using its populated undo row."""
+    _update_from_metadata(
+        move,
+        int(undo[engine.UNDO_MOVING_PIECE]),
+        int(undo[engine.UNDO_CAPTURED_PIECE]),
+        int(undo[engine.UNDO_CAPTURED_SQUARE]),
+        parent,
+        child,
+    )
 
 
 @njit(cache=False, inline="always")
