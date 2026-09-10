@@ -31,8 +31,10 @@ LR_SCHEDULE="${LR_SCHEDULE:-cosine}"
 # node is often far fewer than the machine has. Oversubscribing here would
 # thrash our own packing and everyone else's jobs with it.
 VISIBLE_CPUS="$(nproc)"
-WORKERS="${WORKERS:-$(( VISIBLE_CPUS > 4 ? VISIBLE_CPUS - 2 : 2 ))}"
-THREADS="${THREADS:-$(( VISIBLE_CPUS > 8 ? 4 : 1 ))}"
+# Half the visible cores, capped at 16. Taking nearly all of them starves the
+# other jobs on this node, which need CPU to feed their own GPUs.
+WORKERS="${WORKERS:-$(( VISIBLE_CPUS > 4 ? (VISIBLE_CPUS / 2 > 16 ? 16 : VISIBLE_CPUS / 2) : 2 ))}"
+THREADS="${THREADS:-1}"   # packing is pure Python; native threads only contend
 NICE="${NICE:-15}"
 GPU_FREE_MB="${GPU_FREE_MB:-40000}"     # a GPU must have at least this free
 GPU_MAX_UTIL="${GPU_MAX_UTIL:-10}"      # ...and be no busier than this percent
@@ -175,7 +177,7 @@ stage "fetching $MONTHS Parquet months into $SOURCE_DIR"
 BASE="https://huggingface.co/datasets/Lichess/fishnet-evals/resolve/main"
 SOURCES=()
 fetched=0
-for year in 2014 2015 2016; do
+for year in 2014 2015 2016 2017 2018 2019 2020; do
   for month in 01 02 03 04 05 06 07 08 09 10 11 12; do
     (( fetched >= MONTHS )) && break 2
     name="standard_rated_${year}_${month}.parquet"
@@ -187,9 +189,18 @@ for year in 2014 2015 2016; do
         continue
       fi
       mv "$target.part" "$target"
+      size=$(stat -c%s "$target")
+      if (( size < 65536 )); then
+        say "  $name is empty ($size bytes), that month has no data; skipping"
+        rm -f "$target"
+        continue
+      fi
       say "  downloaded $name ($(du -h "$target" | cut -f1))"
+    elif (( $(stat -c%s "$target") < 65536 )); then
+      say "  $name is empty, skipping"
+      continue
     else
-      say "  reusing $name"
+      say "  reusing $name ($(du -h "$target" | cut -f1))"
     fi
     SOURCES+=(--source "$target")
     fetched=$((fetched + 1))
