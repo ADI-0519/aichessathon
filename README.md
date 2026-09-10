@@ -20,13 +20,12 @@ shortcuts when `make` is available, but none of the commands in this guide requi
 
 ## Current engine
 
-The current champion is the team-trained KingNet75 evaluator combined with the promoted, exact
-qsearch evaluation cache and V7's continuous-time search. It is a Numba-compiled alpha-beta engine
-with a 16-bucket king-conditioned NNUE blended 75:25 with handcrafted evaluation, persistent
-search memory, conservative selective search, and completed-iteration timeout safety. The
-combined build accepted the +20 Elo SPRT hypothesis against the prior champion after 61 pairs,
-scoring 72.54% with zero technical failures. Packaging places the readable `current/` sources and
-weights at the submission zip root.
+The current champion is V14 Runtime: the team-trained KingNet75 evaluator and exact qsearch cache,
+V12's safety and ordering work, V13's material-aware time horizon and guarded log-log LMR, and an
+exact post-pruning main-search accumulator update. It scored 27 wins, 23 draws and 10 losses
+(64.17%, about +101 Elo) over 30 paired development openings against frozen V12, with a paired 95%
+score interval of 56.49% to 71.85% and zero technical failures. Packaging places the readable
+`current/` sources and weights at the submission zip root.
 `agent.py` exposes the required function:
 
 ```python

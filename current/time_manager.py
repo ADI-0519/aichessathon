@@ -1,10 +1,9 @@
-"""Continuous, move-aware clock allocation for the fixed tournament control."""
-
+# Material-aware adaptive clock allocation for V13.
 from __future__ import annotations
 
 from dataclasses import dataclass
 
-MAX_BUDGET_MS = 4_500
+MAX_NORMAL_BUDGET_MS = 4_500
 MAX_HARD_BUDGET_MS = 8_000
 MIN_RESERVE_MS = 250
 MAX_RESERVE_MS = 2_000
@@ -16,28 +15,44 @@ HARD_BUDGET_DENOMINATOR = 5
 
 @dataclass(frozen=True, slots=True)
 class MoveTimeLimits:
-    """Three search deadlines, all covered by the retained clock reserve."""
-
     soft_ms: int
     normal_ms: int
     hard_ms: int
 
 
-def estimated_moves_remaining(fullmove_number: int) -> int:
-    """Estimate our remaining decisions without relying on hidden game state."""
+def _move_number_horizon(fullmove_number: int) -> int:
     move_number = max(1, fullmove_number)
     return max(12, min(32, 32 - (2 * move_number) // 5))
 
 
-def move_time_limits(time_left_ms: int, fullmove_number: int) -> MoveTimeLimits:
-    """Return adaptive deadlines while retaining a hard clock reserve.
+def _material_horizon(piece_count: int) -> int:
+    pieces = max(2, min(32, piece_count))
+    if pieces >= 26:
+        return 40
+    if pieces >= 20:
+        return 34
+    if pieces >= 14:
+        return 32
+    if pieces >= 8:
+        return 24
+    return 10
 
-    The declining moves-to-go estimate spends progressively more of the clock
-    in late middlegames and endings.  The small credit models part of the fixed
-    500 ms increment, but tapers towards zero on a critically low clock. Stable
-    searches may stop at the soft limit; unstable searches may use the hard
-    limit without touching the reserve.
-    """
+
+def estimated_moves_remaining(fullmove_number: int, piece_count: int = 32) -> int:
+    material = _material_horizon(piece_count)
+    move_number = _move_number_horizon(fullmove_number)
+    if piece_count >= 14:
+        return max(material, move_number)
+    if fullmove_number < 35:
+        return max(material, move_number)
+    return material
+
+
+def move_time_limits(
+    time_left_ms: int,
+    fullmove_number: int,
+    piece_count: int = 32,
+) -> MoveTimeLimits:
     if time_left_ms <= 0:
         return MoveTimeLimits(0, 0, 0)
 
@@ -49,10 +64,11 @@ def move_time_limits(time_left_ms: int, fullmove_number: int) -> MoveTimeLimits:
     if usable_ms == 0:
         return MoveTimeLimits(0, 0, 0)
 
-    moves_remaining = estimated_moves_remaining(fullmove_number)
+    moves_remaining = estimated_moves_remaining(fullmove_number, piece_count)
     increment_credit_ms = 350 * time_left_ms // (time_left_ms + 5_000)
     target_ms = usable_ms // moves_remaining + increment_credit_ms
-    normal_ms = max(0, min(MAX_BUDGET_MS, usable_ms, target_ms))
+
+    normal_ms = max(1, min(MAX_NORMAL_BUDGET_MS, usable_ms, target_ms))
     soft_ms = max(
         1,
         normal_ms * SOFT_BUDGET_NUMERATOR // SOFT_BUDGET_DENOMINATOR,
@@ -65,6 +81,13 @@ def move_time_limits(time_left_ms: int, fullmove_number: int) -> MoveTimeLimits:
     return MoveTimeLimits(soft_ms, normal_ms, max(normal_ms, hard_ms))
 
 
-def move_budget_ms(time_left_ms: int, fullmove_number: int) -> int:
-    """Return the normal deadline for compatibility with existing tooling."""
-    return move_time_limits(time_left_ms, fullmove_number).normal_ms
+def move_budget_ms(
+    time_left_ms: int,
+    fullmove_number: int,
+    piece_count: int = 32,
+) -> int:
+    return move_time_limits(
+        time_left_ms,
+        fullmove_number,
+        piece_count,
+    ).normal_ms

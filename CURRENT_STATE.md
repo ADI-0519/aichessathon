@@ -1,6 +1,6 @@
 # Current engine state
 
-Updated: 9 September 2026
+Updated: 10 September 2026
 
 ## Deployable champion
 
@@ -8,17 +8,16 @@ Updated: 9 September 2026
 diagnostic, type-checking, and packaging commands all target it. Packaging copies the contents of
 that directory to the archive root, where the platform imports `agent.py`.
 
-- Engine generation: Search V10 with KingNet75 and exact qsearch evaluation caching
-- Exact Search V10 promotion candidate: `challengers/exp_search_v10/`
-- Frozen pre-V10 champion: `challengers/exp_kingnet75_qcache/`
-- Rollback artifact: `submission_v7.zip`
-- Fresh local artifact: `submission.zip` (gitignored and rebuilt with `make zip`)
-- Lineage: V5 NNUE -> V6 stable timeout -> V7 continuous allocation -> qcache -> KingNet75 -> Search V10
+- Engine generation: V14 Runtime with KingNet75, exact qsearch caching and V13 search
+- Exact promoted snapshot: `challengers/exp_release_v14_runtime/`
+- Frozen rollback champion: `challengers/exp_release_v12/`
+- Versioned release artifact: `submission_v14.zip`
+- Fresh canonical artifact: `submission.zip` (gitignored and rebuilt with `make zip`)
+- Lineage: V7 -> qcache -> KingNet75 -> Search V10 -> V12 -> V13 Search -> V14 Runtime
 
-The current source is the exact executable promotion candidate, apart from descriptive package
-metadata. It combines V7's reliability fixes, qsearch cache, team-trained KingNet evaluator, and
-the validated Search V10 pruning/reduction bundle. Engine files no longer live at the repository
-root, and the repository root must not be packaged as an agent.
+The current executable files and model are byte-identical to the tested V14 Runtime snapshot;
+only descriptive package metadata differs. Engine files no longer live at the repository root,
+and the repository root must not be packaged as an agent.
 
 ## Promoted evaluator
 
@@ -47,6 +46,11 @@ the weights are considered submission-ready.
   killer moves, quiet history, late-move reductions, and guarded null-move pruning.
 - Search V10's dynamic null-move reduction, reverse futility, late-move pruning, quiet futility,
   SEE pruning, and contextual LMR.
+- V12's signed history maluses, conservative quiet SEE, stale-accumulator repair, and adaptive
+  completed-iteration timing.
+- V13's material-aware horizon, larger transposition table, safe partial-root recovery, log-log
+  interior LMR, and guarded root LMR with verification.
+- V14's exact post-pruning main-search accumulator updates and reduced import warm-up.
 - A 65,536-entry direct-mapped cache for exact blended static evaluations reached in quiescence.
 - Persistent per-game search memory and repetition history.
 - Last-completed-iteration timeout safety and continuous, move-aware clock allocation.
@@ -71,10 +75,11 @@ code/model assets copied from another engine.
 | KingNet75/qcache vs prior `current/`, development SPRT | 71W 35D 16L, 72.54%, about +169 Elo over 61 pairs | Accepted H1 in the 0-versus-20 Elo pentanomial SPRT; promote. |
 | Search V10 vs KingNet75/qcache, development, 25 pairs | 24W 10D 16L, 58.0%, about +56 Elo, zero failures | Positive development result. |
 | Search V10 vs KingNet75/qcache, independent validation, 25 pairs | 24W 11D 15L, 59.0%, about +63 Elo, zero failures | Confirmed the direction on the held-out split; promote. |
+| V14 Runtime vs frozen V12, development, 30 pairs | 27W 23D 10L, 64.17%, about +101 Elo; paired 95% score interval 56.49% to 71.85%; zero failures | Direct promotion evidence; V14 Runtime becomes canonical champion. |
+| V14 qTT vs V14 Runtime, 10 pairs | 4W 8D 8L, 40.0%, about -70 Elo; zero failures | Reject qTT and its exact-tree early-probe optimisation. |
 
-Search V10 with KingNet75/qcache is now the strength champion. Historical ladder losses remain
-useful as position-distribution diagnostics, but they came from the older submitted lineage and
-are not direct measurements of this engine.
+V14 Runtime is now the strength champion. Historical ladder losses remain useful as
+position-distribution diagnostics but are not direct measurements of this engine.
 
 ## Completed experiments
 
@@ -111,14 +116,11 @@ NNUE-only, no-LMR, no-null, and no-LMR/no-null searches on six rated-error posit
 
 Keep `current/` frozen while the next lanes are measured independently:
 
-1. Benchmark V11-BIG widths with equal neutral-output semantics, including package size,
-   import/JIT time, evaluator/update throughput, fixed-node NPS, and timed depth.
-2. Train the selected width from scratch on source-disjoint mixed data and gate it on material-aware
-   validation, runtime parity, search throughput, paired games, and official-clock safety.
-3. Rebase adaptive time management onto Search V10 as a separate challenger and test it at official
-   or near-official clocks; short games cannot exercise healthy-clock extensions properly.
-4. Screen the already-built S1-lean search challenger cheaply. Do not combine it with evaluator or
-   time changes before its isolated result is known.
+1. Run faithful V12/V14 replay over rounds 97 onward and retain only genuine decision regressions.
+2. Investigate V14's one-million-node `Rxb2` miss without globally disabling pruning.
+3. Measure initialization on the platform validation log; do not trade playing NPS for local-Colab
+   warm-up improvements.
+4. Keep qTT rejected and test any further search mechanism in an isolated challenger.
 
 Behaviour-changing candidates now use the integrated five-bin logistic-Elo GSPRT. Exact semantic
 optimisations use equivalence plus throughput gates instead of an inappropriate Elo hypothesis.

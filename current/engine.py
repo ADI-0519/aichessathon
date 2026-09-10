@@ -1172,7 +1172,6 @@ def warmup() -> None:
     position = position_from_board(chess.Board())
     legal_moves(position)
     legal_captures(position)
-    perft(position, 1)
     undo = np.empty(UNDO_SIZE, dtype=np.int64)
     undo_key = np.empty(1, dtype=np.uint64)
     make_null_move(position.pieces, position.state, position.key, undo, undo_key)

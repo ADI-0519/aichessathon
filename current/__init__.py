@@ -1,1 +1,1 @@
-"""Last-day V12 release candidate built on the proven Search V10 champion."""
+"""V14 Runtime champion: V13 search with exact post-pruning NNUE updates."""

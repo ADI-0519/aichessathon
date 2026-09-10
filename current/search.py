@@ -47,8 +47,26 @@ TT_BOUND = 3
 TT_GENERATION = 4
 TT_HALFMOVE = 5
 TT_FIELD_COUNT = 6
-DEFAULT_TT_BITS = 18
+DEFAULT_TT_BITS = 20
 Q_EVAL_BITS = 16
+
+LMR_TABLE_MAX = 64
+LMR_TABLE = np.zeros((LMR_TABLE_MAX, LMR_TABLE_MAX), dtype=np.int32)
+for _lmr_depth in range(1, LMR_TABLE_MAX):
+    for _lmr_index in range(1, LMR_TABLE_MAX):
+        _base_reduction = int(
+            0.75
+            + np.log(float(_lmr_depth))
+            * np.log(float(_lmr_index))
+            / 2.25
+        )
+        LMR_TABLE[_lmr_depth, _lmr_index] = max(1, _base_reduction)
+
+ROOT_LMR_MIN_DEPTH = 6
+ROOT_LMR_MIN_INDEX = 4
+ROOT_LMR_DEEP_DEPTH = 9
+ROOT_LMR_DEEP_INDEX = 10
+
 
 # Search V10 plus the independently switchable S1 move-ordering layer.
 ENABLE_V10_DYNAMIC_NMP = True
@@ -1262,13 +1280,8 @@ def _negamax(
             quiet_see = static_exchange_eval(
                 pieces, state, move, see_gain_stack[ply]
             )
-        nnue.update_for_move(
-            pieces,
-            state,
-            move,
-            accumulator_stack[ply],
-            accumulator_stack[ply + 1],
-        )
+        nnue.refresh(pieces, accumulator_stack[ply])
+
         engine.make_move(
             pieces, state, key, move, undo_stack[ply], undo_key_stack[ply]
         )
@@ -1331,6 +1344,15 @@ def _negamax(
             )
             continue
 
+        # Same accumulator transition as update_for_move(), except the populated
+        # undo row now tells us exactly which piece moved/captured.
+        nnue.update_after_move(
+            move,
+            undo_stack[ply],
+            accumulator_stack[ply],
+            accumulator_stack[ply + 1],
+        )
+
         reduction = 0
         lmr_start_index = 3 if ENABLE_V10_CONTEXTUAL_LMR else 4
         if (
@@ -1340,15 +1362,13 @@ def _negamax(
             and not in_check
             and not gives_check
         ):
-            reduction = 1
+            reduction = int(
+                LMR_TABLE[
+                    min(depth, LMR_TABLE_MAX - 1),
+                    min(index, LMR_TABLE_MAX - 1),
+                ]
+            )
             if ENABLE_V10_CONTEXTUAL_LMR:
-                # Late quiets at deep non-PV nodes can be reduced more, while
-                # good history / killer moves earn back depth. This is still
-                # intentionally much milder than a modern Stockfish table.
-                if depth >= 6 and index >= 7:
-                    reduction += 1
-                if depth >= 9 and index >= 13:
-                    reduction += 1
                 if not non_pv:
                     reduction -= 1
                 if quiet_hist >= good_history_threshold:
@@ -1357,9 +1377,7 @@ def _negamax(
                     reduction += 1
                 if is_killer:
                     reduction -= 1
-                reduction = max(0, min(reduction, depth - 2))
-            else:
-                reduction = max(1, min(reduction, depth - 2))
+            reduction = max(0, min(reduction, depth - 2))
 
         reduced = reduction > 0
         child_depth = depth - 1 - reduction if reduced else depth - 1
@@ -1578,6 +1596,7 @@ def _search_root(
     if _visit_node(stats, stop, node_limit, False):
         return 0, preferred_move, True, 0
     side = int(state[engine.STATE_SIDE])
+    root_in_check = engine.is_in_check(pieces, side)
     count = engine.generate_legal_moves(
         pieces,
         state,
@@ -1614,6 +1633,17 @@ def _search_root(
     improved_move = 0
     for index in range(count):
         move = int(legal_stack[0, index])
+        flags = engine.move_flags(move)
+        quiet = flags & (engine.FLAG_CAPTURE | engine.FLAG_PROMOTION) == 0
+        quiet_hist = 0
+        if quiet:
+            quiet_hist = int(
+                quiet_history[
+                    side,
+                    engine.move_from(move),
+                    engine.move_to(move),
+                ]
+            )
         nnue.update_for_move(
             pieces,
             state,
@@ -1623,12 +1653,34 @@ def _search_root(
         )
         engine.make_move(pieces, state, key, move, undo_stack[0], undo_key_stack[0])
         history[history_count] = key[0]
+        gives_check = engine.is_in_check(pieces, int(state[engine.STATE_SIDE]))
+        good_root_history = (
+            HISTORY_V2_GOOD_THRESHOLD
+            if ENABLE_HISTORY_V2
+            else V10_GOOD_HISTORY_THRESHOLD
+        )
+        root_reduction = 0
+        if (
+            index > 0
+            and depth >= ROOT_LMR_MIN_DEPTH
+            and index >= ROOT_LMR_MIN_INDEX
+            and not root_in_check
+            and quiet
+            and flags & engine.FLAG_CASTLING == 0
+            and not gives_check
+            and quiet_hist < good_root_history
+        ):
+            root_reduction = 1
+            if depth >= ROOT_LMR_DEEP_DEPTH and index >= ROOT_LMR_DEEP_INDEX:
+                root_reduction = 2
+            root_reduction = min(root_reduction, max(0, depth - 2))
+        child_depth = depth - 1 - root_reduction
         if index == 0:
             child_score, aborted = _negamax(
                 pieces,
                 state,
                 key,
-                depth - 1,
+                child_depth,
                 -beta,
                 -alpha,
                 1,
@@ -1660,7 +1712,7 @@ def _search_root(
                 pieces,
                 state,
                 key,
-                depth - 1,
+                child_depth,
                 -alpha - 1,
                 -alpha,
                 1,
@@ -1687,6 +1739,42 @@ def _search_root(
                 node_limit,
                 stats,
             )
+            if (
+                not aborted
+                and root_reduction > 0
+                and -child_score > alpha
+            ):
+                child_score, aborted = _negamax(
+                    pieces,
+                    state,
+                    key,
+                    depth - 1,
+                    -alpha - 1,
+                    -alpha,
+                    1,
+                    True,
+                    history,
+                    history_count + 1,
+                    root_history_count,
+                    legal_stack,
+                    pseudo_stack,
+                    undo_stack,
+                    undo_key_stack,
+                    accumulator_stack,
+                    score_stack,
+                    see_gain_stack,
+                    killers,
+                    quiet_history,
+                    q_eval_keys,
+                    q_eval_scores,
+                    q_eval_valid,
+                    tt_keys,
+                    tt_data,
+                    generation,
+                    stop,
+                    node_limit,
+                    stats,
+                )
             if not aborted and -child_score > alpha and -child_score < beta:
                 child_score, aborted = _negamax(
                     pieces,
@@ -1877,9 +1965,10 @@ def search_position(
                 stats,
             )
             if aborted:
-                # A root move from an interrupted iteration has not been
-                # compared against every legal alternative.  Keep the result
-                # from the last fully completed depth instead.
+                # Keep only a fully completed deeper root move that already
+                # raised alpha; otherwise retain the last completed-depth move.
+                if _partial_move != 0:
+                    best_move = _partial_move
                 stopped = True
                 break
             aspiration_failed = score <= alpha or score >= beta
@@ -1915,6 +2004,8 @@ def search_position(
                     stats,
                 )
                 if aborted:
+                    if _partial_move != 0:
+                        best_move = _partial_move
                     stopped = True
                     break
             previous_move = best_move

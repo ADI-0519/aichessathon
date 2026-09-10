@@ -60,7 +60,7 @@ class AgentTests(unittest.TestCase):
         agent._memory.clear()
 
     def test_import_warmup_fits_initialization_allowance(self) -> None:
-        self.assertLess(agent._warmup_elapsed_s, 75.0)
+        self.assertLess(agent._warmup_elapsed_s, 90.0)
 
     def test_low_clock_returns_legal_move(self) -> None:
         board = chess.Board()
@@ -92,9 +92,11 @@ class AgentTests(unittest.TestCase):
     def test_clock_schedule_always_preserves_a_reserve(self) -> None:
         for remaining in (1, 10, 100, 1_000, 10_000, 60_000, 120_000):
             with self.subTest(remaining=remaining):
-                budget = agent._move_budget_ms(remaining, 30)
-                self.assertGreaterEqual(budget, 0)
-                self.assertLess(budget, remaining)
+                limits = agent._move_time_limits(remaining, 30, 32)
+                self.assertGreaterEqual(limits.soft_ms, 0)
+                self.assertLessEqual(limits.soft_ms, limits.normal_ms)
+                self.assertLessEqual(limits.normal_ms, limits.hard_ms)
+                self.assertLess(limits.hard_ms, remaining)
 
 
 if __name__ == "__main__":

@@ -81,7 +81,11 @@ def _choose_move(fen: str, time_left_ms: int) -> str:
     if len(legal_moves) == 1:
         chosen = fallback
     else:
-        limits = _move_time_limits(time_left_ms, board.fullmove_number)
+        limits = _move_time_limits(
+            time_left_ms,
+            board.fullmove_number,
+            int(board.occupied).bit_count(),
+        )
         chosen = fallback
         if limits.hard_ms > 0:
             position = engine.position_from_board(board)
