@@ -116,6 +116,58 @@ class ReleaseV14QttTests(unittest.TestCase):
         self.assertEqual(int(self.data[index, self.search.TT_DEPTH]), 0)
         self.assertEqual(int(self.stats[self.search.STAT_QTT_STORES]), 1)
 
+    def test_mate_score_is_rebased_when_probed_at_another_ply(self) -> None:
+        key = 3
+        stored_ply = 7
+        probed_ply = 2
+        score = self.search.MATE_SCORE - 12
+        self.search._qtt_store.py_func(
+            np.uint64(key),
+            0,
+            score,
+            self.search.TT_EXACT,
+            stored_ply,
+            1,
+            self.keys,
+            self.data,
+            self.stats,
+        )
+        result, cutoff = self.search._qtt_probe.py_func(
+            np.uint64(key),
+            0,
+            -self.search.INFINITY,
+            self.search.INFINITY,
+            probed_ply,
+            self.keys,
+            self.data,
+            self.stats,
+        )
+        self.assertTrue(cutoff)
+        self.assertEqual(
+            int(result),
+            score + stored_ply - probed_ply,
+        )
+
+    def test_qsearch_probe_can_reuse_main_search_bounds(self) -> None:
+        key = 4
+        index = key
+        self.keys[index] = np.uint64(key)
+        self.data[index, self.search.TT_SCORE] = np.int32(65)
+        self.data[index, self.search.TT_DEPTH] = np.int32(5)
+        self.data[index, self.search.TT_BOUND] = np.int32(self.search.TT_LOWER)
+        self.data[index, self.search.TT_GENERATION] = np.int32(9)
+        self.data[index, self.search.TT_HALFMOVE] = np.int32(7)
+
+        self.assertEqual(self._probe(key, beta=60), (65, True))
+        self.assertEqual(self._probe(key, beta=70), (0, False))
+
+    def test_selective_pruning_suppresses_final_exact_and_upper_bounds(self) -> None:
+        final_bound = self.search._qtt_final_bound.py_func
+        self.assertEqual(final_bound(20, 10, False), self.search.TT_EXACT)
+        self.assertEqual(final_bound(10, 10, False), self.search.TT_UPPER)
+        self.assertEqual(final_bound(20, 10, True), self.search.TT_EMPTY)
+        self.assertEqual(final_bound(10, 10, True), self.search.TT_EMPTY)
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -831,6 +831,17 @@ def _qtt_store(
     )
     stats[STAT_QTT_STORES] += 1
 
+
+@njit(cache=False, inline="always")
+def _qtt_final_bound(best: int, original_alpha: int, pruned_any: bool) -> int:
+    """Return a safe non-cutoff qsearch bound, or TT_EMPTY if none exists."""
+    if pruned_any:
+        return TT_EMPTY
+    if best <= original_alpha:
+        return TT_UPPER
+    return TT_EXACT
+
+
 @njit(cache=False)
 def _quiescence(
     pieces: NDArray[np.uint64],
@@ -1062,8 +1073,8 @@ def _quiescence(
 
     # Delta and SEE pruning deliberately omit legal moves. They preserve a
     # lower bound after a cutoff, but cannot justify an exact or upper result.
-    if not pruned_any:
-        bound = TT_UPPER if best <= original_alpha else TT_EXACT
+    bound = _qtt_final_bound(best, original_alpha, pruned_any)
+    if bound != TT_EMPTY:
         _qtt_store(
             key[0],
             int(state[engine.STATE_HALFMOVE]),
