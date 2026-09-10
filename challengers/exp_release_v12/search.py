@@ -27,6 +27,10 @@ MAX_HISTORY = 512
 STOP_POLL_MASK = 255
 SEE_MAX_EXCHANGES = 32
 DELTA_MARGIN = 120
+STABLE_ITERATIONS_REQUIRED = 2
+STABLE_SCORE_DELTA = 30
+UNSTABLE_SCORE_DELTA = 75
+NEXT_ITERATION_COST_MULTIPLIER = 1.5
 
 # Percentage of the static evaluation supplied by the learned model.  Keep this
 # as a source constant so every packaged challenger is reproducible.
@@ -1748,10 +1752,34 @@ def _history_buffer(
     return history, count
 
 
+def _should_stop_after_iteration(
+    *,
+    elapsed_s: float,
+    soft_limit_s: float,
+    normal_limit_s: float,
+    hard_limit_s: float,
+    stable_iterations: int,
+    unstable: bool,
+    last_iteration_s: float,
+) -> bool:
+    """Stop only between completed iterations while preserving the hard limit."""
+    if (
+        elapsed_s >= soft_limit_s
+        and stable_iterations >= STABLE_ITERATIONS_REQUIRED
+    ):
+        return True
+    if elapsed_s >= normal_limit_s and not unstable:
+        return True
+    predicted_next_s = last_iteration_s * NEXT_ITERATION_COST_MULTIPLIER
+    return hard_limit_s - elapsed_s <= predicted_next_s
+
+
 def search_position(
     position: engine.Position,
     memory: SearchMemory,
     *,
+    soft_time_limit_s: float | None = None,
+    normal_time_limit_s: float | None = None,
     time_limit_s: float | None = None,
     node_limit: int = 0,
     max_depth: int = MAX_DEPTH,
@@ -1761,6 +1789,13 @@ def search_position(
         raise ValueError("a positive time or node limit is required")
     if time_limit_s is not None and time_limit_s <= 0:
         raise ValueError("time_limit_s must be positive")
+    if (soft_time_limit_s is None) != (normal_time_limit_s is None):
+        raise ValueError("soft and normal time limits must be provided together")
+    if soft_time_limit_s is not None and normal_time_limit_s is not None:
+        if time_limit_s is None:
+            raise ValueError("adaptive time limits require a hard time limit")
+        if not 0 < soft_time_limit_s <= normal_time_limit_s <= time_limit_s:
+            raise ValueError("time limits must satisfy 0 < soft <= normal <= hard")
     if not 1 <= max_depth <= MAX_DEPTH:
         raise ValueError(f"max_depth must be between 1 and {MAX_DEPTH}")
 
@@ -1800,11 +1835,14 @@ def search_position(
     best_score = 0
     completed_depth = 0
     stopped = False
+    stable_iterations = 0
+    last_iteration_s = 0.0
     try:
         for depth in range(1, max_depth + 1):
             if time_limit_s is not None and time.perf_counter() - started >= time_limit_s:
                 stopped = True
                 break
+            iteration_started = time.perf_counter()
             window = 45
             alpha = -INFINITY if depth <= 2 else best_score - window
             beta = INFINITY if depth <= 2 else best_score + window
@@ -1844,7 +1882,8 @@ def search_position(
                 # from the last fully completed depth instead.
                 stopped = True
                 break
-            if score <= alpha or score >= beta:
+            aspiration_failed = score <= alpha or score >= beta
+            if aspiration_failed:
                 score, move, aborted, _partial_move = _search_root(
                     working.pieces,
                     working.state,
@@ -1878,11 +1917,47 @@ def search_position(
                 if aborted:
                     stopped = True
                     break
+            previous_move = best_move
+            previous_score = best_score
+            had_previous_iteration = completed_depth > 0
+            move_changed = had_previous_iteration and move != previous_move
+            score_delta = abs(score - previous_score) if had_previous_iteration else 0
+            if (
+                had_previous_iteration
+                and not move_changed
+                and score_delta <= STABLE_SCORE_DELTA
+                and not aspiration_failed
+            ):
+                stable_iterations += 1
+            else:
+                stable_iterations = 0
             best_move = move
             best_score = score
             completed_depth = depth
+            last_iteration_s = time.perf_counter() - iteration_started
             if abs(score) >= MATE_BOUND:
                 break
+            if (
+                soft_time_limit_s is not None
+                and normal_time_limit_s is not None
+                and time_limit_s is not None
+            ):
+                elapsed_s = time.perf_counter() - started
+                unstable = (
+                    move_changed
+                    or score_delta >= UNSTABLE_SCORE_DELTA
+                    or aspiration_failed
+                )
+                if _should_stop_after_iteration(
+                    elapsed_s=elapsed_s,
+                    soft_limit_s=soft_time_limit_s,
+                    normal_limit_s=normal_time_limit_s,
+                    hard_limit_s=time_limit_s,
+                    stable_iterations=stable_iterations,
+                    unstable=unstable,
+                    last_iteration_s=last_iteration_s,
+                ):
+                    break
     finally:
         stop[0] = np.uint8(1)
         if timer is not None:

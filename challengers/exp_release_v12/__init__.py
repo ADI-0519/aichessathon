@@ -1,1 +1,1 @@
-"""Search V10 challenger with signed history and quiet SEE experiments."""
+"""Last-day V12 release candidate built on the proven Search V10 champion."""

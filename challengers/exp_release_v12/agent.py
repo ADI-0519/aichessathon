@@ -20,7 +20,7 @@ import chess  # noqa: E402 - thread limits must precede native-library imports
 import engine  # noqa: E402
 import numpy as np  # noqa: E402
 import search  # noqa: E402
-from time_manager import move_budget_ms as _move_budget_ms  # noqa: E402
+from time_manager import move_time_limits as _move_time_limits  # noqa: E402
 
 _memory = search.SearchMemory.create()
 _game_board: chess.Board | None = None
@@ -81,15 +81,17 @@ def _choose_move(fen: str, time_left_ms: int) -> str:
     if len(legal_moves) == 1:
         chosen = fallback
     else:
-        budget_ms = _move_budget_ms(time_left_ms, board.fullmove_number)
+        limits = _move_time_limits(time_left_ms, board.fullmove_number)
         chosen = fallback
-        if budget_ms > 0:
+        if limits.hard_ms > 0:
             position = engine.position_from_board(board)
             prior_history = np.asarray(_position_history, dtype=np.uint64)
             result = search.search_position(
                 position,
                 _memory,
-                time_limit_s=budget_ms / 1_000.0,
+                soft_time_limit_s=limits.soft_ms / 1_000.0,
+                normal_time_limit_s=limits.normal_ms / 1_000.0,
+                time_limit_s=limits.hard_ms / 1_000.0,
                 prior_history=prior_history,
             )
             candidate = chess.Move.from_uci(engine.move_to_uci(result.move))

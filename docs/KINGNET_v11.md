@@ -293,3 +293,18 @@ MODEL="benchmarks/runs/kingnet-v11-mixed80m/model.npz"
 
 Training artifacts remain under ignored `benchmarks/runs/`. Preserve the manifest
 and run-specific configuration beside every candidate model.
+
+## Mixed80m result
+
+The completed 256-wide run selected epoch 16 with validation objective
+`0.0075940354`. Better offline validation did not translate into stronger timed
+search against the deployed Search V10 champion:
+
+- V11 at 75% learned blend: 13 wins, 7 draws, 20 losses (41.25%);
+- V11 at 100% learned blend: 11 wins, 12 draws, 17 losses (42.5%).
+
+Both comparisons used the same 20 paired development openings at 10 seconds
+plus 0.1 seconds and had zero technical failures. The half-point recovery from
+removing HCE is too small and noisy to rescue the model. Both runtime candidates
+are rejected for the final-day release; the data, configuration, checkpoints and
+model remain useful evidence for a later retraining cycle.
