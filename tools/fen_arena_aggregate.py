@@ -27,6 +27,8 @@ def main() -> None:
     terminations: Counter[str] = Counter()
     failures: Counter[str] = Counter()
     by_position: defaultdict[int, list[float]] = defaultdict(list)
+    clean_markers: Counter[str] = Counter()
+    clean_by_position: defaultdict[int, list[float]] = defaultdict(list)
 
     for log in sorted(arguments.log_dir.glob("shard-*.log")):
         offset = int(log.stem.split("-")[1])
@@ -37,9 +39,14 @@ def main() -> None:
             marker, termination = match.group(3), match.group(4)
             markers[marker] += 1
             terminations[termination] += 1
+            position = offset + int(match.group(1))
+            by_position[position].append(POINTS[marker])
             if termination in FAILED_TERMINATIONS:
-                failures[termination] += 1
-            by_position[offset + int(match.group(1))].append(POINTS[marker])
+                # marker tells which side the failure cost the game
+                failures[f"{termination} scored {marker}"] += 1
+                continue
+            clean_markers[marker] += 1
+            clean_by_position[position].append(POINTS[marker])
 
     games = sum(markers.values())
     if not games:
@@ -61,10 +68,31 @@ def main() -> None:
             f"over {len(pairs)} complete pairs"
         )
     print("terminations: " + ", ".join(f"{k} {v}" for k, v in sorted(terminations.items())))
-    if failures:
-        print("FAILED terminations: " + ", ".join(f"{k} {v}" for k, v in failures.items()))
-    else:
+    if not failures:
         print("FAILED terminations: none")
+        return
+
+    print("FAILED terminations: " + ", ".join(f"{k} {v}" for k, v in failures.items()))
+    # a game opponent lost to crash/flag isn't a game we won
+    clean_games = sum(clean_markers.values())
+    if not clean_games:
+        return
+    clean_pairs = [
+        statistics.mean(scores) for scores in clean_by_position.values() if len(scores) == 2
+    ]
+    clean_score = (clean_markers["+"] + clean_markers["="] / 2) / clean_games
+    print(
+        f"excluding them: +{clean_markers['+']} ={clean_markers['=']} -{clean_markers['-']}, "
+        f"score {clean_score:.1%} over {clean_games} games"
+    )
+    if len(clean_pairs) > 1:
+        clean_error = statistics.stdev(clean_pairs) / math.sqrt(len(clean_pairs))
+        print(
+            f"  paired standard error {clean_error:.1%}, "
+            f"95% interval {clean_score - 1.96 * clean_error:.1%} "
+            f"to {clean_score + 1.96 * clean_error:.1%} "
+            f"over {len(clean_pairs)} complete pairs"
+        )
 
 
 if __name__ == "__main__":
