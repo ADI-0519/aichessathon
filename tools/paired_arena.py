@@ -165,7 +165,15 @@ def main() -> None:
             if outcome.termination in FAILED_TERMINATIONS:
                 failures[outcome.termination] = failures.get(outcome.termination, 0) + 1
             if arguments.pgn_dir is not None:
-                name = f"game-{game_number:02d}-{marker}.pgn"
+                # Name by the global position, not by a counter that restarts at
+                # one in every shard: paired_arena_shards points four of these at
+                # the same directory, and a per-shard counter silently overwrites
+                # three quarters of the run.
+                colour = "w" if candidate_is_white else "b"
+                name = (
+                    f"game-p{arguments.offset + position_number:03d}"
+                    f"-{colour}-{marker}.pgn"
+                )
                 (arguments.pgn_dir / name).write_text(outcome.pgn, encoding="utf-8")
             print(
                 f"game {game_number}/{len(suite) * 2}, position {position_number}, "
