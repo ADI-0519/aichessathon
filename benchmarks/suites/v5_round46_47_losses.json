@@ -1,0 +1,24 @@
+{
+  "schema_version": 1,
+  "description": "First major V5 errors in AI Chessathon rated rounds 46 and 47. Diagnostic regressions only; reference moves come from independent Stockfish 18 analysis at 100,000 nodes.",
+  "positions": [
+    {
+      "id": "round46-20-be2",
+      "label": "Elbow Grease, White move 20",
+      "fen": "r2q1rk1/bp3ppp/p1p2n2/P7/1P1P2b1/2QB1N2/5PPP/R1B1R1K1 w - - 1 20",
+      "played_move": "c1e3",
+      "reference_move": "d3e2",
+      "baseline_move": "c1e3",
+      "diagnosis": "V5 played Be3 and allowed ...Bxf3, worsening an already uncomfortable middlegame by roughly 109 cp; Be2 keeps the bishop and pawn structure coordinated."
+    },
+    {
+      "id": "round47-11-nd4",
+      "label": "Keep Kann and Caro On, Black move 11",
+      "fen": "r2q1rk1/ppp1bppp/1nn5/4p3/P7/1B1P1Q1P/1PP2PP1/RNB1R1K1 b - - 2 11",
+      "played_move": "d8d7",
+      "reference_move": "c6d4",
+      "baseline_move": "d8d7",
+      "diagnosis": "V5 played Qd7 instead of the centralising Nd4, swinging from a small advantage to a clear disadvantage by roughly 150 cp."
+    }
+  ]
+}

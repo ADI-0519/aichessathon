@@ -1,0 +1,29 @@
+{
+  "output": {
+    "bytes": 47991,
+    "name": "openings_8moves_v3_500.epd",
+    "sha256": "e637babf9a0c83ab14ccbc39e4d493e69bd4482e0c68d367f9b480c2cb4e4e32",
+    "suite_digest": "2716e72baad04e73eacdd0c09c8b660fc726a416f2d396dbeb7bfdb57abd3f58"
+  },
+  "schema_version": 1,
+  "selection": {
+    "method": "lowest-sha256-v1",
+    "requested_positions": 500,
+    "seed": "aichessathon-openings-v1",
+    "unique_source_positions": 34700
+  },
+  "source": {
+    "bytes": 8037438,
+    "name": "8moves_v3.pgn",
+    "sha256": "5835239f88cc2c7511b177c32392a69f3ede21819cf0616f80a7f907cd21d17e",
+    "url": "https://github.com/official-stockfish/books/blob/master/8moves_v3.pgn.zip"
+  },
+  "splits": {
+    "counts": {
+      "development": 302,
+      "holdout": 93,
+      "validation": 105
+    },
+    "seed": "aichessathon-backtest-v2"
+  }
+}

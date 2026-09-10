@@ -1,0 +1,33 @@
+{
+  "schema_version": 1,
+  "description": "Major V5 errors in AI Chessathon rated round 50. Diagnostic regressions only; reference moves come from independent Stockfish 18 analysis at 100,000 nodes.",
+  "positions": [
+    {
+      "id": "round50-35-qd7",
+      "label": "The Castle Gambit, Black move 35",
+      "fen": "5rk1/6rp/3qpppQ/1p1p4/p1nP1PR1/P1P2N1P/1P2R1P1/7K b - - 9 35",
+      "played_move": "f8f7",
+      "reference_move": "d6d7",
+      "baseline_move": "f8f7",
+      "diagnosis": "After White's 35.Rg4 blunder, V5 immediately returned most of an approximately three-pawn advantage with 35...Rff7 instead of 35...Qd7, a loss of roughly 239 cp."
+    },
+    {
+      "id": "round50-44-b4",
+      "label": "The Castle Gambit, Black move 44",
+      "fen": "7k/2q3rp/4pp1Q/1p1p4/p2PnPP1/P1P2N2/1P4R1/6K1 b - - 8 44",
+      "played_move": "c7c4",
+      "reference_move": "b5b4",
+      "baseline_move": "c7c4",
+      "diagnosis": "V5 played 44...Qc4 instead of the forcing 44...b4 while still holding about 45 seconds, surrendering roughly 161 cp and its renewed winning chances."
+    },
+    {
+      "id": "round50-81-qd6",
+      "label": "The Castle Gambit, Black move 81",
+      "fen": "8/5k2/5p1p/8/p5P1/P1P1Q1K1/1P6/3q4 b - - 2 81",
+      "played_move": "d1h1",
+      "reference_move": "d1d6",
+      "baseline_move": "d1h1",
+      "diagnosis": "In an equal queen ending, V5 played 81...Qh1 instead of 81...Qd6+ and fell to roughly -1.2 despite retaining about 26 seconds."
+    }
+  ]
+}

@@ -1,0 +1,105 @@
+{
+  "schema_version": 1,
+  "description": "Critical endgame positions from AI Chessathon rounds 40 and 41.",
+  "positions": [
+    {
+      "id": "team-keble-39-d5",
+      "label": "Team Keble, White move 39",
+      "fen": "8/3k2p1/p3rp1p/PpQ5/2pP2P1/8/5P1P/6K1 w - - 5 39",
+      "played_move": "h2h4",
+      "reference_move": "d4d5",
+      "baseline_move": "h2h4",
+      "diagnosis": "V5 chose h4 with a winning position; Stockfish preferred activating the passed d-pawn with d5."
+    },
+    {
+      "id": "team-keble-40-qd5",
+      "label": "Team Keble, White move 40",
+      "fen": "8/3k2p1/p1r2p1p/PpQ5/2pP2PP/8/5P2/6K1 w - - 1 40",
+      "played_move": "c5a7",
+      "reference_move": "c5d5",
+      "baseline_move": "c5a7",
+      "diagnosis": "V5 spent about 1.4 seconds on Qa7+, losing much of a winning advantage; Qd5 centralises with checks and supports the passer."
+    },
+    {
+      "id": "team-keble-41-qa8",
+      "label": "Team Keble, White move 41",
+      "fen": "8/Q5p1/p1rk1p1p/Pp6/2pP2PP/8/5P2/6K1 w - - 3 41",
+      "played_move": "a7g7",
+      "reference_move": "a7a8",
+      "baseline_move": "a7g7",
+      "diagnosis": "V5 grabbed a pawn with Qxg7 instead of maintaining queen activity and the winning attack with Qa8."
+    },
+    {
+      "id": "team-keble-42-g5",
+      "label": "Team Keble, White move 42",
+      "fen": "8/6Q1/p1r2p1p/Pp1k4/2pP2PP/8/5P2/6K1 w - - 1 42",
+      "played_move": "g7h6",
+      "reference_move": "g4g5",
+      "baseline_move": "g7h6",
+      "diagnosis": "V5 took another pawn with Qxh6 instead of using g5 to restrict the king and preserve the attack."
+    },
+    {
+      "id": "team-keble-43-qg7",
+      "label": "Team Keble, White move 43",
+      "fen": "8/8/p1r2p1Q/Pp1k4/3P2PP/2p5/5P2/6K1 w - - 0 43",
+      "played_move": "h6f4",
+      "reference_move": "h6g7",
+      "baseline_move": "h6f4",
+      "diagnosis": "V5 allowed ...c2 with Qf4 and the evaluation fell from winning to equal; Qg7 retains control and checks."
+    },
+    {
+      "id": "this-team-26-nc8",
+      "label": "this team, Black move 26",
+      "fen": "6k1/p1r1n1p1/1p3r1p/PR2Np2/2pP4/2P1P2P/2B1KPP1/8 b - - 4 26",
+      "played_move": "f6e6",
+      "reference_move": "e7c8",
+      "baseline_move": "f6e6",
+      "diagnosis": "V5 chose Re6 and moved from roughly equal to clearly worse; Nc8 keeps the rook active and contains White's pieces."
+    },
+    {
+      "id": "this-team-38-rb5",
+      "label": "this team, Black move 38",
+      "fen": "7k/pr4p1/R5np/3B1p2/8/4PK1P/5PP1/8 b - - 0 38",
+      "played_move": "b7d7",
+      "reference_move": "b7b5",
+      "baseline_move": "b7d7",
+      "diagnosis": "V5 chose passive Rd7 instead of Rb5 and turned a defensible ending into a substantially worse one."
+    },
+    {
+      "id": "this-team-41-nxf5",
+      "label": "this team, Black move 41",
+      "fen": "7k/p1r3p1/R6p/5B2/6Kn/4P2P/5PP1/8 b - - 2 41",
+      "played_move": "h4g2",
+      "reference_move": "h4f5",
+      "baseline_move": "h4g2",
+      "diagnosis": "V5 grabbed the g2 pawn with Nxg2 instead of eliminating the active bishop with Nxf5."
+    },
+    {
+      "id": "this-team-47-kh7",
+      "label": "this team, Black move 47",
+      "fen": "7k/p3r1p1/R6p/8/8/7P/6BK/8 b - - 3 47",
+      "played_move": "h8g8",
+      "reference_move": "h8h7",
+      "baseline_move": "h8g8",
+      "diagnosis": "V5 missed Kh7 in a rook-and-bishop ending and gave away a substantial part of its drawing chances."
+    },
+    {
+      "id": "this-team-51-rf6",
+      "label": "this team, Black move 51",
+      "fen": "5k2/p4rp1/R6p/7P/8/5BK1/8/8 b - - 2 51",
+      "played_move": "f7c7",
+      "reference_move": "f7f6",
+      "baseline_move": "f7c7",
+      "diagnosis": "V5 played Rc7 instead of the active defensive move Rf6 and missed another near-equal defensive chance."
+    },
+    {
+      "id": "this-team-52-rf7",
+      "label": "this team, Black move 52",
+      "fen": "5k2/p1r3p1/R6p/7P/8/5B2/5K2/8 b - - 4 52",
+      "played_move": "f8f7",
+      "reference_move": "c7f7",
+      "baseline_move": "f8f7",
+      "diagnosis": "V5 chose Kf7 rather than activating the rook with Rf7 and lost the final practical drawing opportunity."
+    }
+  ]
+}

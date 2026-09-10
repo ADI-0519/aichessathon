@@ -1,0 +1,51 @@
+{
+  "schema_version": 1,
+  "description": "First major V5 errors in the completed V5-versus-V4 validation run. These positions are diagnostic regressions only; they are no longer held-out evidence.",
+  "positions": [
+    {
+      "id": "validation-04-17-kg8",
+      "label": "Validation game 4, Black move 17",
+      "fen": "4r3/5k1p/p3p1p1/8/P2QPb2/2N5/2q3PP/5R1K b - - 1 25",
+      "played_move": "e6e5",
+      "reference_move": "f7g8",
+      "baseline_move": "e6e5",
+      "diagnosis": "V5 pushed e5 and changed a roughly defensible position into a clearly inferior one; Kg8 preserves king safety and coordination."
+    },
+    {
+      "id": "validation-10-32-h6",
+      "label": "Validation game 10, Black move 32",
+      "fen": "r6k/7p/p3pP2/P7/2P1p1P1/1R6/8/6K1 b - - 0 39",
+      "played_move": "h8g8",
+      "reference_move": "h7h6",
+      "baseline_move": "h8g8",
+      "diagnosis": "V5 moved the king away instead of playing h6, allowing White's connected advanced pawns to become decisive."
+    },
+    {
+      "id": "validation-15-27-ra5",
+      "label": "Validation game 15, White move 27",
+      "fen": "8/5k2/P5p1/1R3p2/2p4p/5K1P/2r3P1/8 w - - 0 35",
+      "played_move": "b5b7",
+      "reference_move": "b5a5",
+      "baseline_move": "b5b7",
+      "diagnosis": "V5 answered ...c4 with Rb7+ and discarded a winning advantage; Ra5 keeps the rook behind the passer and controls Black's connected pawns."
+    },
+    {
+      "id": "validation-17-16-rac1",
+      "label": "Validation game 17, White move 16",
+      "fen": "r2q2k1/2p2pb1/4r1p1/n6p/P2Pp3/1pQ1P1PP/3B1PB1/R4RK1 w - - 2 24",
+      "played_move": "f1b1",
+      "reference_move": "a1c1",
+      "baseline_move": "f1b1",
+      "diagnosis": "V5 placed the wrong rook on b1 and allowed Black to consolidate the advanced b-pawn; Rac1 contests the open file while preserving flexibility."
+    },
+    {
+      "id": "validation-19-17-dxc4",
+      "label": "Validation game 19, Black move 17",
+      "fen": "r4rk1/p2qnpp1/1pnBp2p/3pP2P/P1PP4/5N2/4QPP1/R4RK1 b - - 0 17",
+      "played_move": "f8c8",
+      "reference_move": "d5c4",
+      "baseline_move": "f8c8",
+      "diagnosis": "V5 played the natural-looking Rfc8 and lost its advantage; dxc4 resolves the central tension before committing the rook."
+    }
+  ]
+}

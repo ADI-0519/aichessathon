@@ -1,0 +1,60 @@
+{
+  "schema_version": 1,
+  "description": "Six independently labelled V5 ladder errors from rounds 46, 47, 48, and 50. This compact suite is for mechanism diagnosis, not Elo estimation.",
+  "positions": [
+    {
+      "id": "round46-20-be2",
+      "label": "Elbow Grease, White move 20",
+      "fen": "r2q1rk1/bp3ppp/p1p2n2/P7/1P1P2b1/2QB1N2/5PPP/R1B1R1K1 w - - 1 20",
+      "played_move": "c1e3",
+      "reference_move": "d3e2",
+      "baseline_move": "c1e3",
+      "diagnosis": "V5 played Be3 and allowed ...Bxf3, worsening an already uncomfortable middlegame by roughly 109 cp; Be2 keeps the bishop and pawn structure coordinated."
+    },
+    {
+      "id": "round47-11-nd4",
+      "label": "Keep Kann and Caro On, Black move 11",
+      "fen": "r2q1rk1/ppp1bppp/1nn5/4p3/P7/1B1P1Q1P/1PP2PP1/RNB1R1K1 b - - 2 11",
+      "played_move": "d8d7",
+      "reference_move": "c6d4",
+      "baseline_move": "d8d7",
+      "diagnosis": "V5 played Qd7 instead of the centralising Nd4, swinging from a small advantage to a clear disadvantage by roughly 150 cp."
+    },
+    {
+      "id": "round48-49-kh7",
+      "label": "Keresight, Black move 49",
+      "fen": "8/5pk1/1p4p1/2p1Q3/3p1K2/5P2/8/1r6 b - - 4 49",
+      "played_move": "g7g8",
+      "reference_move": "g7h7",
+      "baseline_move": "g7g8",
+      "diagnosis": "V5 spent only about 1.24 seconds despite having 41.5 seconds left and played Kg8 in an equal ending. The move loses by force; Kh7 holds."
+    },
+    {
+      "id": "round50-35-qd7",
+      "label": "The Castle Gambit, Black move 35",
+      "fen": "5rk1/6rp/3qpppQ/1p1p4/p1nP1PR1/P1P2N1P/1P2R1P1/7K b - - 9 35",
+      "played_move": "f8f7",
+      "reference_move": "d6d7",
+      "baseline_move": "f8f7",
+      "diagnosis": "After White's 35.Rg4 blunder, V5 immediately returned most of an approximately three-pawn advantage with 35...Rff7 instead of 35...Qd7, a loss of roughly 239 cp."
+    },
+    {
+      "id": "round50-44-b4",
+      "label": "The Castle Gambit, Black move 44",
+      "fen": "7k/2q3rp/4pp1Q/1p1p4/p2PnPP1/P1P2N2/1P4R1/6K1 b - - 8 44",
+      "played_move": "c7c4",
+      "reference_move": "b5b4",
+      "baseline_move": "c7c4",
+      "diagnosis": "V5 played 44...Qc4 instead of the forcing 44...b4 while still holding about 45 seconds, surrendering roughly 161 cp and its renewed winning chances."
+    },
+    {
+      "id": "round50-81-qd6",
+      "label": "The Castle Gambit, Black move 81",
+      "fen": "8/5k2/5p1p/8/p5P1/P1P1Q1K1/1P6/3q4 b - - 2 81",
+      "played_move": "d1h1",
+      "reference_move": "d1d6",
+      "baseline_move": "d1h1",
+      "diagnosis": "In an equal queen ending, V5 played 81...Qh1 instead of 81...Qd6+ and fell to roughly -1.2 despite retaining about 26 seconds."
+    }
+  ]
+}
