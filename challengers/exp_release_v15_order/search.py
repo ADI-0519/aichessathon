@@ -1421,14 +1421,13 @@ def _negamax(
         and _has_non_pawn_material(pieces, side)
     )
     if (
-        not in_check
+        excluded_move == 0
+        and not in_check
         and abs(beta) < MATE_BOUND
         and non_pv
         and (
             (
-                ENABLE_V10_REVERSE_FUTILITY
-                and excluded_move == 0
-                and depth <= V10_RFP_MAX_DEPTH
+                ENABLE_V10_REVERSE_FUTILITY and depth <= V10_RFP_MAX_DEPTH
             )
             or (ENABLE_V10_QUIET_FUTILITY and depth <= V10_QF_MAX_DEPTH)
             or (ENABLE_V10_DYNAMIC_NMP and null_move_candidate)

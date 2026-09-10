@@ -25,6 +25,7 @@ from time_manager import move_time_limits as _move_time_limits  # noqa: E402
 _memory = search.SearchMemory.create()
 _game_board: chess.Board | None = None
 _position_history: list[np.uint64] = []
+EMERGENCY_CLOCK_MS = 100
 
 
 def _canonical_fen(board: chess.Board) -> str:
@@ -43,6 +44,32 @@ def _reset_game(board: chess.Board, *, clear_memory: bool = True) -> chess.Board
     if clear_memory:
         _memory.clear()
     return board
+
+
+def _commit_move(board: chess.Board, move: chess.Move) -> str:
+    """Persist the position before and after every returned legal move."""
+    global _game_board
+    current_key = _key_for(board)
+    if not _position_history or _position_history[-1] != current_key:
+        _position_history.append(current_key)
+    board.push(move)
+    _position_history.append(_key_for(board))
+    _game_board = board
+    return move.uci()
+
+
+def _fallback_move(fen: str) -> str:
+    """Return a legal move and retain continuity whenever bookkeeping permits."""
+    board = chess.Board(fen)
+    try:
+        move = next(iter(board.legal_moves))
+    except StopIteration:
+        return "0000"
+    try:
+        return _commit_move(board, move)
+    except Exception as error:
+        print(f"fallback state update failed: {type(error).__name__}: {error}")
+        return move.uci()
 
 
 def _sync_board(fen: str) -> chess.Board:
@@ -67,14 +94,8 @@ def _sync_board(fen: str) -> chess.Board:
 
 
 def _choose_move(fen: str, time_left_ms: int) -> str:
-    global _game_board
-    if time_left_ms <= 100:
-        board = chess.Board(fen)
-        try:
-            move = next(iter(board.legal_moves))
-        except StopIteration:
-            return "0000"
-        return move.uci()
+    if time_left_ms <= EMERGENCY_CLOCK_MS:
+        return _fallback_move(fen)
 
     board = _sync_board(fen)
     legal_moves = list(board.legal_moves)
@@ -107,10 +128,7 @@ def _choose_move(fen: str, time_left_ms: int) -> str:
 
     if chosen not in board.legal_moves:
         chosen = fallback
-    board.push(chosen)
-    _position_history.append(_key_for(board))
-    _game_board = board
-    return chosen.uci()
+    return _commit_move(board, chosen)
 
 
 def get_move(fen: str, time_left_ms: int) -> str:
@@ -119,12 +137,7 @@ def get_move(fen: str, time_left_ms: int) -> str:
         return _choose_move(fen, time_left_ms)
     except Exception as error:
         print(f"compiled challenger failed, using fallback: {type(error).__name__}: {error}")
-        board = chess.Board(fen)
-        try:
-            move = next(iter(board.legal_moves))
-        except StopIteration:
-            return "0000"
-        return move.uci()
+        return _fallback_move(fen)
 
 
 _warmup_started = time.perf_counter()
