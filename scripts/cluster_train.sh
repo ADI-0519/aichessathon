@@ -23,15 +23,15 @@ MONTHS="${MONTHS:-3}"
 ACCUMULATOR="${ACCUMULATOR:-256}"
 HIDDEN="${HIDDEN:-32}"
 EPOCHS="${EPOCHS:-24}"
+BATCH_SIZE="${BATCH_SIZE:-16384}"
+TRAIN_TARGET="${TRAIN_TARGET:-200000000}"
+VALIDATION_TARGET="${VALIDATION_TARGET:-1000000}"
+LR_SCHEDULE="${LR_SCHEDULE:-cosine}"
 # Samples drawn per epoch. The default of twenty million was written for
 # four-million-position datasets; against 200M it means each position is seen
 # about once across the whole run. Defaulting to the training target makes an
 # epoch a full pass.
 SAMPLES_PER_EPOCH="${SAMPLES_PER_EPOCH:-$TRAIN_TARGET}"
-BATCH_SIZE="${BATCH_SIZE:-16384}"
-TRAIN_TARGET="${TRAIN_TARGET:-200000000}"
-VALIDATION_TARGET="${VALIDATION_TARGET:-1000000}"
-LR_SCHEDULE="${LR_SCHEDULE:-cosine}"
 
 # Politeness. 64 cores exist; other people are using them.
 # nproc reports the CPUs this process may actually use, which on a scheduled
