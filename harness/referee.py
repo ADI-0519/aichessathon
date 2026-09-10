@@ -11,8 +11,10 @@ from harness.sandbox import Agent, AgentFailure
 RESULT_HEADERS = {"white": "1-0", "black": "0-1", "draw": "1/2-1/2", "void": "*"}
 FAILED_TERMINATIONS = frozenset({"crash", "illegal", "flag", "init", "both_failed"})
 
+Side = Literal["white", "black"]
 Result = Literal["white", "black", "draw", "void"]
 Decision = Literal["white", "black", "draw"]
+FailureSide = Literal["white", "black", "both"]
 
 
 @dataclass(frozen=True)
@@ -20,6 +22,7 @@ class Outcome:
     result: Result
     termination: str
     pgn: str
+    failed_side: FailureSide | None = None
 
 
 def play_match(
@@ -42,40 +45,73 @@ def _play(
 ) -> Outcome:
     board = chess.Board(start_fen)
     agents = {chess.WHITE: white, chess.BLACK: black}
+    clocks: list[float] = []
 
     white_failure = _start(white)
     black_failure = _start(black)
     if white_failure is not None and black_failure is not None:
-        return _outcome(board, "void", "both_failed")
+        return _outcome(board, "void", "both_failed", clocks, agents, failed_side="both")
+
     if white_failure is not None:
-        return _outcome(board, "black", white_failure)
+        return _outcome(board, "black", white_failure, clocks, agents, failed_side="white")
+
     if black_failure is not None:
-        return _outcome(board, "white", black_failure)
+        return _outcome(board, "white", black_failure, clocks, agents, failed_side="black")
 
     clock = {chess.WHITE: float(base_ms), chess.BLACK: float(base_ms)}
 
     while True:
-        finish = board.outcome(claim_draw=True)
+        finish = board.outcome()
         if finish is not None:
-            return _outcome(board, _decide(finish), finish.termination.name.lower())
+            return _outcome(board, _decide(finish), finish.termination.name.lower(), clocks, agents)
+        if board.is_repetition(3):
+            return _outcome(board, "draw", "threefold_repetition", clocks, agents)
+        if board.is_fifty_moves():
+            return _outcome(board, "draw", "fifty_moves", clocks, agents)
         if board.ply() >= ply_cap:
-            return _outcome(board, "draw", "ply_cap")
+            return _outcome(board, "draw", "ply_cap", clocks, agents)
 
         mover = board.turn
+        agents[mover].resume()
         started_at = time.monotonic()
         try:
             uci = agents[mover].move(board.fen(), int(clock[mover]))
         except AgentFailure as failure:
-            return _outcome(board, _side(not mover), failure.reason)
-        clock[mover] -= (time.monotonic() - started_at) * 1000.0
+            result = _flagged(board, mover) if failure.reason == "flag" else _side(not mover)
+            return _outcome(
+                board,
+                result,
+                failure.reason,
+                clocks,
+                agents,
+                failed_side=_side(mover),
+            )
+        spent_ms = (time.monotonic() - started_at) * 1000.0
+        agents[mover].suspend()  # After the timer, so the freeze is never on your clock.
+        clock[mover] -= spent_ms
         if clock[mover] < 0:
-            return _outcome(board, _flagged(board, mover), "flag")
+            return _outcome(
+                board,
+                _flagged(board, mover),
+                "flag",
+                clocks,
+                agents,
+                failed_side=_side(mover),
+            )
 
         move = _legal_move(board, uci)
         if move is None:
-            return _outcome(board, _side(not mover), "illegal")
+            return _outcome(
+                board,
+                _side(not mover),
+                "illegal",
+                clocks,
+                agents,
+                failed_side=_side(mover),
+            )
         board.push(move)
         clock[mover] += increment_ms
+        clocks.append(clock[mover])
 
 
 def _start(agent: Agent) -> str | None:
@@ -83,6 +119,7 @@ def _start(agent: Agent) -> str | None:
         agent.start(INIT_BUDGET_S)
     except AgentFailure as failure:
         return failure.reason
+    agent.suspend()
     return None
 
 
@@ -94,7 +131,7 @@ def _legal_move(board: chess.Board, uci: str) -> chess.Move | None:
     return move if move in board.legal_moves else None
 
 
-def _side(colour: chess.Color) -> Decision:
+def _side(colour: chess.Color) -> Side:
     return "white" if colour == chess.WHITE else "black"
 
 
@@ -106,8 +143,27 @@ def _flagged(board: chess.Board, mover: chess.Color) -> Decision:
     return "draw" if board.has_insufficient_material(not mover) else _side(not mover)
 
 
-def _outcome(board: chess.Board, result: Result, termination: str) -> Outcome:
+def _outcome(
+    board: chess.Board,
+    result: Result,
+    termination: str,
+    clocks: list[float],
+    agents: dict[chess.Color, Agent],
+    failed_side: FailureSide | None = None,
+) -> Outcome:
     game = chess.pgn.Game.from_board(board)
     game.headers["Result"] = RESULT_HEADERS[result]
     game.headers["Termination"] = termination
-    return Outcome(result=result, termination=termination, pgn=str(game))
+    game.headers["White"] = agents[chess.WHITE].name
+    game.headers["Black"] = agents[chess.BLACK].name
+    for node, remaining in zip(game.mainline(), clocks, strict=True):
+        node.set_clock(remaining / 1000.0)
+    if failed_side is not None:
+        game.headers["FailureSide"] = failed_side
+
+    return Outcome(
+        result=result,
+        termination=termination,
+        pgn=str(game),
+        failed_side=failed_side,
+    )

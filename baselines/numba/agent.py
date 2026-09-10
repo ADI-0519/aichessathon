@@ -2,15 +2,20 @@
 
 The pattern worth copying is the warm-up call at the bottom of this file. numba compiles on
 first call, and that first call costs far more than the move it is part of. Running it at
-import spends the compile inside the 60 second init budget instead of on your clock.
+import spends the compile inside the 90 second init budget instead of on your clock. numba
+compiles per signature, so warm every jitted function with the argument types it will really
+see. An int32 warm-up does not help a float64 call later.
 """
 
 import math
+import os
 import random
 
 import chess
 import numpy as np
 from numba import njit
+
+RNG = random.Random(os.environ.get("HARNESS_SEED", "69"))
 
 PIECE_VALUE = np.array([0, 100, 320, 330, 500, 900, 0], dtype=np.int32)
 MOBILITY_WEIGHT = 4
@@ -66,10 +71,7 @@ def get_move(fen: str, time_left_ms: int) -> str:
             best = [move]
         elif score == best_score:
             best.append(move)
-    return random.choice(best).uci()
+    return RNG.choice(best).uci()
 
 
-# Compile now, at import, not on the first move. Call every jitted function once with the
-# argument types it will really see; numba compiles per signature, so an int32 warm-up does
-# not help a float64 call later.
 evaluate(*encode(chess.Board()), 20)

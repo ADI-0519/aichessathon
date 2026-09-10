@@ -1,6 +1,14 @@
 .venv/
+.venv-training/
 __pycache__/
 .mypy_cache/
 .ruff_cache/
+.pytest_cache/
 submission.zip
 *.pgn
+benchmarks/runs/
+benchmarks/suites/sources/
+docs/EXTERNAL_OPPONENTS.md
+# The V6 king-conditioned weight is generated locally, then replaced by the
+# trained export only after it passes the promotion gates.
+challengers/v6_halfkp/weights/model.npz
