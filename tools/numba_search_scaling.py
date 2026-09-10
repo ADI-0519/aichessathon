@@ -50,6 +50,11 @@ class Probe:
     qtt_hits: int
     qtt_cutoffs: int
     qtt_stores: int
+    tt_collisions: int = 0
+    tt_replacements: int = 0
+    capture_history_updates: int = 0
+    singular_attempts: int = 0
+    singular_extensions: int = 0
 
 
 def selected_pgn_position(path: Path, color: chess.Color, fullmove: int) -> chess.Board:
@@ -119,6 +124,11 @@ def run_probe(
         qtt_hits=getattr(result, "qtt_hits", 0),
         qtt_cutoffs=getattr(result, "qtt_cutoffs", 0),
         qtt_stores=getattr(result, "qtt_stores", 0),
+        tt_collisions=getattr(result, "tt_collisions", 0),
+        tt_replacements=getattr(result, "tt_replacements", 0),
+        capture_history_updates=getattr(result, "capture_history_updates", 0),
+        singular_attempts=getattr(result, "singular_attempts", 0),
+        singular_extensions=getattr(result, "singular_extensions", 0),
     )
 
 
@@ -147,6 +157,11 @@ def assert_deterministic(probes: list[Probe]) -> None:
             probe.qtt_hits,
             probe.qtt_cutoffs,
             probe.qtt_stores,
+            probe.tt_collisions,
+            probe.tt_replacements,
+            probe.capture_history_updates,
+            probe.singular_attempts,
+            probe.singular_extensions,
         )
         for probe in probes
     }
@@ -287,6 +302,11 @@ def main() -> None:
                     "qtt_cutoffs": first.qtt_cutoffs,
                     "qtt_cutoff_rate": qtt_cutoff_rate,
                     "qtt_stores": first.qtt_stores,
+                    "tt_collisions": first.tt_collisions,
+                    "tt_replacements": first.tt_replacements,
+                    "capture_history_updates": first.capture_history_updates,
+                    "singular_attempts": first.singular_attempts,
+                    "singular_extensions": first.singular_extensions,
                     "q_moves_considered": first.q_moves_considered,
                     "q_accumulator_updates": first.q_accumulator_updates,
                     "q_pruned_after_update": first.q_pruned_after_update,

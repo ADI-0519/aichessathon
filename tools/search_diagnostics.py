@@ -288,8 +288,17 @@ def _principal_variation(
         if current_key in seen_keys:
             break
         seen_keys.add(current_key)
-        tt_index = current_key & (len(memory.tt_keys) - 1)
+        if hasattr(search_module, "_tt_probe_index"):
+            tt_index = int(
+                search_module._tt_probe_index(
+                    working.key[0], memory.tt_keys, memory.tt_data
+                )
+            )
+        else:
+            tt_index = current_key & (len(memory.tt_keys) - 1)
         if (
+            tt_index < 0
+            or
             int(memory.tt_keys[tt_index]) != current_key
             or int(memory.tt_data[tt_index, search_module.TT_BOUND]) == search_module.TT_EMPTY
         ):
@@ -427,8 +436,6 @@ def analyze_root_moves(
         )
         if accumulator_stack is not None:
             negamax_arguments.append(accumulator_stack)
-        if move_stack is not None:
-            negamax_arguments.append(move_stack)
         negamax_arguments.extend(
             [
                 score_stack,
@@ -437,8 +444,12 @@ def analyze_root_moves(
                 memory.quiet_history,
             ]
         )
+        if "capture_history" in negamax_parameters:
+            negamax_arguments.append(memory.capture_history)
         if "countermoves" in negamax_parameters:
             negamax_arguments.append(memory.countermoves)
+        if move_stack is not None:
+            negamax_arguments.append(move_stack)
         if "q_eval_keys" in negamax_parameters:
             negamax_arguments.extend(
                 [memory.q_eval_keys, memory.q_eval_scores, memory.q_eval_valid]
@@ -448,11 +459,11 @@ def analyze_root_moves(
                 memory.tt_keys,
                 memory.tt_data,
                 generation,
-                stop,
-                node_limit,
-                stats,
             ]
         )
+        if "excluded_move" in negamax_parameters:
+            negamax_arguments.append(0)
+        negamax_arguments.extend([stop, node_limit, stats])
         child_score, aborted = search_module._negamax(*negamax_arguments)
         engine_module.unmake_move(
             working.pieces,

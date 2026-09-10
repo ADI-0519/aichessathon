@@ -1,0 +1,115 @@
+{
+  "aggregates": [
+    {
+      "beta_cutoffs": 51,
+      "capture_history_updates": 0,
+      "depth": 2,
+      "lmr_reductions": 0,
+      "lmr_researches": 0,
+      "maximum_nps": 202346.27056163494,
+      "median_nps": 202346.27056163494,
+      "minimum_nps": 202346.27056163494,
+      "move": "g1f3",
+      "node_limit": 256,
+      "nodes": 257,
+      "position_id": "fen",
+      "q_accumulator_updates": 0,
+      "q_accumulator_waste_rate": null,
+      "q_check_saves": 0,
+      "q_children_searched": 0,
+      "q_eval_hit_rate": 0.2222222222222222,
+      "q_eval_hits": 52,
+      "q_eval_probes": 234,
+      "q_moves_considered": 0,
+      "q_pruned_after_update": 0,
+      "qnodes": 185,
+      "qshare": 0.7198443579766537,
+      "qtt_cutoff_rate": null,
+      "qtt_cutoffs": 0,
+      "qtt_hit_rate": null,
+      "qtt_hits": 0,
+      "qtt_probes": 0,
+      "qtt_stores": 0,
+      "score": 24,
+      "singular_attempts": 0,
+      "singular_extensions": 0,
+      "tt_collisions": 0,
+      "tt_cutoffs": 6,
+      "tt_hits": 19,
+      "tt_replacements": 0
+    }
+  ],
+  "configuration": {
+    "max_depth": 32,
+    "node_limits": [
+      256
+    ],
+    "positions": [
+      {
+        "fen": "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1",
+        "id": "fen"
+      }
+    ],
+    "repeats": 1
+  },
+  "engine": {
+    "bytes": 6473572,
+    "files": [
+      "__init__.py",
+      "agent.py",
+      "engine.py",
+      "nnue.py",
+      "search.py",
+      "time_manager.py",
+      "weights/model.npz"
+    ],
+    "kind": "local",
+    "path": "C:\\Users\\adirj\\OneDrive\\Documents\\GitHub\\aichessathon\\challengers\\exp_release_v15_tt2",
+    "sha256": "bd0c342eb28b2ba24b579b2db55e8b83d1d6deee3edf7ca07b38e31a0ae16c4a"
+  },
+  "overall": [
+    {
+      "maximum_nps": 202346.27056163494,
+      "median_nps": 202346.27056163494,
+      "minimum_nps": 202346.27056163494,
+      "node_limit": 256
+    }
+  ],
+  "probes": [
+    {
+      "beta_cutoffs": 51,
+      "capture_history_updates": 0,
+      "depth": 2,
+      "elapsed_s": 0.0012701000086963177,
+      "lmr_reductions": 0,
+      "lmr_researches": 0,
+      "move": "g1f3",
+      "node_limit": 256,
+      "nodes": 257,
+      "nps": 202346.27056163494,
+      "position_id": "fen",
+      "q_accumulator_updates": 0,
+      "q_check_saves": 0,
+      "q_children_searched": 0,
+      "q_eval_hits": 52,
+      "q_eval_probes": 234,
+      "q_moves_considered": 0,
+      "q_pruned_after_update": 0,
+      "qnodes": 185,
+      "qtt_cutoffs": 0,
+      "qtt_hits": 0,
+      "qtt_probes": 0,
+      "qtt_stores": 0,
+      "repeat": 1,
+      "score": 24,
+      "singular_attempts": 0,
+      "singular_extensions": 0,
+      "tt_collisions": 0,
+      "tt_cutoffs": 6,
+      "tt_hits": 19,
+      "tt_replacements": 0
+    }
+  ],
+  "schema_version": 1,
+  "warmup_s": 37.595944300002884
+}
