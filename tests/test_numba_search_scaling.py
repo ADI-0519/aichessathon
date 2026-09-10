@@ -30,6 +30,10 @@ def probe(*, move: str = "e2e4", score: int = 12) -> Probe:
         q_pruned_after_update=0,
         q_check_saves=0,
         q_children_searched=0,
+        qtt_probes=0,
+        qtt_hits=0,
+        qtt_cutoffs=0,
+        qtt_stores=0,
     )
 
 

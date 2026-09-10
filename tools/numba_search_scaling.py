@@ -46,6 +46,10 @@ class Probe:
     q_pruned_after_update: int
     q_check_saves: int
     q_children_searched: int
+    qtt_probes: int
+    qtt_hits: int
+    qtt_cutoffs: int
+    qtt_stores: int
 
 
 def selected_pgn_position(path: Path, color: chess.Color, fullmove: int) -> chess.Board:
@@ -111,6 +115,10 @@ def run_probe(
         q_pruned_after_update=getattr(result, "q_pruned_after_update", 0),
         q_check_saves=getattr(result, "q_check_saves", 0),
         q_children_searched=getattr(result, "q_children_searched", 0),
+        qtt_probes=getattr(result, "qtt_probes", 0),
+        qtt_hits=getattr(result, "qtt_hits", 0),
+        qtt_cutoffs=getattr(result, "qtt_cutoffs", 0),
+        qtt_stores=getattr(result, "qtt_stores", 0),
     )
 
 
@@ -135,6 +143,10 @@ def assert_deterministic(probes: list[Probe]) -> None:
             probe.q_pruned_after_update,
             probe.q_check_saves,
             probe.q_children_searched,
+            probe.qtt_probes,
+            probe.qtt_hits,
+            probe.qtt_cutoffs,
+            probe.qtt_stores,
         )
         for probe in probes
     }
@@ -231,6 +243,12 @@ def main() -> None:
             q_eval_hit_rate = (
                 first.q_eval_hits / first.q_eval_probes if first.q_eval_probes else None
             )
+            qtt_hit_rate = (
+                first.qtt_hits / first.qtt_probes if first.qtt_probes else None
+            )
+            qtt_cutoff_rate = (
+                first.qtt_cutoffs / first.qtt_probes if first.qtt_probes else None
+            )
             q_accumulator_waste_rate = (
                 first.q_pruned_after_update / first.q_accumulator_updates
                 if first.q_accumulator_updates
@@ -258,6 +276,12 @@ def main() -> None:
                     "q_eval_probes": first.q_eval_probes,
                     "q_eval_hits": first.q_eval_hits,
                     "q_eval_hit_rate": q_eval_hit_rate,
+                    "qtt_probes": first.qtt_probes,
+                    "qtt_hits": first.qtt_hits,
+                    "qtt_hit_rate": qtt_hit_rate,
+                    "qtt_cutoffs": first.qtt_cutoffs,
+                    "qtt_cutoff_rate": qtt_cutoff_rate,
+                    "qtt_stores": first.qtt_stores,
                     "q_moves_considered": first.q_moves_considered,
                     "q_accumulator_updates": first.q_accumulator_updates,
                     "q_pruned_after_update": first.q_pruned_after_update,
