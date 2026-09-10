@@ -1,1 +1,1 @@
-"""Last-day V12 release candidate built on the proven Search V10 champion."""
+"""V14 runtime challenger with conservative qsearch TT bounds."""
