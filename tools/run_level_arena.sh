@@ -24,6 +24,7 @@ while [ "$offset" -lt "$TOTAL" ]; do
     --offset "$offset" --limit "$per" \
     > "$LOGDIR/shard-$(printf '%03d' "$offset").log" 2>&1 &
   offset=$(( offset + per ))
+  sleep "${SHARD_DELAY_S:-30}"
 done
 wait
 
