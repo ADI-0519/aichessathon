@@ -643,6 +643,18 @@ def _probability_loss(
     return torch.mean((torch.sigmoid(predicted_logit) - target_probability) ** 2)
 
 
+def _cpu_cuda_rng_states(raw_states: object) -> list[Tensor]:
+    """Validate saved CUDA RNG states and normalize them for PyTorch restore APIs."""
+    if not isinstance(raw_states, (list, tuple)):
+        raise ValueError("checkpoint CUDA RNG state must be a sequence")
+    states: list[Tensor] = []
+    for state in raw_states:
+        if not isinstance(state, Tensor) or state.dtype != torch.uint8:
+            raise ValueError("checkpoint CUDA RNG states must be torch.ByteTensor values")
+        states.append(state.detach().cpu().contiguous())
+    return states
+
+
 def _fold_factor(state: dict[str, Tensor]) -> NDArray[np.float32]:
     bucketed = state["embedding.weight"][:FEATURE_COUNT].cpu().numpy()
     shared = state["factor.weight"][:BASE_FEATURE_COUNT].cpu().numpy()
@@ -1008,7 +1020,11 @@ def train(
             dict[str, Any],
             torch.load(
                 settings.resume_checkpoint,
-                map_location=device,
+                # RNG state restoration requires CPU ByteTensors. Loading the
+                # recovery bundle on CPU also avoids temporarily materializing
+                # the model and optimizer twice in accelerator memory; their
+                # load_state_dict methods copy state to the live model device.
+                map_location="cpu",
                 weights_only=False,
             ),
         )
@@ -1032,7 +1048,7 @@ def train(
         torch.set_rng_state(cast(Tensor, recovery["torch_rng_state"]).cpu())
         if device.type == "cuda" and recovery.get("cuda_rng_state") is not None:
             torch.cuda.set_rng_state_all(
-                cast(list[Tensor], recovery["cuda_rng_state"])
+                _cpu_cuda_rng_states(recovery["cuda_rng_state"])
             )
         first_epoch = int(recovery["completed_epoch"]) + 1
         if first_epoch > settings.epochs:

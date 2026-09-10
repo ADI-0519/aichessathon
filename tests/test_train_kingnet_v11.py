@@ -16,6 +16,7 @@ from tools.train_kingnet_v11 import (
     ModelConfig,
     SelectionObjective,
     V11BigEvaluator,
+    _cpu_cuda_rng_states,
     _horizontal_mirror,
     _selection_score,
     export_model,
@@ -27,6 +28,18 @@ ONE_HEAD_MAP = [0] * 33
 
 
 class TrainKingNetV11Tests(unittest.TestCase):
+    def test_cuda_rng_checkpoint_states_are_normalized_for_restore(self) -> None:
+        first = torch.tensor([1, 2, 3], dtype=torch.uint8)
+        second = torch.tensor([4, 5], dtype=torch.uint8)
+
+        restored = _cpu_cuda_rng_states((first, second))
+
+        self.assertEqual(len(restored), 2)
+        self.assertTrue(all(state.device.type == "cpu" for state in restored))
+        self.assertTrue(all(state.dtype == torch.uint8 for state in restored))
+        with self.assertRaisesRegex(ValueError, "ByteTensor"):
+            _cpu_cuda_rng_states([torch.ones(2, dtype=torch.float32)])
+
     def test_horizontal_mirror_preserves_piece_slots_and_padding(self) -> None:
         indices = np.array(
             [
