@@ -136,6 +136,7 @@ fi
 
 # ------------------------------------------------------------------ environment
 stage "preparing the python environment"
+set +o pipefail   # detection below reads tools whose pipelines may close early
 if [[ ! -x "$VENV/bin/python" ]]; then
   python3 -m venv "$VENV"
 fi
@@ -147,10 +148,13 @@ PY="$VENV/bin/python"
 # driver cannot load: the first run here installed cu130 against a 12.8 driver
 # and reported no CUDA at all. Ask the driver what it supports and take the
 # matching wheel index.
-DRIVER_CUDA="$(nvidia-smi --query-gpu=driver_version --format=csv,noheader   | head -1 | awk -F. '{print $1}')"
+# `head` closes the pipe as soon as it has its line, which hands SIGPIPE to
+# whatever is upstream; under `set -o pipefail` that is exit 141 and `set -e`
+# then kills the run. awk does the same job inside one process.
+DRIVER_CUDA="$(nvidia-smi --query-gpu=driver_version --format=csv,noheader   | awk 'NR==1 {split($0, v, "."); print v[1]}')"
 CUDA_TAG="${CUDA_TAG:-}"
 if [[ -z "$CUDA_TAG" ]]; then
-  RUNTIME="$(nvidia-smi | awk -F'CUDA Version: ' '/CUDA Version/ {print $2}'     | awk '{print $1}' | head -1)"
+  RUNTIME="$(nvidia-smi     | awk -F'CUDA Version: ' '/CUDA Version/ {split($2, f, " "); print f[1]; exit}')"
   case "$RUNTIME" in
     13.*) CUDA_TAG=cu130 ;;
     12.8|12.9) CUDA_TAG=cu128 ;;
@@ -173,6 +177,8 @@ if torch.cuda.is_available():
 else:
     raise SystemExit("CUDA is not available in this environment")
 PYCHECK
+
+set -o pipefail
 
 # ----------------------------------------------------------------------- data
 stage "fetching $MONTHS Parquet months into $SOURCE_DIR"
