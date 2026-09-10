@@ -216,6 +216,42 @@ def pack_group(source: str, group_index: int, min_ply: int) -> tuple[np.ndarray,
     return encode_table(table, min_ply)
 
 
+def _file_groups(sources: Sequence[Path]) -> list[tuple[Path, int]]:
+    """List every row group across several Parquet files, in file order."""
+    import pyarrow.parquet as pq
+
+    pairs: list[tuple[Path, int]] = []
+    for source in sources:
+        count = pq.ParquetFile(source).metadata.num_row_groups
+        pairs.extend((source, index) for index in range(count))
+    return pairs
+
+
+def _encoded_files(
+    pairs: Sequence[tuple[Path, int]], *, min_ply: int, workers: int
+) -> Iterator[tuple[str, np.ndarray, int, int]]:
+    """Encode row groups drawn from several files, consumed in the given order."""
+    if workers <= 1 or len(pairs) <= 1:
+        for source, group_index in pairs:
+            packed, scanned, rejected = pack_group(
+                source.as_posix(), group_index, min_ply
+            )
+            yield f"{source.name}#{group_index}", packed, scanned, rejected
+        return
+    with ProcessPoolExecutor(max_workers=min(workers, len(pairs))) as pool:
+        futures = [
+            pool.submit(pack_group, source.as_posix(), group_index, min_ply)
+            for source, group_index in pairs
+        ]
+        try:
+            for (source, group_index), future in zip(pairs, futures, strict=True):
+                packed, scanned, rejected = future.result()
+                yield f"{source.name}#{group_index}", packed, scanned, rejected
+        finally:
+            for future in futures:
+                future.cancel()
+
+
 def _encoded_groups(
     source: Any, groups: Sequence[int], *, min_ply: int, workers: int
 ) -> Iterator[tuple[int, np.ndarray, int, int]]:
@@ -262,8 +298,14 @@ def pack_groups(
     excluded_fingerprints: Collection[bytes] = (),
     deduplicate: bool = False,
     collect_fingerprints: bool = False,
+    file_groups: Sequence[tuple[Path, int]] | None = None,
 ) -> tuple[int, dict[str, Any], set[bytes]]:
-    """Encode selected row groups into ``output`` and return counts."""
+    """Encode selected row groups into ``output`` and return counts.
+
+    ``file_groups`` packs row groups drawn from several Parquet files instead of
+    ``groups`` within ``source``; everything downstream, including deduplication
+    and holdout exclusion, is unchanged and still consumed in the given order.
+    """
     output.parent.mkdir(parents=True, exist_ok=True)
     staging = output.with_suffix(output.suffix + ".staging.npy")
     records = np.lib.format.open_memmap(
@@ -274,9 +316,14 @@ def pack_groups(
     accepted_by_piece_count = [0] * (MAX_PIECES + 1)
     accepted_fingerprints: set[bytes] = set()
     try:
-        for group_index, packed, group_scanned, group_rejected in _encoded_groups(
-            source, groups, min_ply=min_ply, workers=workers
-        ):
+        stream: Iterator[tuple[Any, np.ndarray, int, int]]
+        if file_groups is not None:
+            stream = _encoded_files(file_groups, min_ply=min_ply, workers=workers)
+        else:
+            stream = _encoded_groups(
+                source, groups, min_ply=min_ply, workers=workers
+            )
+        for group_index, packed, group_scanned, group_rejected in stream:
             scanned += group_scanned
             rejected += group_rejected
             for index in range(len(packed)):
@@ -335,6 +382,96 @@ def _sha256(path: Path) -> str:
         while chunk := handle.read(1024 * 1024):
             digest.update(chunk)
     return digest.hexdigest()
+
+
+def pack_multi_source(
+    sources: Sequence[Path],
+    train_output: Path,
+    validation_output: Path,
+    manifest_output: Path,
+    *,
+    train_target: int,
+    validation_target: int,
+    min_ply: int,
+    group_order_seed: int = 0,
+    report_bands: Sequence[ReportBand] = (),
+    workers: int = 1,
+) -> None:
+    """Pack a training set from several Parquet files, holding one out entirely.
+
+    With a single file the only way to keep validation clean is to reserve some
+    of its row groups. With several, the last file is held out whole, so no
+    validation position shares a game -- let alone a position -- with training
+    data. Its fingerprints are still excluded from the training pass, because
+    the same position recurs across games and months.
+    """
+    if len(sources) < 2:
+        raise ValueError("pack_multi_source needs at least two Parquet files")
+    missing = [path for path in sources if not path.is_file()]
+    if missing:
+        raise ValueError(f"missing Parquet files: {missing}")
+
+    train_sources, validation_source = list(sources[:-1]), sources[-1]
+    validation_pairs = _file_groups([validation_source])
+    train_pairs = _file_groups(train_sources)
+    order = np.random.default_rng(group_order_seed).permutation(len(train_pairs))
+    train_pairs = [train_pairs[index] for index in order]
+
+    print(
+        f"{len(train_sources)} training files ({len(train_pairs)} row groups), "
+        f"holding out {validation_source.name} ({len(validation_pairs)} groups), "
+        f"{workers} worker(s)",
+        flush=True,
+    )
+    validation_count, validation_stats, validation_fingerprints = pack_groups(
+        validation_source,
+        (),
+        validation_output,
+        target=validation_target,
+        min_ply=min_ply,
+        report_bands=report_bands,
+        deduplicate=True,
+        collect_fingerprints=True,
+        workers=workers,
+        file_groups=validation_pairs,
+    )
+    train_count, train_stats, _ = pack_groups(
+        train_sources[0],
+        (),
+        train_output,
+        target=train_target,
+        min_ply=min_ply,
+        report_bands=report_bands,
+        excluded_fingerprints=validation_fingerprints,
+        deduplicate=True,
+        workers=workers,
+        file_groups=train_pairs,
+    )
+    manifest = {
+        "schema_version": 3,
+        "train_sources": [path.as_posix() for path in train_sources],
+        "validation_source": validation_source.as_posix(),
+        "train_output": train_output.as_posix(),
+        "validation_output": validation_output.as_posix(),
+        "train_count": train_count,
+        "validation_count": validation_count,
+        "train_stats": train_stats,
+        "validation_stats": validation_stats,
+        "min_ply": min_ply,
+        "cp_clamp": CP_CLAMP,
+        "group_order_seed": group_order_seed,
+        "workers": workers,
+        "holdout": "whole file",
+        "label_perspective": "white",
+    }
+    atomic_write_text(
+        manifest_output, json.dumps(manifest, indent=2) + chr(10)
+    )
+    print(
+        f"wrote {train_output} ({train_count:,}) and "
+        f"{validation_output} ({validation_count:,})",
+        flush=True,
+    )
 
 
 def pack_dataset(
@@ -451,7 +588,8 @@ def pack_dataset(
 
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--source", type=Path, required=True)
+    parser.add_argument("--source", type=Path, action="append", required=True,
+                        help="Parquet file; repeat it to train on several months")
     parser.add_argument("--train-output", type=Path, required=True)
     parser.add_argument("--validation-output", type=Path, required=True)
     parser.add_argument("--manifest", type=Path, required=True)
@@ -482,8 +620,9 @@ def main() -> None:
         help="experiment JSON whose piece_bands are reported in the manifest",
     )
     args = parser.parse_args()
-    if not args.source.is_file():
-        parser.error(f"source Parquet file not found: {args.source}")
+    missing_sources = [path for path in args.source if not path.is_file()]
+    if missing_sources:
+        parser.error(f"source Parquet file not found: {missing_sources[0]}")
     if args.report_config is not None and not args.report_config.is_file():
         parser.error(f"report config not found: {args.report_config}")
     missing_validation = [
@@ -497,8 +636,22 @@ def main() -> None:
             if args.report_config is None
             else load_report_bands(args.report_config)
         )
+        if len(args.source) > 1:
+            pack_multi_source(
+                args.source,
+                args.train_output,
+                args.validation_output,
+                args.manifest,
+                train_target=args.train_target,
+                validation_target=args.validation_target,
+                min_ply=args.min_ply,
+                group_order_seed=args.group_order_seed,
+                report_bands=report_bands,
+                workers=args.workers,
+            )
+            return
         pack_dataset(
-            args.source,
+            args.source[0],
             args.train_output,
             args.validation_output,
             args.manifest,
@@ -509,6 +662,7 @@ def main() -> None:
             group_order_seed=args.group_order_seed,
             report_bands=report_bands,
             external_validation=args.exclude_validation,
+            workers=args.workers,
         )
     except (KeyError, TypeError, ValueError) as error:
         parser.error(str(error))
