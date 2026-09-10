@@ -31,6 +31,13 @@ SEE_MAX_EXCHANGES = 32
 DELTA_MARGIN = 120
 RFP_MAX_DEPTH = 6
 RFP_MARGIN = 85
+FUTILITY_MAX_DEPTH = 4
+FUTILITY_MARGIN = 110
+LMP_MAX_DEPTH = 4
+LMP_BASE = 2
+SEE_PRUNE_MAX_DEPTH = 3
+# 100 plies to the fifty-move draw, less headroom for deepest search
+HALFMOVE_SENSITIVE = 70
 
 # Percentage of the static evaluation supplied by the learned model.  Keep this
 # as a source constant so every packaged challenger is reproducible.
@@ -65,7 +72,7 @@ LMR_MAX = 64
 LMR_TABLE = np.zeros((LMR_MAX, LMR_MAX), dtype=np.int32)
 for _d in range(1, LMR_MAX):
     for _i in range(1, LMR_MAX):
-        _r = int(0.75 + math.log(_d) * math.log(_i) / 2.25)
+        _r = int(0.75 + math.log(_d) * math.log(_i) / 1.75)
         LMR_TABLE[_d, _i] = max(1, _r)
 
 MG_VALUE = np.array((100, 320, 330, 500, 900, 0), dtype=np.int32)
@@ -591,6 +598,33 @@ def _record_quiet_cutoff(
     quiet_history[side, from_square, to_square] = min(1_000_000, previous + bonus)
 
 
+@njit(cache=False, inline="always")
+def _penalise_earlier_quiets(
+    side: int,
+    moves: NDArray[np.int32],
+    cutoff_index: int,
+    depth: int,
+    quiet_history: NDArray[np.int32],
+) -> None:
+    malus = depth * depth
+    for index in range(cutoff_index):
+        move = int(moves[index])
+        if engine.move_flags(move) & (engine.FLAG_CAPTURE | engine.FLAG_PROMOTION):
+            continue
+        from_square = engine.move_from(move)
+        to_square = engine.move_to(move)
+        previous = int(quiet_history[side, from_square, to_square])
+        quiet_history[side, from_square, to_square] = max(-1_000_000, previous - malus)
+
+
+@njit(cache=False, inline="always")
+def _has_non_pawn_material(pieces: NDArray[np.uint64], side: int) -> bool:
+    occupied = np.uint64(0)
+    for kind in range(engine.KNIGHT, engine.QUEEN + 1):
+        occupied |= pieces[engine.piece_index(side, kind)]
+    return bool(occupied != np.uint64(0))
+
+
 @njit(cache=False)
 def _quiescence(
     pieces: NDArray[np.uint64],
@@ -622,6 +656,8 @@ def _quiescence(
 
     side = int(state[engine.STATE_SIDE])
     in_check = engine.is_in_check(pieces, side)
+    # generation dominates node cost, but pawn endings need stalemate exact
+    count = -1
     if in_check:
         count = engine.generate_legal_moves(
             pieces,
@@ -634,7 +670,7 @@ def _quiescence(
         )
         if count == 0:
             return -MATE_SCORE + ply, False
-    else:
+    elif not _has_non_pawn_material(pieces, side):
         count = engine.generate_legal_captures(
             pieces,
             state,
@@ -661,6 +697,18 @@ def _quiescence(
         if stand_pat > alpha:
             alpha = stand_pat
         best = stand_pat
+        if count < 0:
+            count = engine.generate_legal_captures(
+                pieces,
+                state,
+                key,
+                legal_stack[ply],
+                pseudo_stack[ply],
+                undo_stack[ply],
+                undo_key_stack[ply],
+            )
+            if count < 0:
+                return 0, False
 
     _order_moves(
         pieces,
@@ -746,14 +794,6 @@ def _quiescence(
     return best, False
 
 
-@njit(cache=False, inline="always")
-def _has_non_pawn_material(pieces: NDArray[np.uint64], side: int) -> bool:
-    occupied = np.uint64(0)
-    for kind in range(engine.KNIGHT, engine.QUEEN + 1):
-        occupied |= pieces[engine.piece_index(side, kind)]
-    return bool(occupied != np.uint64(0))
-
-
 @njit(cache=False)
 def _negamax(
     pieces: NDArray[np.uint64],
@@ -814,17 +854,20 @@ def _negamax(
 
     side = int(state[engine.STATE_SIDE])
     in_check = engine.is_in_check(pieces, side)
-    count = engine.generate_legal_moves(
-        pieces,
-        state,
-        key,
-        legal_stack[ply],
-        pseudo_stack[ply],
-        undo_stack[ply],
-        undo_key_stack[ply],
-    )
-    if count == 0:
-        return (-MATE_SCORE + ply if in_check else 0), False
+    # deferred past static cutoffs; a stalemate holding pieces scores
+    count = -1
+    if in_check or not _has_non_pawn_material(pieces, side):
+        count = engine.generate_legal_moves(
+            pieces,
+            state,
+            key,
+            legal_stack[ply],
+            pseudo_stack[ply],
+            undo_stack[ply],
+            undo_key_stack[ply],
+        )
+        if count == 0:
+            return (-MATE_SCORE + ply if in_check else 0), False
     if engine.has_rule_draw(
         pieces, state, key[0], history, history_count, root_history_count
     ):
@@ -840,8 +883,15 @@ def _negamax(
         tt_move = int(tt_data[tt_index, TT_MOVE])
         if (
             int(tt_data[tt_index, TT_DEPTH]) >= depth
-            and int(tt_data[tt_index, TT_HALFMOVE]) == min(
-                100, int(state[engine.STATE_HALFMOVE])
+            # clock only moves a score within reach of the fifty-move rule
+            and (
+                (
+                    int(state[engine.STATE_HALFMOVE]) < HALFMOVE_SENSITIVE
+                    and int(tt_data[tt_index, TT_HALFMOVE]) < HALFMOVE_SENSITIVE
+                )
+                or int(tt_data[tt_index, TT_HALFMOVE]) == min(
+                    100, int(state[engine.STATE_HALFMOVE])
+                )
             )
         ):
             tt_score = _score_from_table(int(tt_data[tt_index, TT_SCORE]), ply)
@@ -863,7 +913,7 @@ def _negamax(
         if depth <= RFP_MAX_DEPTH and static_eval - RFP_MARGIN * depth >= beta:
             return static_eval, False
 
-    # null-move pruning, R=2; the material test is the zugzwang guard
+    # null-move pruning, R scaled by depth and margin (material test guards zugzwang)
     if (
         allow_null
         and depth >= 3
@@ -883,7 +933,7 @@ def _negamax(
             pieces,
             state,
             key,
-            depth - 3,
+            depth - 3 - depth // 6 - (1 if static_eval - beta >= 150 else 0),
             -beta,
             -beta + 1,
             ply + 1,
@@ -914,6 +964,19 @@ def _negamax(
             # mate found behind a free move isn't a mate we can claim
             return beta if -null_score >= MATE_BOUND else -null_score, False
 
+    if count < 0:
+        count = engine.generate_legal_moves(
+            pieces,
+            state,
+            key,
+            legal_stack[ply],
+            pseudo_stack[ply],
+            undo_stack[ply],
+            undo_key_stack[ply],
+        )
+        if count == 0:
+            return 0, False
+
     _order_moves(
         pieces,
         state,
@@ -933,6 +996,30 @@ def _negamax(
         move = int(legal_stack[ply, index])
         flags = engine.move_flags(move)
         quiet = flags & (engine.FLAG_CAPTURE | engine.FLAG_PROMOTION) == 0
+        # late-move and futility pruning, before the make so accumulator is spared
+        if (
+            index > 0
+            and quiet
+            and pruning_allowed
+            and (
+                (depth <= LMP_MAX_DEPTH and index >= LMP_BASE + depth * depth)
+                or (
+                    depth <= FUTILITY_MAX_DEPTH
+                    and static_eval + FUTILITY_MARGIN * depth <= alpha
+                )
+            )
+        ):
+            continue
+        # a capture SEE already scored as losing not worth shallow subtree
+        if (
+            index > 0
+            and not quiet
+            and pruning_allowed
+            and depth <= SEE_PRUNE_MAX_DEPTH
+            and flags & engine.FLAG_PROMOTION == 0
+            and int(score_stack[ply, index]) < 2_000_000
+        ):
+            continue
         nnue.update_for_move(
             pieces,
             state,
@@ -1094,6 +1181,9 @@ def _negamax(
             if quiet:
                 _record_quiet_cutoff(
                     side, move, ply, depth, killers, quiet_history
+                )
+                _penalise_earlier_quiets(
+                    side, legal_stack[ply], index, depth, quiet_history
                 )
             break
 
