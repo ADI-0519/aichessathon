@@ -33,6 +33,32 @@ class MaterializeNnueBlendTests(unittest.TestCase):
             with self.assertRaises(FileExistsError):
                 materialize(SOURCE, output, 25)
 
+    def test_materializes_all_python_modules_with_an_explicit_model(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            source = root / "source"
+            source.mkdir()
+            for name in ("agent.py", "engine.py", "nnue.py", "helper.py"):
+                (source / name).write_text(f"# {name}\n", encoding="utf-8")
+            (source / "search.py").write_text("NNUE_BLEND = 75\n", encoding="utf-8")
+            (source / "weights").mkdir()
+            (source / "weights" / "model.npz").write_bytes(b"source model")
+            replacement = root / "trained.npz"
+            replacement.write_bytes(b"trained model")
+            output = root / "candidate"
+
+            materialize(source, output, 100, model=replacement)
+
+            self.assertTrue((output / "helper.py").is_file())
+            self.assertIn(
+                "NNUE_BLEND = 100",
+                (output / "search.py").read_text(encoding="utf-8"),
+            )
+            self.assertEqual(
+                (output / "weights" / "model.npz").read_bytes(),
+                b"trained model",
+            )
+
 
 if __name__ == "__main__":
     unittest.main()

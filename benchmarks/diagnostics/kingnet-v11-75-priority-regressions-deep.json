@@ -1,0 +1,888 @@
+{
+  "engine_root": "C:\\Users\\adirj\\OneDrive\\Documents\\GitHub\\aichessathon\\benchmarks\\runs\\candidates\\kingnet-v11-256-75",
+  "profile": "baseline",
+  "memory_mode": "fresh",
+  "warmup_s": 59.29717679999885,
+  "positions": [
+    {
+      "case": {
+        "identifier": "round47-11-nd4",
+        "label": "Keep Kann and Caro On, Black move 11",
+        "fen": "r2q1rk1/ppp1bppp/1nn5/4p3/P7/1B1P1Q1P/1PP2PP1/RNB1R1K1 b - - 2 11",
+        "played_move": "d8d7",
+        "reference_move": "c6d4",
+        "baseline_move": "d8d7",
+        "diagnosis": "V5 played Qd7 instead of the centralising Nd4, swinging from a small advantage to a clear disadvantage by roughly 150 cp."
+      },
+      "node_probes": [
+        {
+          "node_limit": 300000,
+          "move": "c6d4",
+          "score": -8,
+          "depth": 10,
+          "nodes": 300001,
+          "qnodes": 193878,
+          "elapsed_s": 3.387606500007678,
+          "tt_hits": 23378,
+          "tt_cutoffs": 5603,
+          "lmr_reductions": 33361,
+          "lmr_researches": 207,
+          "memory_mode": "fresh"
+        },
+        {
+          "node_limit": 1000000,
+          "move": "c6d4",
+          "score": 16,
+          "depth": 11,
+          "nodes": 1000001,
+          "qnodes": 658585,
+          "elapsed_s": 11.000474999993457,
+          "tt_hits": 62932,
+          "tt_cutoffs": 16232,
+          "lmr_reductions": 89067,
+          "lmr_researches": 479,
+          "memory_mode": "fresh"
+        }
+      ],
+      "root_lines": [
+        {
+          "move": "c6d4",
+          "score": -12,
+          "static_score": -27,
+          "depth": 5,
+          "complete": true,
+          "nodes": 1149,
+          "qnodes": 751,
+          "tt_hits": 19,
+          "tt_cutoffs": 4,
+          "lmr_reductions": 18,
+          "lmr_researches": 2,
+          "pv": [
+            "c6d4",
+            "f3e4",
+            "d4b3",
+            "c2b3",
+            "f7f6"
+          ]
+        },
+        {
+          "move": "e7b4",
+          "score": -31,
+          "static_score": -61,
+          "depth": 5,
+          "complete": true,
+          "nodes": 1771,
+          "qnodes": 1262,
+          "tt_hits": 17,
+          "tt_cutoffs": 7,
+          "lmr_reductions": 14,
+          "lmr_researches": 2,
+          "pv": [
+            "e7b4",
+            "c2c3",
+            "c6d4",
+            "g2g3"
+          ]
+        },
+        {
+          "move": "a8b8",
+          "score": -35,
+          "static_score": -56,
+          "depth": 5,
+          "complete": true,
+          "nodes": 3428,
+          "qnodes": 2787,
+          "tt_hits": 51,
+          "tt_cutoffs": 11,
+          "lmr_reductions": 21,
+          "lmr_researches": 6,
+          "pv": [
+            "a8b8",
+            "c2c3",
+            "a7a6",
+            "g2g3",
+            "e5e4"
+          ]
+        },
+        {
+          "move": "d8d7",
+          "score": -41,
+          "static_score": -59,
+          "depth": 5,
+          "complete": true,
+          "nodes": 4307,
+          "qnodes": 3505,
+          "tt_hits": 59,
+          "tt_cutoffs": 19,
+          "lmr_reductions": 44,
+          "lmr_researches": 4,
+          "pv": [
+            "d8d7",
+            "b1d2",
+            "a8d8",
+            "g2g4",
+            "c6d4"
+          ]
+        },
+        {
+          "move": "e7f6",
+          "score": -42,
+          "static_score": -73,
+          "depth": 5,
+          "complete": true,
+          "nodes": 3531,
+          "qnodes": 2615,
+          "tt_hits": 85,
+          "tt_cutoffs": 15,
+          "lmr_reductions": 51,
+          "lmr_researches": 2,
+          "pv": [
+            "e7f6",
+            "a4a5",
+            "c6d4",
+            "f3b7",
+            "d4b3"
+          ]
+        },
+        {
+          "move": "b6d7",
+          "score": -42,
+          "static_score": -50,
+          "depth": 5,
+          "complete": true,
+          "nodes": 1942,
+          "qnodes": 1516,
+          "tt_hits": 21,
+          "tt_cutoffs": 6,
+          "lmr_reductions": 10,
+          "lmr_researches": 3,
+          "pv": [
+            "b6d7",
+            "c2c3",
+            "a7a6",
+            "g2g3",
+            "d7c5"
+          ]
+        },
+        {
+          "move": "e7c5",
+          "score": -52,
+          "static_score": -73,
+          "depth": 5,
+          "complete": true,
+          "nodes": 6142,
+          "qnodes": 4819,
+          "tt_hits": 174,
+          "tt_cutoffs": 59,
+          "lmr_reductions": 65,
+          "lmr_researches": 5,
+          "pv": [
+            "e7c5",
+            "f3g3",
+            "c6a5",
+            "e1e5",
+            "a5b3"
+          ]
+        },
+        {
+          "move": "d8d6",
+          "score": -54,
+          "static_score": -67,
+          "depth": 5,
+          "complete": true,
+          "nodes": 3441,
+          "qnodes": 2608,
+          "tt_hits": 71,
+          "tt_cutoffs": 29,
+          "lmr_reductions": 31,
+          "lmr_researches": 0,
+          "pv": [
+            "d8d6",
+            "a4a5",
+            "c6d4",
+            "f3b7",
+            "d4b3"
+          ]
+        },
+        {
+          "move": "d8b8",
+          "score": -57,
+          "static_score": -59,
+          "depth": 5,
+          "complete": true,
+          "nodes": 4129,
+          "qnodes": 3267,
+          "tt_hits": 86,
+          "tt_cutoffs": 25,
+          "lmr_reductions": 44,
+          "lmr_researches": 0,
+          "pv": [
+            "d8b8",
+            "c1e3",
+            "a7a5",
+            "b1d2",
+            "c6d4"
+          ]
+        },
+        {
+          "move": "d8c8",
+          "score": -58,
+          "static_score": -61,
+          "depth": 5,
+          "complete": true,
+          "nodes": 3427,
+          "qnodes": 2773,
+          "tt_hits": 81,
+          "tt_cutoffs": 18,
+          "lmr_reductions": 51,
+          "lmr_researches": 10,
+          "pv": [
+            "d8c8",
+            "f3g3",
+            "c6a5",
+            "g3e5",
+            "a5b3"
+          ]
+        },
+        {
+          "move": "e7d6",
+          "score": -62,
+          "static_score": -89,
+          "depth": 5,
+          "complete": true,
+          "nodes": 2382,
+          "qnodes": 1758,
+          "tt_hits": 32,
+          "tt_cutoffs": 9,
+          "lmr_reductions": 24,
+          "lmr_researches": 1,
+          "pv": [
+            "e7d6",
+            "g2g3",
+            "a7a5",
+            "c2c3",
+            "b6d7"
+          ]
+        },
+        {
+          "move": "g8h8",
+          "score": -72,
+          "static_score": -70,
+          "depth": 5,
+          "complete": true,
+          "nodes": 2018,
+          "qnodes": 1302,
+          "tt_hits": 73,
+          "tt_cutoffs": 21,
+          "lmr_reductions": 38,
+          "lmr_researches": 4,
+          "pv": [
+            "g8h8",
+            "c2c3",
+            "f7f5",
+            "b1d2",
+            "b6d7"
+          ]
+        },
+        {
+          "move": "a7a6",
+          "score": -73,
+          "static_score": -56,
+          "depth": 5,
+          "complete": true,
+          "nodes": 2990,
+          "qnodes": 2371,
+          "tt_hits": 48,
+          "tt_cutoffs": 5,
+          "lmr_reductions": 43,
+          "lmr_researches": 3,
+          "pv": [
+            "a7a6",
+            "b1d2",
+            "b6d7",
+            "d2c4",
+            "d7c5"
+          ]
+        },
+        {
+          "move": "a7a5",
+          "score": -74,
+          "static_score": -50,
+          "depth": 5,
+          "complete": true,
+          "nodes": 2625,
+          "qnodes": 2015,
+          "tt_hits": 51,
+          "tt_cutoffs": 11,
+          "lmr_reductions": 41,
+          "lmr_researches": 0,
+          "pv": [
+            "a7a5",
+            "b1d2",
+            "a8b8",
+            "c2c3",
+            "b6d7"
+          ]
+        },
+        {
+          "move": "c6a5",
+          "score": -76,
+          "static_score": -91,
+          "depth": 5,
+          "complete": true,
+          "nodes": 3214,
+          "qnodes": 2244,
+          "tt_hits": 75,
+          "tt_cutoffs": 17,
+          "lmr_reductions": 51,
+          "lmr_researches": 0,
+          "pv": [
+            "c6a5",
+            "b3a2",
+            "a5c6",
+            "c2c3",
+            "b6a4"
+          ]
+        },
+        {
+          "move": "e7g5",
+          "score": -85,
+          "static_score": -83,
+          "depth": 5,
+          "complete": true,
+          "nodes": 2225,
+          "qnodes": 1850,
+          "tt_hits": 22,
+          "tt_cutoffs": 6,
+          "lmr_reductions": 11,
+          "lmr_researches": 1,
+          "pv": [
+            "e7g5",
+            "b1d2",
+            "b6d7",
+            "a4a5",
+            "g5d2"
+          ]
+        },
+        {
+          "move": "e7h4",
+          "score": -86,
+          "static_score": -73,
+          "depth": 5,
+          "complete": true,
+          "nodes": 4946,
+          "qnodes": 4050,
+          "tt_hits": 92,
+          "tt_cutoffs": 20,
+          "lmr_reductions": 49,
+          "lmr_researches": 1,
+          "pv": [
+            "e7h4",
+            "b1d2",
+            "b6d7",
+            "g2g3",
+            "c6d4"
+          ]
+        },
+        {
+          "move": "a8c8",
+          "score": -90,
+          "static_score": -60,
+          "depth": 5,
+          "complete": true,
+          "nodes": 4120,
+          "qnodes": 3197,
+          "tt_hits": 110,
+          "tt_cutoffs": 29,
+          "lmr_reductions": 51,
+          "lmr_researches": 2,
+          "pv": [
+            "a8c8",
+            "b1d2",
+            "b6d7",
+            "d2c4",
+            "e7b4"
+          ]
+        },
+        {
+          "move": "b6c8",
+          "score": -93,
+          "static_score": -87,
+          "depth": 5,
+          "complete": true,
+          "nodes": 5116,
+          "qnodes": 4083,
+          "tt_hits": 80,
+          "tt_cutoffs": 12,
+          "lmr_reductions": 81,
+          "lmr_researches": 3,
+          "pv": [
+            "b6c8",
+            "b1d2",
+            "a7a5",
+            "c2c3",
+            "c8d6"
+          ]
+        },
+        {
+          "move": "g7g5",
+          "score": -96,
+          "static_score": -170,
+          "depth": 5,
+          "complete": true,
+          "nodes": 4329,
+          "qnodes": 3410,
+          "tt_hits": 84,
+          "tt_cutoffs": 32,
+          "lmr_reductions": 52,
+          "lmr_researches": 1,
+          "pv": [
+            "g7g5",
+            "a4a5",
+            "c6d4",
+            "f3b7",
+            "d4b3"
+          ]
+        },
+        {
+          "move": "d8e8",
+          "score": -99,
+          "static_score": -76,
+          "depth": 5,
+          "complete": true,
+          "nodes": 3887,
+          "qnodes": 3149,
+          "tt_hits": 74,
+          "tt_cutoffs": 18,
+          "lmr_reductions": 46,
+          "lmr_researches": 5,
+          "pv": [
+            "d8e8",
+            "b1d2",
+            "b6d7",
+            "f3d5",
+            "d7c5"
+          ]
+        },
+        {
+          "move": "g7g6",
+          "score": -102,
+          "static_score": -67,
+          "depth": 5,
+          "complete": true,
+          "nodes": 5621,
+          "qnodes": 4704,
+          "tt_hits": 115,
+          "tt_cutoffs": 24,
+          "lmr_reductions": 54,
+          "lmr_researches": 5,
+          "pv": [
+            "g7g6",
+            "b1d2",
+            "a7a5",
+            "c2c3",
+            "b6d7"
+          ]
+        },
+        {
+          "move": "h7h6",
+          "score": -106,
+          "static_score": -73,
+          "depth": 5,
+          "complete": true,
+          "nodes": 4277,
+          "qnodes": 3458,
+          "tt_hits": 82,
+          "tt_cutoffs": 20,
+          "lmr_reductions": 53,
+          "lmr_researches": 2,
+          "pv": [
+            "h7h6",
+            "f3g3",
+            "e7g5",
+            "c1g5",
+            "d8g5"
+          ]
+        },
+        {
+          "move": "h7h5",
+          "score": -106,
+          "static_score": -122,
+          "depth": 5,
+          "complete": true,
+          "nodes": 3884,
+          "qnodes": 3096,
+          "tt_hits": 65,
+          "tt_cutoffs": 19,
+          "lmr_reductions": 50,
+          "lmr_researches": 8,
+          "pv": [
+            "h7h5",
+            "g2g3",
+            "h5h4",
+            "b1c3",
+            "h4g3"
+          ]
+        },
+        {
+          "move": "c6b4",
+          "score": -182,
+          "static_score": -86,
+          "depth": 5,
+          "complete": true,
+          "nodes": 2654,
+          "qnodes": 2161,
+          "tt_hits": 42,
+          "tt_cutoffs": 7,
+          "lmr_reductions": 20,
+          "lmr_researches": 5,
+          "pv": [
+            "c6b4",
+            "e1e5",
+            "b4c6",
+            "e5f5",
+            "b6a4"
+          ]
+        },
+        {
+          "move": "e5e4",
+          "score": -210,
+          "static_score": -70,
+          "depth": 5,
+          "complete": true,
+          "nodes": 3005,
+          "qnodes": 2480,
+          "tt_hits": 37,
+          "tt_cutoffs": 10,
+          "lmr_reductions": 22,
+          "lmr_researches": 0,
+          "pv": [
+            "e5e4",
+            "f3e4",
+            "f8e8",
+            "a4a5",
+            "b6d7"
+          ]
+        },
+        {
+          "move": "c6b8",
+          "score": -214,
+          "static_score": -124,
+          "depth": 5,
+          "complete": true,
+          "nodes": 2750,
+          "qnodes": 2239,
+          "tt_hits": 52,
+          "tt_cutoffs": 13,
+          "lmr_reductions": 13,
+          "lmr_researches": 1,
+          "pv": [
+            "c6b8",
+            "a4a5",
+            "e7b4",
+            "e1e5"
+          ]
+        },
+        {
+          "move": "d8d4",
+          "score": -329,
+          "static_score": -105,
+          "depth": 5,
+          "complete": true,
+          "nodes": 2842,
+          "qnodes": 2328,
+          "tt_hits": 48,
+          "tt_cutoffs": 17,
+          "lmr_reductions": 20,
+          "lmr_researches": 2,
+          "pv": [
+            "d8d4",
+            "f3c6",
+            "e7b4",
+            "c6e4",
+            "b4e1"
+          ]
+        },
+        {
+          "move": "f8e8",
+          "score": -387,
+          "static_score": -71,
+          "depth": 5,
+          "complete": true,
+          "nodes": 566,
+          "qnodes": 365,
+          "tt_hits": 4,
+          "tt_cutoffs": 1,
+          "lmr_reductions": 2,
+          "lmr_researches": 1,
+          "pv": [
+            "f8e8",
+            "b3f7",
+            "g8h8",
+            "f7e8",
+            "d8e8"
+          ]
+        },
+        {
+          "move": "b6c4",
+          "score": -401,
+          "static_score": -96,
+          "depth": 5,
+          "complete": true,
+          "nodes": 1868,
+          "qnodes": 1371,
+          "tt_hits": 53,
+          "tt_cutoffs": 17,
+          "lmr_reductions": 26,
+          "lmr_researches": 3,
+          "pv": [
+            "b6c4",
+            "c2c3",
+            "c4b2",
+            "c1b2",
+            "c6a5"
+          ]
+        },
+        {
+          "move": "b6a4",
+          "score": -413,
+          "static_score": -20,
+          "depth": 5,
+          "complete": true,
+          "nodes": 1616,
+          "qnodes": 1265,
+          "tt_hits": 26,
+          "tt_cutoffs": 10,
+          "lmr_reductions": 5,
+          "lmr_researches": 3,
+          "pv": [
+            "b6a4",
+            "b3a4",
+            "e7b4",
+            "c2c3",
+            "c6d4"
+          ]
+        },
+        {
+          "move": "b6d5",
+          "score": -471,
+          "static_score": -111,
+          "depth": 5,
+          "complete": true,
+          "nodes": 2022,
+          "qnodes": 1643,
+          "tt_hits": 37,
+          "tt_cutoffs": 17,
+          "lmr_reductions": 11,
+          "lmr_researches": 0,
+          "pv": [
+            "b6d5",
+            "f3d5",
+            "c6d4",
+            "d5d8",
+            "a8d8"
+          ]
+        },
+        {
+          "move": "e7a3",
+          "score": -473,
+          "static_score": -116,
+          "depth": 5,
+          "complete": true,
+          "nodes": 4142,
+          "qnodes": 3462,
+          "tt_hits": 88,
+          "tt_cutoffs": 28,
+          "lmr_reductions": 22,
+          "lmr_researches": 1,
+          "pv": [
+            "e7a3",
+            "a1a3",
+            "c6d4",
+            "f3g3",
+            "h7h6"
+          ]
+        },
+        {
+          "move": "d8d5",
+          "score": -652,
+          "static_score": -107,
+          "depth": 5,
+          "complete": true,
+          "nodes": 591,
+          "qnodes": 389,
+          "tt_hits": 9,
+          "tt_cutoffs": 7,
+          "lmr_reductions": 0,
+          "lmr_researches": 0,
+          "pv": [
+            "d8d5",
+            "b3d5",
+            "c6d4",
+            "f3e4",
+            "b6d5"
+          ]
+        },
+        {
+          "move": "d8d3",
+          "score": -727,
+          "static_score": 10,
+          "depth": 5,
+          "complete": true,
+          "nodes": 2506,
+          "qnodes": 1996,
+          "tt_hits": 54,
+          "tt_cutoffs": 23,
+          "lmr_reductions": 11,
+          "lmr_researches": 0,
+          "pv": [
+            "d8d3",
+            "f3d3",
+            "a8d8",
+            "d3f3",
+            "c6d4"
+          ]
+        }
+      ]
+    },
+    {
+      "case": {
+        "identifier": "round48-49-kh7",
+        "label": "Keresight, Black move 49",
+        "fen": "8/5pk1/1p4p1/2p1Q3/3p1K2/5P2/8/1r6 b - - 4 49",
+        "played_move": "g7g8",
+        "reference_move": "g7h7",
+        "baseline_move": "g7g8",
+        "diagnosis": "V5 spent only about 1.24 seconds despite having 41.5 seconds left and played Kg8 in an equal ending. The move loses by force; Kh7 holds."
+      },
+      "node_probes": [
+        {
+          "node_limit": 300000,
+          "move": "g7h7",
+          "score": -44,
+          "depth": 11,
+          "nodes": 300001,
+          "qnodes": 179195,
+          "elapsed_s": 2.09788089999347,
+          "tt_hits": 43390,
+          "tt_cutoffs": 15931,
+          "lmr_reductions": 24620,
+          "lmr_researches": 414,
+          "memory_mode": "fresh"
+        },
+        {
+          "node_limit": 1000000,
+          "move": "g7h7",
+          "score": -41,
+          "depth": 12,
+          "nodes": 1000001,
+          "qnodes": 614554,
+          "elapsed_s": 6.826733499998227,
+          "tt_hits": 159065,
+          "tt_cutoffs": 58820,
+          "lmr_reductions": 66592,
+          "lmr_researches": 776,
+          "memory_mode": "fresh"
+        }
+      ],
+      "root_lines": [
+        {
+          "move": "g7h7",
+          "score": -85,
+          "static_score": -110,
+          "depth": 5,
+          "complete": true,
+          "nodes": 1610,
+          "qnodes": 1097,
+          "tt_hits": 93,
+          "tt_cutoffs": 31,
+          "lmr_reductions": 43,
+          "lmr_researches": 6,
+          "pv": [
+            "g7h7",
+            "f4g3",
+            "b1a1",
+            "e5g5",
+            "a1a3"
+          ]
+        },
+        {
+          "move": "g7g8",
+          "score": -133,
+          "static_score": -67,
+          "depth": 5,
+          "complete": true,
+          "nodes": 2535,
+          "qnodes": 1808,
+          "tt_hits": 166,
+          "tt_cutoffs": 67,
+          "lmr_reductions": 39,
+          "lmr_researches": 6,
+          "pv": [
+            "g7g8",
+            "f4g5",
+            "b1f1",
+            "f3f4",
+            "d4d3"
+          ]
+        },
+        {
+          "move": "g7f8",
+          "score": -138,
+          "static_score": -319,
+          "depth": 5,
+          "complete": true,
+          "nodes": 2500,
+          "qnodes": 1785,
+          "tt_hits": 138,
+          "tt_cutoffs": 68,
+          "lmr_reductions": 49,
+          "lmr_researches": 3,
+          "pv": [
+            "g7f8",
+            "f4g5",
+            "d4d3",
+            "f3f4"
+          ]
+        },
+        {
+          "move": "f7f6",
+          "score": -337,
+          "static_score": -72,
+          "depth": 5,
+          "complete": true,
+          "nodes": 1347,
+          "qnodes": 937,
+          "tt_hits": 74,
+          "tt_cutoffs": 19,
+          "lmr_reductions": 10,
+          "lmr_researches": 0,
+          "pv": [
+            "f7f6",
+            "e5e7",
+            "g7g8",
+            "e7f6",
+            "g8h7"
+          ]
+        },
+        {
+          "move": "g7h6",
+          "score": -29998,
+          "static_score": -1450,
+          "depth": 5,
+          "complete": true,
+          "nodes": 1470,
+          "qnodes": 936,
+          "tt_hits": 86,
+          "tt_cutoffs": 35,
+          "lmr_reductions": 41,
+          "lmr_researches": 2,
+          "pv": [
+            "g7h6",
+            "e5h8"
+          ]
+        }
+      ]
+    }
+  ]
+}

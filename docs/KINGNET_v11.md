@@ -17,7 +17,11 @@ the in-memory accumulator width and the platform still enforces its init budget.
 The exporter can store the folded sparse feature table as float16 while retaining
 float32 training and fixed-point runtime evaluation. This reduces its on-disk size
 by roughly half. Compact storage is a packaging optimization, not a claim that a
-wider network is stronger or fast enough for the competition CPU.
+wider network is stronger or fast enough for the competition CPU. The exporter
+rejects float16 when it would change a runtime feature weight by more than the
+configured quantization tolerance. Use float32 for a long training run when the
+uncompressed model still fits comfortably; compact a completed model only after
+the exporter accepts it and the normal runtime gates pass.
 
 ## Configuration is the experiment contract
 
@@ -265,6 +269,27 @@ the correctness and throughput gates, materialize separate 75% and 100%
 candidates from that exact file. Screen 75% against the current champion first,
 then screen 100% against the winning V11 candidate. No retraining is required;
 the pure learned candidate also avoids the handcrafted evaluation call.
+
+Use the V11-compatible runtime as the source while supplying the trained export
+explicitly. The materializer copies every top-level Python module required by
+the source candidate, including its time manager:
+
+```bash
+PY="./.venv/Scripts/python.exe"
+MODEL="benchmarks/runs/kingnet-v11-mixed80m/model.npz"
+
+"$PY" -m tools.materialize_nnue_blend \
+  --source challengers/exp_kingnet_v11_big \
+  --model "$MODEL" \
+  --blend 75 \
+  --output benchmarks/runs/candidates/kingnet-v11-256-75
+
+"$PY" -m tools.materialize_nnue_blend \
+  --source challengers/exp_kingnet_v11_big \
+  --model "$MODEL" \
+  --blend 100 \
+  --output benchmarks/runs/candidates/kingnet-v11-256-100
+```
 
 Training artifacts remain under ignored `benchmarks/runs/`. Preserve the manifest
 and run-specific configuration beside every candidate model.
