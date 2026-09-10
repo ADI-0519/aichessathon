@@ -1088,6 +1088,28 @@ def _has_non_pawn_material(pieces: NDArray[np.uint64], side: int) -> bool:
 
 
 @njit(cache=False, inline="always")
+def _reverse_futility_allowed(
+    excluded_move: int,
+    have_static_eval: bool,
+    depth: int,
+    has_non_pawn_material: bool,
+) -> bool:
+    """Return whether RFP may terminate this node without searching moves.
+
+    An excluded-move search must inspect the alternatives to its excluded move.
+    Letting reverse futility return from that verification can falsely classify
+    the transposition-table move as singular.
+    """
+    return bool(
+        ENABLE_V10_REVERSE_FUTILITY
+        and excluded_move == 0
+        and have_static_eval
+        and depth <= V10_RFP_MAX_DEPTH
+        and has_non_pawn_material
+    )
+
+
+@njit(cache=False, inline="always")
 def _tt_bucket_start(key: np.uint64, table_size: int) -> int:
     index = int(key & np.uint64(table_size - 1))
     return index & ~(TT_BUCKET_SIZE - 1) if ENABLE_TT2 else index
@@ -1380,7 +1402,11 @@ def _negamax(
         and abs(beta) < MATE_BOUND
         and non_pv
         and (
-            (ENABLE_V10_REVERSE_FUTILITY and depth <= V10_RFP_MAX_DEPTH)
+            (
+                ENABLE_V10_REVERSE_FUTILITY
+                and excluded_move == 0
+                and depth <= V10_RFP_MAX_DEPTH
+            )
             or (ENABLE_V10_QUIET_FUTILITY and depth <= V10_QF_MAX_DEPTH)
             or (ENABLE_V10_DYNAMIC_NMP and null_move_candidate)
         )
@@ -1401,10 +1427,12 @@ def _negamax(
     # of check, and away from pawn-only endings where static evaluation is a
     # less trustworthy substitute for search.
     if (
-        ENABLE_V10_REVERSE_FUTILITY
-        and have_static_eval
-        and depth <= V10_RFP_MAX_DEPTH
-        and _has_non_pawn_material(pieces, side)
+        _reverse_futility_allowed(
+            excluded_move,
+            have_static_eval,
+            depth,
+            _has_non_pawn_material(pieces, side),
+        )
     ):
         rfp_margin = V10_RFP_MARGIN_BASE + V10_RFP_MARGIN_PER_DEPTH * depth
         if static_eval - rfp_margin >= beta:

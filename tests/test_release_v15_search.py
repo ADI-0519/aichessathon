@@ -29,6 +29,14 @@ class ReleaseV15SearchTests(unittest.TestCase):
         )
         self.stats = np.zeros(self.search.STAT_COUNT, dtype=np.int64)
 
+    def test_reverse_futility_never_prunes_singular_verification(self) -> None:
+        allowed = self.search._reverse_futility_allowed
+        self.assertTrue(allowed(0, True, self.search.V10_RFP_MAX_DEPTH, True))
+        self.assertFalse(allowed(1, True, self.search.V10_RFP_MAX_DEPTH, True))
+        self.assertFalse(allowed(0, False, self.search.V10_RFP_MAX_DEPTH, True))
+        self.assertFalse(allowed(0, True, self.search.V10_RFP_MAX_DEPTH + 1, True))
+        self.assertFalse(allowed(0, True, self.search.V10_RFP_MAX_DEPTH, False))
+
     def _entry(self, index: int, key: int, depth: int, generation: int) -> None:
         self.keys[index] = np.uint64(key)
         self.data[index, self.search.TT_DEPTH] = np.int32(depth)
