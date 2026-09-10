@@ -1,6 +1,7 @@
 SHELL := /bin/bash
+OUT ?= submission.zip
 
-.PHONY: setup play arena zip gate
+.PHONY: setup play arena zip zip-challenger gate
 
 setup:
 	uv sync
@@ -13,6 +14,10 @@ arena:
 
 zip:
 	uv run python -m harness.package
+
+# package zips its working directory, so this must run inside challenger to include weights/
+zip-challenger:
+	cd challengers/$(CHALLENGER) && PYTHONPATH=$(CURDIR) uv run python -m harness.package --out $(CURDIR)/$(OUT)
 
 gate:
 	uv run ruff check .
