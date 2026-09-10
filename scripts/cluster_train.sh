@@ -22,7 +22,12 @@ cd "$ROOT"
 MONTHS="${MONTHS:-3}"
 ACCUMULATOR="${ACCUMULATOR:-256}"
 HIDDEN="${HIDDEN:-32}"
-EPOCHS="${EPOCHS:-12}"
+EPOCHS="${EPOCHS:-24}"
+# Samples drawn per epoch. The default of twenty million was written for
+# four-million-position datasets; against 200M it means each position is seen
+# about once across the whole run. Defaulting to the training target makes an
+# epoch a full pass.
+SAMPLES_PER_EPOCH="${SAMPLES_PER_EPOCH:-$TRAIN_TARGET}"
 BATCH_SIZE="${BATCH_SIZE:-16384}"
 TRAIN_TARGET="${TRAIN_TARGET:-200000000}"
 VALIDATION_TARGET="${VALIDATION_TARGET:-1000000}"
@@ -254,9 +259,9 @@ MODEL="$RUN_DIR/model.npz"
 MODEL_MANIFEST="$RUN_DIR/model-manifest.json"
 CONFIG="$RUN_DIR/config.json"
 
-"$PY" - "$CONFIG" "$TRAIN_NPY" "$VAL_NPY" "$ACCUMULATOR" "$HIDDEN"       "$EPOCHS" "$BATCH_SIZE" <<'PYCONF'
+"$PY" - "$CONFIG" "$TRAIN_NPY" "$VAL_NPY" "$ACCUMULATOR" "$HIDDEN"       "$EPOCHS" "$BATCH_SIZE" "$SAMPLES_PER_EPOCH" <<'PYCONF'
 import json, sys
-config_path, train_npy, val_npy, acc, hidden, epochs, batch = sys.argv[1:8]
+config_path, train_npy, val_npy, acc, hidden, epochs, batch, spe = sys.argv[1:9]
 # Sampling and selection lean towards the endings, where our static evaluation
 # is worst: measured against Stockfish it errs by 94 cp with 26 or more pieces
 # and 346 cp with seven or fewer, and both long rated losses were endgames.
@@ -271,7 +276,7 @@ config = {
     "export": {"feature_storage": "float16"},
     "training": {
         "epochs": int(epochs),
-        "samples_per_epoch": 20_000_000,
+        "samples_per_epoch": int(spe),
         "batch_size": int(batch),
         "learning_rate": 0.0003,
         "min_learning_rate": 0.00001,
@@ -309,6 +314,7 @@ with open(config_path, "w", encoding="utf-8") as handle:
 print(f"wrote {config_path}")
 PYCONF
 
+say "epoch = $SAMPLES_PER_EPOCH samples over $TRAIN_TARGET positions; $EPOCHS epochs"
 stage "training KingNet ${ACCUMULATOR}/pair$((ACCUMULATOR / 2))/${HIDDEN} for $EPOCHS epochs on GPU $GPU_ID"
 nice -n "$NICE" "$PY" -m tools.train_kingnet_v11   --config "$CONFIG"   --output "$MODEL"   --manifest "$MODEL_MANIFEST" &
 TRAIN_PID=$!
