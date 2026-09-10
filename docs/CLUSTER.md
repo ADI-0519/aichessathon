@@ -30,7 +30,34 @@ fast:
   rather than fighting the first for the same files.
 - **Cleans up on exit**, including on Ctrl-C, so no orphaned trainer keeps a GPU.
 
-Override any of it: `GPU_ID=6 WORKERS=8 bash scripts/cluster_train.sh`.
+**Choosing the card yourself:**
+
+```bash
+GPU=6 bash scripts/cluster_train.sh
+```
+
+It checks the card exists, reports what is already on it, and warns if someone
+else appears to be using it -- but proceeds, because you named it. Leaving `GPU`
+unset makes it find an idle card instead.
+
+Override anything else the same way: `GPU=6 WORKERS=8 MONTHS=24 bash scripts/cluster_train.sh`.
+
+## Memory
+
+It reads `MemAvailable` before starting and refuses if what is free will not
+cover the run plus 16 GB of headroom, because swapping on a shared box hurts
+everyone. A packed position is 68 bytes and each packing worker needs about a
+gigabyte for the Parquet row group it decodes, so:
+
+| positions | workers | needs |
+| --- | --- | --- |
+| 60M (default) | 12 | ~19 GB |
+| 200M | 12 | ~29 GB |
+| 800M | 12 | ~66 GB |
+
+Against the 327 GB free when this was written, even the largest run is
+comfortable. Note that 13 GB of swap was already in use, so treat the available
+figure as something that moves rather than a guarantee.
 
 ## Watching it
 

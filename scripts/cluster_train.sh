@@ -69,9 +69,37 @@ say "run directory: $RUN_DIR"
 say "log:           $LOG"
 say "status:        $STATUS"
 
+# ------------------------------------------------------------------- memory
+stage "checking memory"
+AVAILABLE_KB="$(awk '/MemAvailable/ {print $2}' /proc/meminfo)"
+AVAILABLE_GB=$((AVAILABLE_KB / 1024 / 1024))
+# 68 bytes a position, plus roughly a gigabyte per packing worker for the
+# Parquet row group it decodes.
+NEED_GB=$(( (TRAIN_TARGET * 68 / 1024 / 1024 / 1024) + WORKERS + 4 ))
+say "available: ${AVAILABLE_GB} GB, this run needs about ${NEED_GB} GB"
+if (( AVAILABLE_GB < NEED_GB + 16 )); then
+  echo "Not enough memory: ${AVAILABLE_GB} GB available, ${NEED_GB} GB needed plus headroom." >&2
+  echo "Others are using this machine; lower TRAIN_TARGET or WORKERS, or wait." >&2
+  exit 1
+fi
+
 # ----------------------------------------------------------------- pick one GPU
 stage "selecting a GPU"
-GPU_ID="${GPU_ID:-}"
+# GPU=6 picks a card explicitly; leaving it unset finds an idle one.
+GPU_ID="${GPU:-${GPU_ID:-}}"
+if [[ -n "$GPU_ID" ]]; then
+  if ! nvidia-smi --query-gpu=index --format=csv,noheader,nounits        | grep -qx "$GPU_ID"; then
+    echo "GPU $GPU_ID does not exist on this machine." >&2
+    nvidia-smi --query-gpu=index,memory.used,memory.total,utilization.gpu --format=csv >&2
+    exit 1
+  fi
+  read -r used_mb util < <(nvidia-smi --id="$GPU_ID"     --query-gpu=memory.used,utilization.gpu --format=csv,noheader,nounits     | tr -d ',')
+  say "using GPU $GPU_ID as asked: ${used_mb} MB already in use, ${util}% busy"
+  if (( used_mb > 2000 )); then
+    say "WARNING: someone else appears to be on GPU $GPU_ID. Continuing because"
+    say "         you named it, but check gpustat if that was not intended."
+  fi
+fi
 if [[ -z "$GPU_ID" ]]; then
   GPU_ID="$(nvidia-smi --query-gpu=index,memory.free,utilization.gpu \
             --format=csv,noheader,nounits \
