@@ -1,0 +1,38 @@
+# Balanced endgames, 0 < |white_cp| <= 120, each a quiet position (no capture in the last two plies,
+# not in check) at a target of 8-12 pieces.  Two sources: our own arena/rated games, then Stockfish
+# self-play (20,000 nodes/move) out of Stockfish 8-move book openings taken from the end of
+# openings_8moves_v3_500.epd, disjoint from balanced_openings_v1.
+# Stockfish 19, 1,500,000 nodes per position; white_cp is its eval from White's side.
+# Development input for paired arenas (tools.paired_arena --suite); never packaged with the agent.
+3nN3/3P2R1/8/2p2k2/6r1/8/4K3/8 w - - 2 63  # yasee/aichessathon-round-81-saucybeans.pgn; white_cp 8
+8/8/6k1/4qpP1/5R1p/5K2/4B1R1/8 b - - 1 73  # Stockfish self-play from 8moves_v3 pgn-022577; white_cp -2
+3n4/3PR3/5N1k/2p5/3r2P1/8/4K3/8 b - - 1 60  # games/aichessathon-round-81-saucybeans.pgn; white_cp 8
+4k3/8/3p3B/5p2/b7/P7/1K6/8 w - - 2 49  # Stockfish self-play from 8moves_v3 pgn-026466; white_cp -2
+r7/3k2B1/5p2/2pn4/7R/7P/5PP1/6K1 w - - 2 42  # games/aichessathon-round-77-archierayteam.pgn; white_cp 13
+8/7p/4k3/8/5K1P/P3N3/4P3/1r6 w - - 1 49  # Stockfish self-play from 8moves_v3 pgn-020842; white_cp -17
+1b6/8/6pp/1N2k3/1P2p3/6P1/P3K2P/8 b - - 2 43  # games/aichessathon-round-82-dawilliucodes.pgn; white_cp 60
+8/5p2/6kp/4B1p1/8/3K1PP1/b6P/8 w - - 2 59  # Stockfish self-play from 8moves_v3 pgn-004982; white_cp 1
+8/8/8/3k1P1K/8/2R1P3/2p1r3/8 b - - 2 58  # arena-combined-vs-adiv14-resume/game-p007-w-=.pgn; white_cp -10
+8/4p2p/2R3pk/3P4/5r2/b3N3/5PKP/8 w - - 2 36  # Stockfish self-play from 8moves_v3 pgn-012132; white_cp -6
+6k1/2R2p2/6p1/p7/4r2P/6P1/5P2/5K2 b - - 1 23  # arena-bignet256-vs-current/game-p007-w-=.pgn; white_cp 30
+2r5/8/3kP1pp/1p2R3/5PK1/8/8/8 w - - 2 62  # Stockfish self-play from 8moves_v3 pgn-002506; white_cp -1
+8/1r6/5k2/2b2P1p/R7/6P1/2K4P/8 b - - 2 56  # arena-bignet256-vs-external/game-p005-w--.pgn; white_cp -31
+5q1k/1Q5p/3p4/p7/P1B2b2/1K6/1P6/8 w - - 2 44  # Stockfish self-play from 8moves_v3 pgn-005838; white_cp 33
+1r6/R3P2p/4kp2/5b2/8/2P1N2P/8/6K1 b - - 2 42  # arena-bignet256-vs-current/game-p002-w-=.pgn; white_cp 2
+8/6B1/2R5/1r6/4kppP/8/8/7K w - - 2 54  # Stockfish self-play from 8moves_v3 pgn-027896; white_cp 27
+8/6p1/7p/6p1/R2K1n2/1P3k2/8/8 b - - 2 62  # arena-combined-vs-adiv14-resume/game-p003-b-+.pgn; white_cp -3
+5k2/5p2/p7/P5p1/1r4bP/R4B2/5P2/6K1 b - - 2 34  # Stockfish self-play from 8moves_v3 pgn-019192; white_cp -2
+8/8/8/pn1p1R2/6k1/1P2K3/P7/2r5 w - - 2 59  # Stockfish self-play from 8moves_v3 pgn-033474; white_cp 2
+R7/5p2/4k1p1/6K1/p1r5/P7/1P5P/8 w - - 2 50  # Stockfish self-play from 8moves_v3 pgn-033073; white_cp 2
+8/8/pn3k2/6p1/4P3/P3K3/8/5N2 w - - 2 57  # Stockfish self-play from 8moves_v3 pgn-005166; white_cp -2
+8/5k2/7R/3r2p1/6K1/5P1P/8/8 w - - 2 47  # Stockfish self-play from 8moves_v3 pgn-001828; white_cp 24
+R7/5p2/5k2/5r2/B6p/8/6PK/5b2 b - - 2 57  # Stockfish self-play from 8moves_v3 pgn-007267; white_cp -7
+7k/p3R2p/6br/8/P7/3B1N2/1b4P1/3K4 w - - 2 47  # Stockfish self-play from 8moves_v3 pgn-004129; white_cp 9
+8/1k6/7R/5p1P/6p1/6K1/4P3/5r2 w - - 2 74  # Stockfish self-play from 8moves_v3 pgn-007798; white_cp 13
+5k2/7Q/5p2/3p1P2/3P4/4qP1P/7K/8 w - - 2 56  # Stockfish self-play from 8moves_v3 pgn-007749; white_cp 1
+8/5pp1/6kp/R7/4r3/7P/6PK/8 w - - 2 59  # Stockfish self-play from 8moves_v3 pgn-018267; white_cp -28
+6k1/p6p/2R3pP/8/1r1P4/2p5/2P3PK/8 w - - 2 45  # Stockfish self-play from 8moves_v3 pgn-008337; white_cp 40
+8/2R2pkp/4b3/PB3r2/4K3/8/8/8 w - - 2 36  # Stockfish self-play from 8moves_v3 pgn-005906; white_cp -4
+2r5/k7/4pN1P/p4rP1/1p6/6K1/8/3R4 w - - 2 51  # Stockfish self-play from 8moves_v3 pgn-032595; white_cp -37
+8/1p4k1/4R3/p4K1p/3r4/PP6/8/8 w - - 1 50  # Stockfish self-play from 8moves_v3 pgn-033713; white_cp 2
+6k1/p7/2r4p/5n2/8/1RPN3P/5PK1/8 b - - 2 42  # Stockfish self-play from 8moves_v3 pgn-002406; white_cp 29

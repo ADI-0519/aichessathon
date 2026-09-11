@@ -38,3 +38,23 @@ archive hash above, then run:
 The hash-ranked selection is independent of source ordering. The EPD retains halfmove and fullmove
 counters, and `tools.backtest` recomputes the stable development/validation/holdout assignment from
 each normalized FEN.
+
+## Balanced arena suites (2026-09-11)
+
+`tools.paired_arena` and `tools.paired_arena_shards` take `--suite FILE` (one FEN or EPD record per
+line, `#` comments allowed) in place of their generated positions. Half of the generated 24-position
+set was decided before either engine moved -- twelve starts at 250 cp or more for one side, one a
+forced mate -- so in a paired run those games split and carry no information. Against external_a
+from balanced starts only, adi_v14 scored 23% and bignet256 16%, not the 34% and 29% the full set
+reported.
+
+- `balanced_openings_v1.epd`: 48 positions, every one within 100 cp by Stockfish. The 30 real
+  platform start positions recorded in our rated PGNs (named openings, moves 5-11), interleaved with
+  18 positions from the head of `openings_8moves_v3_500.epd`.
+- `balanced_endgames_v1.epd`: 32 quiet positions (no capture in the last two plies, not in check)
+  of 7-12 pieces, within 120 cp and not a dead 0.00. Nine come from our own games; the other 23 from
+  Stockfish self-play out of book openings taken from the tail of the 500-position file, disjoint
+  from the opening suite. Our own games are decisive by the time they reach an endgame, so they
+  yield few balanced ones.
+
+`balanced_v1.manifest.json` records the engine, node counts, selection rules and counts.

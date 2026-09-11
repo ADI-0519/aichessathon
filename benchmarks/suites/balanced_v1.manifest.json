@@ -1,0 +1,53 @@
+{
+ "built": "2026-09-11",
+ "engine": "Stockfish 19",
+ "nodes": 1500000,
+ "balanced_openings_v1": {
+  "positions": 48,
+  "platform_starts_accepted": 30,
+  "book_positions": 18,
+  "platform_starts_rejected": []
+ },
+ "balanced_endgames_v1": {
+  "positions": 32,
+  "from_our_games": 9,
+  "from_stockfish_selfplay": 23,
+  "selfplay_openings_tried": 95,
+  "selfplay_nodes_per_move": 20000,
+  "selection": "quiet position at a target of 8-12 pieces; 0 < |white_cp| <= 120",
+  "piece_counts": [
+   7,
+   7,
+   7,
+   8,
+   8,
+   8,
+   8,
+   8,
+   8,
+   9,
+   9,
+   9,
+   9,
+   9,
+   9,
+   9,
+   9,
+   9,
+   10,
+   10,
+   10,
+   10,
+   11,
+   11,
+   11,
+   11,
+   11,
+   11,
+   12,
+   12,
+   12,
+   12
+  ]
+ }
+}

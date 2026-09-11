@@ -10,7 +10,7 @@ from collections import Counter, defaultdict
 from pathlib import Path
 
 from harness.referee import FAILED_TERMINATIONS
-from tools.paired_arena import positions
+from tools.paired_arena import load_suite, positions
 
 GAME_LINE = re.compile(
     r"^game \d+/\d+, position (\d+), candidate (white|black): ([+=-]) by (\S+)$"
@@ -85,6 +85,7 @@ def main() -> None:
     parser.add_argument("--positions", type=int)
     parser.add_argument("--seed", type=int, default=20260904)
     parser.add_argument("--no-curated", action="store_true")
+    parser.add_argument("--suite", type=Path)
     parser.add_argument("--shards", type=int, default=10)
     parser.add_argument("--log-dir", type=Path, required=True)
     parser.add_argument(
@@ -120,7 +121,10 @@ def main() -> None:
         parser.error("give --opponent, or --extra for a module that names its own")
     if arguments.shards <= 0:
         parser.error("--shards must be positive")
-    suite = positions(arguments.positions, arguments.seed, not arguments.no_curated)
+    if arguments.suite is not None:
+        suite = load_suite(arguments.suite)[: arguments.positions]
+    else:
+        suite = positions(arguments.positions, arguments.seed, not arguments.no_curated)
     if len(suite) < arguments.positions:
         parser.error(f"suite yielded only {len(suite)} positions")
 
@@ -140,6 +144,8 @@ def main() -> None:
     shared += arguments.extra
     if arguments.no_curated:
         shared.append("--no-curated")
+    if arguments.suite is not None:
+        shared += ["--suite", str(arguments.suite)]
 
     # Each shard writes straight into its own log rather than into a pipe the
     # parent drains at exit.  A long run is then inspectable while it is still

@@ -69,6 +69,31 @@ def positions(
     return result[:count]
 
 
+def load_suite(path: Path) -> list[str]:
+    """Start positions from a file: one FEN or EPD record per line, '#' comments allowed.
+
+    EPD records keep their hmvc/fmvn move counters when present (the time
+    manager reads the move number), so an opening book and a hand-written FEN
+    list load the same way.
+    """
+    result: list[str] = []
+    for raw in path.read_text(encoding="utf-8").splitlines():
+        line = raw.split("#", 1)[0].strip()
+        if not line:
+            continue
+        fields = line.split()
+        if len(fields) >= 6 and fields[4].isdigit() and fields[5].isdigit():
+            fen = " ".join(fields[:6])
+        else:
+            board, _ = chess.Board.from_epd(line)  # honours hmvc/fmvn opcodes
+            fen = board.fen()
+        chess.Board(fen)  # reject a malformed line here, not mid-run
+        result.append(fen)
+    if not result:
+        raise ValueError(f"{path} holds no positions")
+    return result
+
+
 def elo(score: float) -> float:
     """Convert a score fraction to an Elo difference, clamped at the extremes."""
     if score <= 0.001:
@@ -111,6 +136,11 @@ def main() -> None:
     parser.add_argument("--seed", type=int, default=20260904)
     parser.add_argument("--no-curated", action="store_true")
     parser.add_argument(
+        "--suite",
+        type=Path,
+        help="read start positions from this FEN/EPD file instead of generating them",
+    )
+    parser.add_argument(
         "--pgn-dir",
         type=Path,
         help="write each game as a PGN here, for tools/blunder_audit.py",
@@ -126,9 +156,13 @@ def main() -> None:
         arguments.pgn_dir.mkdir(parents=True, exist_ok=True)
     candidate = arguments.candidate.resolve()
     opponent = arguments.opponent.resolve()
-    suite = positions(arguments.positions, arguments.seed, not arguments.no_curated)[
-        arguments.offset :
-    ]
+    if arguments.suite is not None:
+        full = load_suite(arguments.suite)
+        if arguments.positions is not None:
+            full = full[: arguments.positions]
+    else:
+        full = positions(arguments.positions, arguments.seed, not arguments.no_curated)
+    suite = full[arguments.offset :]
     suite = suite[: arguments.limit]
     if not suite:
         parser.error("--offset selects no positions")
