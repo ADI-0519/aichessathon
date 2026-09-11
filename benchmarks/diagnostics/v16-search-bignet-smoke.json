@@ -1,0 +1,115 @@
+{
+  "aggregates": [
+    {
+      "beta_cutoffs": 3362,
+      "capture_history_updates": 1026,
+      "depth": 5,
+      "lmr_reductions": 638,
+      "lmr_researches": 21,
+      "maximum_nps": 84323.54406230197,
+      "median_nps": 84323.54406230197,
+      "minimum_nps": 84323.54406230197,
+      "move": "f1e1",
+      "node_limit": 10000,
+      "nodes": 10001,
+      "position_id": "fen",
+      "q_accumulator_updates": 0,
+      "q_accumulator_waste_rate": null,
+      "q_check_saves": 0,
+      "q_children_searched": 0,
+      "q_eval_hit_rate": 0.27958278383886825,
+      "q_eval_hits": 2332,
+      "q_eval_probes": 8341,
+      "q_moves_considered": 0,
+      "q_pruned_after_update": 0,
+      "qnodes": 7683,
+      "qshare": 0.7682231776822318,
+      "qtt_cutoff_rate": null,
+      "qtt_cutoffs": 0,
+      "qtt_hit_rate": null,
+      "qtt_hits": 0,
+      "qtt_probes": 0,
+      "qtt_stores": 0,
+      "score": 4,
+      "singular_attempts": 0,
+      "singular_extensions": 0,
+      "tt_collisions": 0,
+      "tt_cutoffs": 161,
+      "tt_hits": 629,
+      "tt_replacements": 0
+    }
+  ],
+  "configuration": {
+    "max_depth": 32,
+    "node_limits": [
+      10000
+    ],
+    "positions": [
+      {
+        "fen": "r1bqr1k1/pp1nbppp/2pp1n2/4p3/P2PP3/2N2N2/BPP2PPP/R1BQ1RK1 w - - 2 9",
+        "id": "fen"
+      }
+    ],
+    "repeats": 1
+  },
+  "engine": {
+    "bytes": 13015257,
+    "files": [
+      "__init__.py",
+      "agent.py",
+      "engine.py",
+      "nnue.py",
+      "search.py",
+      "time_manager.py",
+      "weights/model.npz"
+    ],
+    "kind": "local",
+    "path": "C:\\Users\\adirj\\OneDrive\\Documents\\GitHub\\aichessathon\\challengers\\exp_release_v16_search_bignet",
+    "sha256": "f845f4c78031583026d9be153287745a81df3391f87832ab15a2573c61d97c8b"
+  },
+  "overall": [
+    {
+      "maximum_nps": 84323.54406230197,
+      "median_nps": 84323.54406230197,
+      "minimum_nps": 84323.54406230197,
+      "node_limit": 10000
+    }
+  ],
+  "probes": [
+    {
+      "beta_cutoffs": 3362,
+      "capture_history_updates": 1026,
+      "depth": 5,
+      "elapsed_s": 0.11860270000761375,
+      "lmr_reductions": 638,
+      "lmr_researches": 21,
+      "move": "f1e1",
+      "node_limit": 10000,
+      "nodes": 10001,
+      "nps": 84323.54406230197,
+      "position_id": "fen",
+      "q_accumulator_updates": 0,
+      "q_check_saves": 0,
+      "q_children_searched": 0,
+      "q_eval_hits": 2332,
+      "q_eval_probes": 8341,
+      "q_moves_considered": 0,
+      "q_pruned_after_update": 0,
+      "qnodes": 7683,
+      "qtt_cutoffs": 0,
+      "qtt_hits": 0,
+      "qtt_probes": 0,
+      "qtt_stores": 0,
+      "repeat": 1,
+      "score": 4,
+      "singular_attempts": 0,
+      "singular_extensions": 0,
+      "tt_collisions": 0,
+      "tt_cutoffs": 161,
+      "tt_hits": 629,
+      "tt_replacements": 0
+    }
+  ],
+  "schema_version": 1,
+  "warmup_s": 61.519337699981406
+}

@@ -1,6 +1,6 @@
 # Experiment ledger
 
-Updated: 10 September 2026
+Updated: 11 September 2026
 
 This is the compact decision record for engine experiments. Detailed analysis remains in the
 dated research documents and machine-readable benchmark files. A development score is evidence
@@ -39,7 +39,9 @@ for choosing what to validate next, not proof of Elo; technical smokes establish
 | V13 Search | V13 Core's material-aware horizon, 2^20 TT and partial-root recovery plus log-log interior LMR and guarded verified root LMR. It scored 5W 4D 3L (58.3%) against V12 over six official-clock pairs; fixed-node comparison established V14 Runtime's exact parity with this search. | Superseded by the exact-speed V14 Runtime build. |
 | V14 Runtime | Delays main-search NNUE updates until moves survive pruning and removes redundant perft warm-up. It preserved V13 Search's fixed-node tree and generally improved throughput. Directly against frozen V12 it scored 27W 23D 10L over 30 paired development openings: 64.17%, about +101 Elo, paired 95% score interval 56.49% to 71.85%, zero failures. | Promote as canonical champion. |
 | V14 qTT | Added a quiescence TT. Although it produced many cutoffs and sometimes greater fixed-node depth, it regressed validation-loss choices and scored 4W 8D 8L (40.0%, about -70 Elo) against V14 Runtime over ten pairs. The early-probe variant preserved the same tree and improved speed only modestly. | Reject both qTT variants. |
-| V15 search family | Four explicit arms derived from frozen V14 Runtime: a bundled two-slot/2^22-entry main TT (`exp_release_v15_tt2`), TT2 plus capture history only (`exp_release_v15_capture`), TT2 plus bounded capture history/countermoves (`exp_release_v15_order`), and the full ordering build plus conservative single-ply singular extensions (`exp_release_v15_search`). Each mechanism is independently implemented and instrumented; qTT, ProbCut, singular multicut and double extensions are excluded. Singular verification forbids reverse futility and requires its TT score/bound to match the current halfmove-clock signature. The first game synchronization no longer redundantly clears a newly allocated 128 MiB TT. Unit, lint, type and cold-compile smokes pass; the full runner-to-ready path took 68.1s locally against the real 90s harness gate. | Await paired games. Keep `current/` frozen until an arm wins and clears the 90s init gate on representative hardware. Measure singular activity before spending games on the full arm. |
+| V15 search family | Four explicit arms derived from frozen V14 Runtime: a bundled two-slot/2^22-entry main TT (`exp_release_v15_tt2`), TT2 plus capture history only (`exp_release_v15_capture`), TT2 plus bounded capture history/countermoves (`exp_release_v15_order`), and the full ordering build plus conservative single-ply singular extensions (`exp_release_v15_search`). On the same 12 paired development openings at 20+0.5, TT2 scored 41.7%, Capture scored 56.2%, and full Search scored 62.5% against V14 Runtime. Full Search's exact source fingerprint is recorded in the run manifest; all arms had zero failures. The paired intervals remain wide. | Reject standalone TT2. Keep Capture only as component evidence. Advance full Search as the measured base for the combined release candidate, without promoting it from 12 reused pairs alone. |
+| BigNet-256 evaluator | Team-trained format-3 network with a 256-wide accumulator and eight material heads, trained on 200 million positions. In otherwise identical search it scored 28W 7D 13L against the shipped evaluator over 24 official-clock pairs: 65.6%, about +112 Elo. A combined V14 Runtime + BigNet run scored 24W 9D 15L against V14 over another 24 official-clock pairs: 59.4%, about +66 Elo. Both had zero failures. | Proven major evaluator gain. Preserve its hash and differential-update tests; use it as the evaluator in the combined candidate. |
+| V16 Search + BigNet | Full V15 Search plus the proven BigNet evaluator, retaining the 75% blend and V15 reliability fixes. Numba literal-specialization controls reduce cold compilation without intended chess changes. Differential verification passed 126 positions with zero accumulator error, including eight stale-bucket transitions. Two cold fixed-node runs initialized in 51.7s and 61.5s; the actual runner reached ready in 59.3s; both packaged colour smokes passed. The archive is 13.0 MB uncompressed. | Primary release candidate. Run paired games against both V14 BigNet (search isolation) and frozen V14/current (full-stack strength) before promotion. |
 
 ## Reliability and infrastructure completed
 
@@ -58,7 +60,6 @@ for choosing what to validate next, not proof of Elo; technical smokes establish
 
 ## Considered but not yet tested as candidates
 
-- Lazy NNUE accumulator updates and quiescence/static-evaluation caching.
 - Pawn/HCE caching after separating pawn-only terms from king-dependent shelter terms.
 - Opening books, pending measured coverage of curated starts.
 - Small Syzygy tablebases as endgame polish rather than a solution to middlegame errors.
