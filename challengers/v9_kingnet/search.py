@@ -617,6 +617,19 @@ def _penalise_earlier_quiets(
         quiet_history[side, from_square, to_square] = max(-1_000_000, previous - malus)
 
 
+@njit(cache=False)
+def _king_can_move(pieces: NDArray[np.uint64], state: NDArray[np.int64], side: int) -> bool:
+    # one legal king move rules out stalemate; not in check, unblocks nothing
+    king_square = engine.lsb_square(pieces[engine.piece_index(side, engine.KING)])
+    targets = engine.KING_ATTACKS[king_square] & ~engine.occupancy_for(pieces, side)
+    enemy = engine.BLACK if side == engine.WHITE else engine.WHITE
+    while targets != np.uint64(0):
+        if not engine.is_square_attacked(pieces, engine.lsb_square(targets), enemy):
+            return True
+        targets &= targets - np.uint64(1)
+    return False
+
+
 @njit(cache=False, inline="always")
 def _has_non_pawn_material(pieces: NDArray[np.uint64], side: int) -> bool:
     occupied = np.uint64(0)
@@ -656,7 +669,7 @@ def _quiescence(
 
     side = int(state[engine.STATE_SIDE])
     in_check = engine.is_in_check(pieces, side)
-    # generation dominates node cost, but pawn endings need stalemate exact
+    # generation dominates node cost, mobile king rules out stalemate
     count = -1
     if in_check:
         count = engine.generate_legal_moves(
@@ -670,7 +683,7 @@ def _quiescence(
         )
         if count == 0:
             return -MATE_SCORE + ply, False
-    elif not _has_non_pawn_material(pieces, side):
+    elif not _has_non_pawn_material(pieces, side) or not _king_can_move(pieces, state, side):
         count = engine.generate_legal_captures(
             pieces,
             state,
@@ -854,9 +867,13 @@ def _negamax(
 
     side = int(state[engine.STATE_SIDE])
     in_check = engine.is_in_check(pieces, side)
-    # deferred past static cutoffs; a stalemate holding pieces scores
+    # deferred past the static cutoffs, but only once stalemate is ruled out
     count = -1
-    if in_check or not _has_non_pawn_material(pieces, side):
+    if (
+        in_check
+        or not _has_non_pawn_material(pieces, side)
+        or not _king_can_move(pieces, state, side)
+    ):
         count = engine.generate_legal_moves(
             pieces,
             state,
