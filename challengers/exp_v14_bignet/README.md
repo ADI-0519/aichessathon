@@ -75,3 +75,27 @@ adi_v14 does not carry the init fix. At ~1.4x local-to-platform (pre-fix
 `current` measured 61.4s local against 88.5s on rated round 98) that puts it
 near 88s of a 90s budget, which is worth fixing there regardless of what this
 build measures.
+
+## Result: stronger than adi_v14 (2026-09-11)
+
+    +24 =9 -15, score 59.4% over 48 paired games from 24 positions, 120s+0.5s
+    paired standard error 4.2%, 95% interval 51.1% to 67.6%    <- excludes 50%
+    Elo +66 (95% +8 to +128)
+    P(stronger): 98.7% paired normal, 99.0% bootstrap over pairs, LOS 92.5%
+    positions swept: this build 4, adi_v14 0.  FAILED terminations: none
+
+    pos  1-6   curated book openings    7.5/12 = 62.5%
+    pos  7-9   fixed endgames/tactics   3.5/6  = 58.3%
+    pos 10-24  random deep FENs        17.5/30 = 58.3%
+
+So the net survives V14's search, at about half the margin it showed under
+v11_big's (+66 here, +112 there); a stronger search makes up some of what a
+weaker evaluator misses.  It does not close the gap to external_a: the same net
+scored 31.2% there, level with adi_v14's 34.4%.
+
+The run is spliced.  A Claude session crash at ~01:17 killed the first run's
+engines, and its shards then scored every remaining game `both_failed` as a
+draw.  Only the eight complete pairs from before the crash (positions 1, 2, 7,
+8, 13, 14, 19, 20) were kept; the other sixteen positions were replayed with
+identical code, seed, positions and control.  Logs and all 48 PGNs are in
+`benchmarks/runs/arena-combined-vs-adiv14-resume/` (gitignored, local).
