@@ -11,6 +11,7 @@ from tools.search_diagnostics import load_engine_modules
 
 REPOSITORY = Path(__file__).resolve().parents[1]
 CHALLENGER = REPOSITORY / "challengers" / "exp_release_v15_search"
+V16_CHALLENGER = REPOSITORY / "challengers" / "exp_release_v16_search_bignet"
 
 
 class ReleaseV15SearchTests(unittest.TestCase):
@@ -121,6 +122,14 @@ class ReleaseV15SearchTests(unittest.TestCase):
         self.assertGreater(first, 0)
         self.assertLess(second, first)
         self.assertTrue(np.abs(table).max() <= self.search.CAPTURE_HISTORY_LIMIT)
+
+
+class ReleaseV16SearchBigNetInvariantTests(ReleaseV15SearchTests):
+    """Apply the established V15 search contract to the combined V16 build."""
+
+    @classmethod
+    def setUpClass(cls) -> None:
+        cls.engine, cls.search = load_engine_modules(V16_CHALLENGER)
 
 
 if __name__ == "__main__":
