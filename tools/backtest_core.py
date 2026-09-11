@@ -9,7 +9,7 @@ import os
 import subprocess
 import sys
 from collections import Counter, defaultdict
-from collections.abc import Iterable, Sequence
+from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import asdict, dataclass
 from datetime import UTC, datetime
 from pathlib import Path
@@ -131,19 +131,37 @@ def positions_from_fens(
 
 
 def load_epd(path: Path, *, split_seed: str) -> list[SuitePosition]:
-    """Load one EPD position per non-comment line."""
+    """Load one EPD or full-FEN record per non-comment line.
+
+    Some externally produced suites use the common ``FEN # label`` form even
+    when their filename ends in ``.epd``. Accept that form without weakening
+    normal EPD validation, and retain the label as the position identifier.
+    """
     entries: list[tuple[str, str]] = []
     with path.open(encoding="utf-8-sig") as handle:
         for line_number, raw_line in enumerate(handle, start=1):
-            line = raw_line.strip()
-            if not line or line.startswith("#"):
+            line, separator, comment = raw_line.partition("#")
+            line = line.strip()
+            if not line:
                 continue
-            board = chess.Board()
             try:
-                operations = board.set_epd(line)
+                fields = line.split()
+                if (
+                    len(fields) == 6
+                    and fields[4].isdigit()
+                    and fields[5].isdigit()
+                ):
+                    board = chess.Board(line)
+                    operations: Mapping[str, object] = {}
+                else:
+                    board = chess.Board()
+                    operations = board.set_epd(line)
             except ValueError as error:
                 raise ValueError(f"{path}:{line_number}: invalid EPD: {error}") from error
-            raw_identifier = operations.get("id", f"epd-{line_number:06d}")
+            fallback_identifier = (
+                comment.strip() if separator and comment.strip() else f"epd-{line_number:06d}"
+            )
+            raw_identifier = operations.get("id", fallback_identifier)
             entries.append((str(raw_identifier), canonical_fen(board)))
     return positions_from_fens(entries, split_seed=split_seed)
 

@@ -1,0 +1,51 @@
+# Balanced openings: real platform starts from our rated games, interleaved with Stockfish 8-move book positions; all |white_cp| <= 100
+# Built 2026-09-11: Stockfish 19, 1,500,000 nodes per position; white_cp is its eval from White's side.
+# Development input for paired arenas (tools.paired_arena --suite); never packaged with the agent.
+r1bq1rk1/pppnbpp1/4pn1p/3p4/2PP3B/2N1PN2/PP3PPP/R2QKB1R w KQ - 2 8  # platform round 100; white_cp 9
+r1bq1rk1/pppnbppp/3p1n2/4p3/3PP3/2N1BP2/PPPQ2PP/R3KBNR w KQ - 4 9  # 8moves_v3 pgn-023025; white_cp 8
+r2qkb1r/pp3ppp/2npbn2/3Np3/4P3/1N3P2/PPP3PP/R1BQKB1R b KQkq - 3 8  # platform round 101; white_cp 19
+r3k2r/pp1nqppp/2pbpn2/3p4/6b1/1P1P1NP1/PBPNPPBP/R2Q1RK1 w kq - 3 9  # 8moves_v3 pgn-009720; white_cp 14
+r1bqk1nr/pp2ppbp/2np2p1/2p5/4P3/2NP2P1/PPP1NPBP/R1BQK2R b KQkq - 1 6  # platform round 102; white_cp 5
+r1bq1rk1/pp2bppp/2nppn2/8/3NPP2/2NB4/PPP3PP/R1BQ1RK1 w - - 5 9  # 8moves_v3 pgn-020185; white_cp 7
+rnbqkb1r/ppp2ppp/8/3p4/3Pn3/P4N2/1PP2PPP/RNBQKB1R b KQkq - 0 6  # platform round 103; white_cp -12
+r2qk2r/ppp1bppp/1nn1b3/4p3/8/2N2NP1/PP1PPPBP/1RBQ1RK1 w kq - 8 9  # 8moves_v3 pgn-021199; white_cp 35
+rnbqk2r/p3nppp/1p2p3/2ppP3/P2P4/2P2N2/2P2PPP/R1BQKB1R b KQkq - 0 8  # platform round 104; white_cp 22
+rn1q1rk1/pbpp1pp1/1p2pn1p/6B1/2PP4/P1Q1P3/1P3PPP/R3KBNR w KQ - 0 9  # 8moves_v3 pgn-015155; white_cp 11
+rnbqk2r/ppp3pp/3bpn2/3p1p2/2PP4/1P3NP1/P3PPBP/RNBQK2R b KQkq - 0 7  # platform round 105; white_cp 29
+r1bqkb1r/pp4pp/4p3/2ppnp2/3PnP2/2PBP3/PP4PP/RNBQ1RK1 w kq - 0 9  # 8moves_v3 pgn-022492; white_cp -6
+r1bqk2r/pppnppbp/6p1/8/Q2PP3/2P2N2/P4PPP/R1B1KB1R b KQkq - 4 8  # platform round 27; white_cp 23
+r1b2rk1/pp2qppp/2nbpn2/1Bpp4/3P4/2P1PNB1/PP1N1PPP/R2QK2R w KQ - 6 9  # 8moves_v3 pgn-013174; white_cp 14
+rn1q1rk1/pbp1bppp/1p1ppn2/8/2PP4/PP3NP1/4PPBP/RNBQ1RK1 b - - 0 8  # platform round 28; white_cp 11
+r1bq1rk1/pp4pp/2nppn2/2p2p2/1bPP4/2NBP3/PPQ1NPPP/R1B2RK1 w - - 2 9  # 8moves_v3 pgn-028237; white_cp 42
+rnbqkb1r/1p3ppp/p3pn2/2p5/2BP4/4PN1P/PP3PP1/RNBQ1RK1 b kq - 1 7  # platform round 29; white_cp 8
+r1bq1rk1/p1pnbpp1/1p2pn1p/3p4/3P3B/3BPN2/PPPN1PPP/R2Q1RK1 w - - 0 9  # 8moves_v3 pgn-033539; white_cp -1
+r2q1rk1/1bp1bppp/p2p1n2/np2p3/4P3/1BNP1N1P/PPP2PP1/R1BQR1K1 w - - 1 11  # platform round 30; white_cp -25
+rn1qk2r/1p3pbp/p2pbnp1/2p5/P1P5/5NP1/1P2PPBP/RNBQK2R w KQkq - 0 9  # 8moves_v3 pgn-023078; white_cp 42
+rnbqk2r/ppp1bppp/4pn2/3p4/2P5/5NP1/PPQPPPBP/RNB1K2R b KQkq - 4 5  # platform round 31; white_cp -20
+r3kbnr/pp1n1ppp/2p1p1b1/8/3P1N1q/2P3N1/PP3PPP/R1BQKB1R w KQkq - 1 9  # 8moves_v3 pgn-030921; white_cp 54
+rnbqk2r/ppp2ppp/3b4/3p4/3Pn3/2P2N1P/PP3PP1/RNBQKB1R w KQkq - 1 8  # platform round 32; white_cp 0
+r1bqk2r/pp2ppbp/2np2p1/6B1/3NP1n1/2N5/PPPQ1PPP/R3KB1R w KQkq - 6 9  # 8moves_v3 pgn-015053; white_cp 32
+rnbq1rk1/ppp2pbp/5np1/4p3/2P1P3/2N1BN2/PP2BPPP/R2QK2R b KQ - 1 8  # platform round 33; white_cp -1
+r1bqk2r/pp1n1ppp/5n2/3p2B1/1bpP4/2NBPN2/PP3PPP/R2QK2R w KQkq - 0 9  # 8moves_v3 pgn-023856; white_cp 36
+rnbqkb1r/1p3ppp/p2p1n2/4p3/4P3/1NN1B3/PPP2PPP/R2QKB1R b KQkq - 1 7  # platform round 34; white_cp 33
+rnbqk2r/pp3pbp/2p3p1/3p4/2PPn3/3BN3/PP3PPP/RNBQK2R w KQkq - 0 9  # 8moves_v3 pgn-013777; white_cp 6
+r1bq1rk1/ppp2pbp/2np1np1/3Pp3/2P1P3/P1N2N2/1P2BPPP/R1BQK2R b KQ - 0 8  # platform round 35; white_cp 10
+rnbq1rk1/p5pp/1ppbpn2/3p1p2/2PP4/BP4PN/P3PPBP/RN1Q1RK1 w - - 0 9  # 8moves_v3 pgn-030377; white_cp 55
+rnbq1rk1/ppp2ppp/5n2/3p4/1b1P4/2NBP3/PP2NPPP/R1BQK2R b KQ - 1 7  # platform round 36; white_cp -5
+r1bqr1k1/ppp2ppp/2np1n2/8/1b2PQ2/2N5/PPPB1PPP/2KR1BNR w - - 0 9  # 8moves_v3 pgn-030287; white_cp -5
+r1b1k2r/pp3ppp/2nqpn2/2pp4/3P4/2P1P2P/PP1N1PP1/R2QKBNR w KQkq - 0 8  # platform round 37; white_cp -3
+rn1q1rk1/pbp1bpp1/1p2pn1p/3p4/2PP3B/2N1PN2/PP3PPP/2RQKB1R w K - 2 9  # 8moves_v3 pgn-017985; white_cp 10
+r1bqkb1r/pp2pppp/2np1n2/8/4P3/1NN5/PPP2PPP/R1BQKB1R b KQkq - 4 6  # platform round 38; white_cp 16
+rnbq1rk1/ppp2pp1/4pb1p/8/2QP4/2N2N2/PP2PPPP/R3KB1R w KQ - 1 9  # 8moves_v3 pgn-003686; white_cp -5
+r1bqk1nr/pp1p1ppp/2n1p3/2b5/4P3/PN6/1PP2PPP/RNBQKB1R b KQkq - 2 6  # platform round 39; white_cp 24
+r1bqkb1r/1p2pppp/p1np4/8/4P1n1/1NN5/PPPB1PPP/R2QKB1R b KQkq - 3 8  # platform round 66; white_cp 21
+r1bqkb1r/1p3ppp/p1np1n2/4p3/4P3/N1N1B3/PPP2PPP/R2QKB1R b KQkq - 1 8  # platform round 67; white_cp -4
+r1bqk2r/pppp1ppp/2n2n2/1Bb5/3NP3/2P5/PP3PPP/RNBQ1RK1 b kq - 2 7  # platform round 77; white_cp -10
+rnbq1rk1/ppp2ppp/4pn2/8/1bBP4/2N1P2P/PP3PP1/R1BQK1NR b KQ - 0 7  # platform round 78; white_cp -9
+r1bqk2r/pppp1ppp/2n2n2/8/1b1NP3/3Q4/PPPB1PPP/RN2KB1R b KQkq - 4 6  # platform round 79; white_cp -24
+r1bq1rk1/2p1bppp/p2p1n2/np2p3/4P3/1B1P1N1P/PPPN1PP1/R1BQR1K1 b - - 2 10  # platform round 80; white_cp -24
+rnbqk2r/ppp1bppp/4pn2/8/2Pp4/1P3NP1/P2PPPBP/RNBQ1RK1 b kq - 1 6  # platform round 81; white_cp -3
+rnbqk2r/ppp1bppp/4pn2/3p4/2P5/1P3NP1/P2PPPBP/RNBQK2R b KQkq - 0 5  # platform round 82; white_cp 10
+r2qkb1r/1p3ppp/p1np1n2/4p3/P3P1b1/N1N5/1PP2PPP/R1BQKB1R w KQkq - 2 9  # platform round 97; white_cp -8
+rnbq1rk1/ppp2pbp/3p1np1/4p3/2PPP3/P1N2N2/1P2BPPP/R1BQK2R b KQ - 0 7  # platform round 98; white_cp 8
+r1bqkb1r/pp3ppp/2n1pn2/2pp4/3P1B2/2PBP3/PP1N1PPP/R2QK1NR b KQkq - 1 6  # platform round 99; white_cp -2

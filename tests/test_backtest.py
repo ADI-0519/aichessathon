@@ -240,6 +240,18 @@ class BacktestCoreTests(unittest.TestCase):
             positions = load_fen(path, split_seed="test")
         self.assertEqual(positions[0].fen, fen)
 
+    def test_loads_labelled_full_fen_from_epd_suite(self) -> None:
+        fen = "8/5pk1/6p1/3p4/3P4/5KP1/5P2/8 w - - 17 42"
+        with tempfile.TemporaryDirectory() as temporary:
+            path = Path(temporary) / "suite.epd"
+            path.write_text(
+                f"# generated suite\n{fen}  # balanced endgame; white_cp 12\n",
+                encoding="utf-8",
+            )
+            positions = load_epd(path, split_seed="test")
+        self.assertEqual(positions[0].identifier, "balanced endgame; white_cp 12")
+        self.assertEqual(positions[0].fen, fen)
+
     def test_agent_fingerprint_matches_packaged_inputs_only(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
