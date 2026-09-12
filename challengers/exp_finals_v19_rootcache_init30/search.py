@@ -12,12 +12,11 @@ import time
 from dataclasses import dataclass
 
 import chess
+import engine
+import nnue
 import numpy as np
 from numba import njit
 from numpy.typing import NDArray
-
-import engine
-import nnue
 
 INFINITY = 32_000
 MATE_SCORE = 30_000
@@ -30,8 +29,11 @@ SEE_MAX_EXCHANGES = 32
 DELTA_MARGIN = 120
 STABLE_ITERATIONS_REQUIRED = 2
 STABLE_SCORE_DELTA = 30
-UNSTABLE_SCORE_DELTA = 75
-NEXT_ITERATION_COST_MULTIPLIER = 1.5
+UNSTABLE_SCORE_DELTA = 50
+NEXT_ITERATION_COST_MULTIPLIER = 1.35
+ASPIRATION_INITIAL_WINDOW = 18
+ASPIRATION_GROWTH_NUMERATOR = 3
+ASPIRATION_GROWTH_DENOMINATOR = 2
 
 # Percentage of the static evaluation supplied by the learned model.  Keep this
 # as a source constant so every packaged challenger is reproducible.
@@ -51,9 +53,10 @@ TT_FIELD_COUNT = 6
 TT_HALFMOVE_LIMIT = 100
 DEFAULT_TT_BITS = 22
 TT_BUCKET_SIZE = 2
-Q_EVAL_BITS = 16
+Q_EVAL_BITS = 18
 
 LMR_TABLE_MAX = 64
+LMR_REDUCTION_DIVISOR = 1.75
 LMR_TABLE = np.zeros((LMR_TABLE_MAX, LMR_TABLE_MAX), dtype=np.int32)
 for _lmr_depth in range(1, LMR_TABLE_MAX):
     for _lmr_index in range(1, LMR_TABLE_MAX):
@@ -61,7 +64,7 @@ for _lmr_depth in range(1, LMR_TABLE_MAX):
             0.75
             + np.log(float(_lmr_depth))
             * np.log(float(_lmr_index))
-            / 2.25
+            / LMR_REDUCTION_DIVISOR
         )
         LMR_TABLE[_lmr_depth, _lmr_index] = max(1, _base_reduction)
 
@@ -84,6 +87,7 @@ ENABLE_TT2 = True
 ENABLE_CAPTURE_HISTORY = True
 ENABLE_COUNTERMOVES = True
 ENABLE_SINGULAR_EXTENSIONS = True
+ENABLE_DEFERRED_MOVE_GENERATION = True
 ACTIVE_PROFILE = "baseline"
 
 _S1_PROFILES = {
@@ -97,13 +101,13 @@ _S1_PROFILES = {
 # Conservative selective-search parameters. Values are intentionally modest:
 # the goal is a material effective-depth gain without making the new KingNet
 # evaluator carry Stockfish-scale pruning immediately.
-V10_RFP_MAX_DEPTH = 4
+V10_RFP_MAX_DEPTH = 6
 V10_RFP_MARGIN_BASE = 80
 V10_RFP_MARGIN_PER_DEPTH = 95
-V10_QF_MAX_DEPTH = 3
+V10_QF_MAX_DEPTH = 4
 V10_QF_MARGIN_BASE = 95
 V10_QF_MARGIN_PER_DEPTH = 125
-V10_LMP_MAX_DEPTH = 3
+V10_LMP_MAX_DEPTH = 4
 V10_SEE_MAX_DEPTH = 5
 V10_SEE_MARGIN_PER_DEPTH = 70
 V10_NMP_VERIFY_DEPTH = 8
@@ -885,6 +889,25 @@ def _record_capture_cutoff(
 
 
 @njit(cache=False)
+def _king_has_legal_step(pieces: NDArray[np.uint64], side: int) -> bool:
+    """Return whether an unchecked king has an immediately legal step.
+
+    A legal king step proves that the position is not stalemate, allowing move
+    generation to be deferred until after node-level cutoffs. Callers must
+    still generate moves eagerly when the king is in check.
+    """
+    king_square = engine.lsb_square(pieces[engine.piece_index(side, engine.KING)])
+    targets = engine.KING_ATTACKS[king_square] & ~engine.occupancy_for(pieces, side)
+    enemy = engine.BLACK if side == engine.WHITE else engine.WHITE
+    while targets != np.uint64(0):
+        target = engine.lsb_square(targets)
+        if not engine.is_square_attacked(pieces, target, enemy):
+            return True
+        targets &= targets - np.uint64(1)
+    return False
+
+
+@njit(cache=False)
 def _quiescence(
     pieces: NDArray[np.uint64],
     state: NDArray[np.int64],
@@ -933,6 +956,7 @@ def _quiescence(
 
     side = int(state[engine.STATE_SIDE])
     in_check = engine.is_in_check(pieces, side)
+    count = -1
     if in_check:
         count = engine.generate_legal_moves(
             pieces,
@@ -945,7 +969,11 @@ def _quiescence(
         )
         if count == 0:
             return -MATE_SCORE + ply, False
-    else:
+    elif (
+        not ENABLE_DEFERRED_MOVE_GENERATION
+        or not _has_non_pawn_material(pieces, side)
+        or not _king_has_legal_step(pieces, side)
+    ):
         count = engine.generate_legal_captures(
             pieces,
             state,
@@ -981,6 +1009,19 @@ def _quiescence(
         if stand_pat > alpha:
             alpha = stand_pat
         best = stand_pat
+
+    if count < 0:
+        count = engine.generate_legal_captures(
+            pieces,
+            state,
+            key,
+            legal_stack[ply],
+            pseudo_stack[ply],
+            undo_stack[ply],
+            undo_key_stack[ply],
+        )
+        if count < 0:
+            return 0, False
 
     _order_moves(
         pieces,
@@ -1281,17 +1322,24 @@ def _negamax(
 
     side = int(state[engine.STATE_SIDE])
     in_check = engine.is_in_check(pieces, side)
-    count = engine.generate_legal_moves(
-        pieces,
-        state,
-        key,
-        legal_stack[ply],
-        pseudo_stack[ply],
-        undo_stack[ply],
-        undo_key_stack[ply],
-    )
-    if count == 0:
-        return (-MATE_SCORE + ply if in_check else 0), False
+    count = -1
+    if (
+        not ENABLE_DEFERRED_MOVE_GENERATION
+        or in_check
+        or not _has_non_pawn_material(pieces, side)
+        or not _king_has_legal_step(pieces, side)
+    ):
+        count = engine.generate_legal_moves(
+            pieces,
+            state,
+            key,
+            legal_stack[ply],
+            pseudo_stack[ply],
+            undo_stack[ply],
+            undo_key_stack[ply],
+        )
+        if count == 0:
+            return (-MATE_SCORE + ply if in_check else 0), False
     if engine.has_rule_draw(
         pieces, state, key[0], history, history_count, root_history_count
     ):
@@ -1582,6 +1630,19 @@ def _negamax(
                 # A mate seen after giving the opponent a free move is not a
                 # mate score we can safely claim.
                 return beta if null_value >= MATE_BOUND else null_value, False
+
+    if count < 0:
+        count = engine.generate_legal_moves(
+            pieces,
+            state,
+            key,
+            legal_stack[ply],
+            pseudo_stack[ply],
+            undo_stack[ply],
+            undo_key_stack[ply],
+        )
+        if count == 0:
+            return (-MATE_SCORE + ply if in_check else 0), False
 
     _order_moves(
         pieces,
@@ -2384,58 +2445,18 @@ def search_position(
                 stopped = True
                 break
             iteration_started = time.perf_counter()
-            window = 45
-            alpha = -INFINITY if depth <= 2 else best_score - window
-            beta = INFINITY if depth <= 2 else best_score + window
-            score, move, aborted, _partial_move = _search_root(
-                working.pieces,
-                working.state,
-                working.key,
-                depth,
-                alpha,
-                beta,
-                best_move,
-                history,
-                history_count,
-                root_history_count,
-                legal_stack,
-                pseudo_stack,
-                undo_stack,
-                undo_key_stack,
-                accumulator_stack,
-                score_stack,
-                see_gain_stack,
-                killers,
-                memory.quiet_history,
-                memory.capture_history,
-                memory.countermoves,
-                move_stack,
-                memory.q_eval_keys,
-                memory.q_eval_scores,
-                memory.q_eval_valid,
-                memory.tt_keys,
-                memory.tt_data,
-                generation,
-                stop,
-                node_limit,
-                stats,
-            )
-            if aborted:
-                # Keep only a fully completed deeper root move that already
-                # raised alpha; otherwise retain the last completed-depth move.
-                if _partial_move != 0:
-                    best_move = _partial_move
-                stopped = True
-                break
-            aspiration_failed = score <= alpha or score >= beta
-            if aspiration_failed:
+            aspiration_delta = ASPIRATION_INITIAL_WINDOW
+            alpha = -INFINITY if depth <= 2 else best_score - aspiration_delta
+            beta = INFINITY if depth <= 2 else best_score + aspiration_delta
+            aspiration_failed = False
+            while True:
                 score, move, aborted, _partial_move = _search_root(
                     working.pieces,
                     working.state,
                     working.key,
                     depth,
-                    -INFINITY,
-                    INFINITY,
+                    alpha,
+                    beta,
                     best_move,
                     history,
                     history_count,
@@ -2463,10 +2484,36 @@ def search_position(
                     stats,
                 )
                 if aborted:
+                    # Keep only a fully completed deeper root move that already
+                    # raised alpha; otherwise retain the last completed-depth move.
                     if _partial_move != 0:
                         best_move = _partial_move
                     stopped = True
                     break
+                fail_low = score <= alpha
+                fail_high = score >= beta
+                if not fail_low and not fail_high:
+                    break
+
+                aspiration_failed = True
+                if aspiration_delta >= INFINITY:
+                    alpha = -INFINITY
+                    beta = INFINITY
+                elif fail_low:
+                    alpha = max(-INFINITY, score - aspiration_delta)
+                else:
+                    beta = min(INFINITY, score + aspiration_delta)
+                aspiration_delta = min(
+                    INFINITY,
+                    max(
+                        aspiration_delta + 1,
+                        aspiration_delta
+                        * ASPIRATION_GROWTH_NUMERATOR
+                        // ASPIRATION_GROWTH_DENOMINATOR,
+                    ),
+                )
+            if stopped:
+                break
             previous_move = best_move
             previous_score = best_score
             had_previous_iteration = completed_depth > 0

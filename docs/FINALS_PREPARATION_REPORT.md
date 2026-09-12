@@ -324,6 +324,26 @@ play the same offsets against the frozen public Toby build; only a bundle that
 improves both internal and external score proceeds to the expensive match-clock
 test. Time-management claims themselves must still be decided at match clock.
 
+### Review of the proposed `FINALS_MAX` builder
+
+The externally supplied builder was audited as a proposal and was not executed.
+Its packaging checks are useful, but source rewriting by regular expression is
+too brittle for the final engine, and several chess changes conflict with local
+evidence. SearchMax already contains RFP depth 6, quiet-futility depth 4, TT22,
+aggressive LMR and long-horizon timing. Changing the BigNet blend from 75% to
+90% is unsupported after the 50% and 100% lanes regressed, and extending every
+advanced pawn push through depth 8 is a large, position-specific tree change.
+The proposed 10+0.1 gate is also invalid for a build which intentionally defers
+roughly 70 seconds of compilation from initialization to its first move.
+
+The reviewed successor is `exp_finals_v19_rootcache_init30`, derived from the
+positive V18 SearchMax build. It preserves the learned blend and proven pruning
+profile, expands only the exact q-evaluation cache from 2^16 to 2^18, adds a
+progressively widened 18-centipawn aspiration window, and lets a 50-centipawn
+iteration swing access the existing hard time allowance. This is a challenger,
+not a promoted engine. Its first gate must use 120+0.5 so deferred warm-up and
+clock accounting are exercised honestly.
+
 ### P2: opening-book coverage, not blind book deployment
 
 All ten observed Swiss starts begin on moves 5--9, leaving legal book coverage

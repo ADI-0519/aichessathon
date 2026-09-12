@@ -1,7 +1,10 @@
 from __future__ import annotations
 
 import os
+import threading
 import time
+
+_IMPORT_STARTED_S = time.perf_counter()
 
 # NumPy and Numba inspect these variables when they are first imported.  The
 # match container supplies one core, so larger native pools only waste memory
@@ -17,9 +20,8 @@ for _variable in (
     os.environ[_variable] = "1"
 
 import chess  # noqa: E402 - thread limits must precede native-library imports
-import numpy as np  # noqa: E402
-
 import engine  # noqa: E402
+import numpy as np  # noqa: E402
 import search  # noqa: E402
 from time_manager import move_time_limits as _move_time_limits  # noqa: E402
 
@@ -27,6 +29,34 @@ _memory = search.SearchMemory.create()
 _game_board: chess.Board | None = None
 _position_history: list[np.uint64] = []
 EMERGENCY_CLOCK_MS = 100
+# Leave substantial scheduling and runner overhead below the 30-second finals
+# deadline. Any unfinished compilation is joined, and explicitly charged, on
+# the first move.
+INIT_READY_TARGET_S = 20.0
+
+_warmup_done = threading.Event()
+_warmup_error: BaseException | None = None
+
+
+def _warmup_worker() -> None:
+    """Compile the engine once, recording failure for the protocol thread."""
+    global _warmup_error
+    try:
+        search.warmup()
+    except BaseException as error:
+        _warmup_error = error
+    finally:
+        _warmup_done.set()
+
+
+def _finish_warmup(time_left_ms: int) -> int:
+    """Join deferred compilation and charge its wall time to this move."""
+    started = time.perf_counter()
+    _warmup_done.wait()
+    waited_ms = int((time.perf_counter() - started) * 1_000.0) + 1
+    if _warmup_error is not None:
+        raise RuntimeError("engine warm-up failed") from _warmup_error
+    return max(0, time_left_ms - waited_ms)
 
 
 def _canonical_fen(board: chess.Board) -> str:
@@ -135,12 +165,19 @@ def _choose_move(fen: str, time_left_ms: int) -> str:
 def get_move(fen: str, time_left_ms: int) -> str:
     """Return legal UCI, retaining a fresh-board fallback for every failure."""
     try:
-        return _choose_move(fen, time_left_ms)
+        adjusted_time_ms = _finish_warmup(time_left_ms)
+        return _choose_move(fen, adjusted_time_ms)
     except Exception as error:
         print(f"compiled challenger failed, using fallback: {type(error).__name__}: {error}")
         return _fallback_move(fen)
 
 
-_warmup_started = time.perf_counter()
-search.warmup()
-_warmup_elapsed_s = time.perf_counter() - _warmup_started
+_warmup_thread = threading.Thread(
+    target=_warmup_worker,
+    name="engine-warmup",
+    daemon=True,
+)
+_warmup_thread.start()
+_ready_wait_s = max(0.0, INIT_READY_TARGET_S - (time.perf_counter() - _IMPORT_STARTED_S))
+_warmup_done.wait(_ready_wait_s)
+_warmup_elapsed_s = time.perf_counter() - _IMPORT_STARTED_S

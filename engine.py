@@ -263,9 +263,7 @@ def piece_at(
     return NO_PIECE
 
 
-# Castling call sites pass constant squares. Pinning the integer types prevents
-# Numba from compiling a separate specialization for every literal value.
-@njit("boolean(uint64[::1], int64, int64)", cache=False)
+@njit(cache=False)
 def is_square_attacked(pieces: NDArray[np.uint64], square: int, by_color: int) -> bool:
     """Return whether ``square`` is attacked, including pinned attackers."""
     pawn_origins = PAWN_ATTACKS[BLACK if by_color == WHITE else WHITE, square]
@@ -1178,3 +1176,4 @@ def warmup() -> None:
     undo_key = np.empty(1, dtype=np.uint64)
     make_null_move(position.pieces, position.state, position.key, undo, undo_key)
     unmake_null_move(position.state, position.key, undo, undo_key)
+

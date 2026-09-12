@@ -1,14 +1,21 @@
-# V14 Runtime champion
+# V16 Search + BigNet champion
 
-This is the canonical promoted copy of `challengers/exp_release_v14_runtime`.
-It keeps the KingNet75 model, qsearch evaluation cache and V12 safety work,
-then adds the V13 core/search changes:
+This is the canonical promoted copy of
+`challengers/exp_release_v16_search_bignet`. It combines:
 
-- material-aware time horizon, a larger direct-mapped TT, and safe partial-root recovery;
-- log-log interior LMR with contextual corrections;
-- guarded root LMR with full-depth verification;
-- post-pruning main-search NNUE updates and removal of redundant perft warm-up.
+- the V15 search stack: two-slot TT, capture history, countermoves,
+  conservative singular extensions and hardened selective search;
+- the team-trained 200M-position format-3 BigNet with a 256-wide
+  king-conditioned accumulator, pairwise features and eight material heads;
+- the evidence-backed 75% learned / 25% handcrafted evaluation blend;
+- exact qsearch evaluation caching and post-pruning accumulator updates; and
+- persistent board/repetition state, legal emergency fallback and adaptive
+  completed-iteration timing.
 
-No opening positions, opponent moves, third-party engine code or third-party
-weights are embedded. V14 Runtime scored 64.17% over 30 paired development
-openings against frozen V12, with zero technical failures.
+The executable behavior and model match the frozen V16 challenger; only import
+grouping and descriptive package metadata differ. No third-party engine code,
+network, opening book, tablebase or opponent-specific move is included.
+
+The finals V18 candidates remain separate experiments. In particular, this
+directory does not contain their long-horizon clock, SearchMax settings or
+30-second asynchronous initialization adapter.

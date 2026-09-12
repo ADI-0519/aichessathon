@@ -20,12 +20,13 @@ shortcuts when `make` is available, but none of the commands in this guide requi
 
 ## Current engine
 
-The current champion is V14 Runtime: the team-trained KingNet75 evaluator and exact qsearch cache,
-V12's safety and ordering work, V13's material-aware time horizon and guarded log-log LMR, and an
-exact post-pruning main-search accumulator update. It scored 27 wins, 23 draws and 10 losses
-(64.17%, about +101 Elo) over 30 paired development openings against frozen V12, with a paired 95%
-score interval of 56.49% to 71.85% and zero technical failures. Packaging places the readable
-`current/` sources and weights at the submission zip root.
+The current champion is V16 Search + BigNet. It combines the V15 search stack
+with the team's 200M-position, 256-wide format-3 BigNet at the tested 75:25
+learned/handcrafted blend. The frozen source of truth is
+`challengers/exp_release_v16_search_bignet/`; `current/` is its canonical
+deployable copy. Finals V18 candidates remain isolated under `challengers/`.
+Packaging places the readable `current/` sources and weights at the submission
+zip root.
 `agent.py` exposes the required function:
 
 ```python

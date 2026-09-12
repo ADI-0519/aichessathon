@@ -1,6 +1,6 @@
 # Current engine state
 
-Updated: 10 September 2026
+Updated: 12 September 2026
 
 ## Deployable champion
 
@@ -8,16 +8,16 @@ Updated: 10 September 2026
 diagnostic, type-checking, and packaging commands all target it. Packaging copies the contents of
 that directory to the archive root, where the platform imports `agent.py`.
 
-- Engine generation: V14 Runtime with KingNet75, exact qsearch caching and V13 search
-- Exact promoted snapshot: `challengers/exp_release_v14_runtime/`
-- Frozen rollback champion: `challengers/exp_release_v12/`
-- Versioned release artifact: `submission_v14.zip`
+- Engine generation: V16 Search + BigNet
+- Exact promoted snapshot: `challengers/exp_release_v16_search_bignet/`
+- Frozen rollback champion: `challengers/exp_release_v14_runtime/`
+- Versioned release artifact: the retained V16 submission archive
 - Fresh canonical artifact: `submission.zip` (gitignored and rebuilt with `make zip`)
-- Lineage: V7 -> qcache -> KingNet75 -> Search V10 -> V12 -> V13 Search -> V14 Runtime
+- Lineage: V7 -> qcache -> KingNet75 -> Search V10 -> V12 -> V13 -> V14 -> V15 Search -> V16 BigNet
 
-The current executable files and model are byte-identical to the tested V14 Runtime snapshot;
-only descriptive package metadata differs. Engine files no longer live at the repository root,
-and the repository root must not be packaged as an agent.
+The current executable behavior and model match the tested V16 snapshot; only
+import grouping and descriptive package metadata differ. Engine files no longer
+live at the repository root, and the repository root must not be packaged as an agent.
 
 ## Promoted evaluator
 
@@ -38,8 +38,9 @@ the weights are considered submission-ready.
 
 ## What the current champion contains
 
-- Team-trained, incrementally updated 16-bucket king-conditioned NNUE with a 128-wide accumulator
-  and 32-wide hidden layer, blended 75:25 with the handcrafted evaluator.
+- Team-trained 200M-position format-3 BigNet with a 256-wide king-conditioned accumulator,
+  pairwise interaction features, eight material heads and a 32-wide hidden layer, blended 75:25
+  with the handcrafted evaluator.
 - Numba-compiled board and alpha-beta search with iterative deepening and principal-variation
   search.
 - A fixed-size array transposition table, aspiration windows, quiescence search, SEE move scoring,
@@ -51,12 +52,15 @@ the weights are considered submission-ready.
 - V13's material-aware horizon, larger transposition table, safe partial-root recovery, log-log
   interior LMR, and guarded root LMR with verification.
 - V14's exact post-pruning main-search accumulator updates and reduced import warm-up.
+- V15's two-slot TT, capture history, countermoves, conservative singular extensions and
+  selective-search reliability fixes.
+- V16's BigNet runtime, fixed-point export and reduced redundant Numba specializations.
 - A 65,536-entry direct-mapped cache for exact blended static evaluations reached in quiescence.
 - Persistent per-game search memory and repetition history.
 - Last-completed-iteration timeout safety and continuous, move-aware clock allocation.
 
-It does not contain pondering, an opening book, Syzygy tablebases, a lazy NNUE accumulator, or
-code/model assets copied from another engine.
+It does not contain pondering, an opening book, Syzygy tablebases, a fully lazy NNUE delta chain,
+or code/model assets copied from another engine.
 
 ## Strength evidence
 
@@ -77,8 +81,11 @@ code/model assets copied from another engine.
 | Search V10 vs KingNet75/qcache, independent validation, 25 pairs | 24W 11D 15L, 59.0%, about +63 Elo, zero failures | Confirmed the direction on the held-out split; promote. |
 | V14 Runtime vs frozen V12, development, 30 pairs | 27W 23D 10L, 64.17%, about +101 Elo; paired 95% score interval 56.49% to 71.85%; zero failures | Direct promotion evidence; V14 Runtime becomes canonical champion. |
 | V14 qTT vs V14 Runtime, 10 pairs | 4W 8D 8L, 40.0%, about -70 Elo; zero failures | Reject qTT and its exact-tree early-probe optimisation. |
+| V16 vs V14 BigNet, official clock, 20 pairs | 12W 22D 6L, 57.5%, about +53 Elo; zero failures | Positive full-stack evidence, although the paired interval crossed 50%. |
+| V16 vs V15 Search, official clock, 18 pairs | 22W 8D 6L, 72.2%, about +166 Elo; zero failures | Strong evidence that BigNet improved the V15 search lineage. |
+| V16 vs frozen Toby `8456160d`, official clock | 1W 9D 34L, 12.5%, about -338 Elo; zero failures | V16 is the internal champion but retains a large absolute-strength gap. |
 
-V14 Runtime is now the strength champion. Historical ladder losses remain useful as
+V16 Search + BigNet is now the canonical strength champion. Historical ladder losses remain useful as
 position-distribution diagnostics but are not direct measurements of this engine.
 
 ## Completed experiments
@@ -114,7 +121,7 @@ NNUE-only, no-LMR, no-null, and no-LMR/no-null searches on six rated-error posit
 
 ## Next development decision
 
-Keep `current/` frozen while the next lanes are measured independently:
+Keep `current/` frozen as V16 while the finals challengers are measured independently:
 
 1. Run faithful V12/V14 replay over rounds 97 onward and retain only genuine decision regressions.
 2. Investigate V14's one-million-node `Rxb2` miss without globally disabling pruning.
@@ -131,6 +138,9 @@ network must not be copied into the submission.
 
 ## Competition contract
 
-The canonical source is <https://aichessathon.com/docs>. At this update: 120 s + 0.5 s, a 90 s
-initialization budget, one CPU core, 2 GB RAM, no GPU or network, a draw at 600 plies, 50 MB
-uncompressed, and ten uploads per day. The checked-in harness is synced with the current official starter semantics: 600-ply draw, suspended pondering, platform-style scratch paths/log truncation seeded opening-pair arenas, and extracted-ZIP smoke testing.
+The canonical public source is <https://aichessathon.com/docs>. It still states 120 s + 0.5 s, a
+90 s initialization budget, one CPU core, 2 GB RAM, no GPU or network, a draw at 600 plies and
+50 MB uncompressed. The live-final briefing subsequently announced a 30-second initialization
+constraint; that newer event instruction governs finals builds. The checked-in harness still
+mirrors the public 90-second contract, so finals candidates require a separate 30-second cold-start
+measurement.

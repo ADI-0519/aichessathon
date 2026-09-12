@@ -12,12 +12,11 @@ import time
 from dataclasses import dataclass
 
 import chess
+import engine
+import nnue
 import numpy as np
 from numba import njit
 from numpy.typing import NDArray
-
-import engine
-import nnue
 
 INFINITY = 32_000
 MATE_SCORE = 30_000
@@ -48,9 +47,7 @@ TT_BOUND = 3
 TT_GENERATION = 4
 TT_HALFMOVE = 5
 TT_FIELD_COUNT = 6
-TT_HALFMOVE_LIMIT = 100
-DEFAULT_TT_BITS = 22
-TT_BUCKET_SIZE = 2
+DEFAULT_TT_BITS = 20
 Q_EVAL_BITS = 16
 
 LMR_TABLE_MAX = 64
@@ -80,10 +77,6 @@ ENABLE_V10_SEE_PRUNING = True
 ENABLE_V10_CONTEXTUAL_LMR = True
 ENABLE_HISTORY_V2 = True
 ENABLE_QUIET_SEE_PRUNING = True
-ENABLE_TT2 = True
-ENABLE_CAPTURE_HISTORY = True
-ENABLE_COUNTERMOVES = True
-ENABLE_SINGULAR_EXTENSIONS = True
 ACTIVE_PROFILE = "baseline"
 
 _S1_PROFILES = {
@@ -120,14 +113,6 @@ HISTORY_V2_UPDATE_CAP = 2_048
 HISTORY_V2_GOOD_THRESHOLD = 512
 HISTORY_V2_BAD_THRESHOLD = -512
 
-CAPTURE_HISTORY_LIMIT = 16_384
-CAPTURE_HISTORY_DEPTH_SCALE = 16
-CAPTURE_HISTORY_UPDATE_CAP = 2_048
-COUNTERMOVE_ORDER_SCORE = 7_000_000
-SINGULAR_MIN_DEPTH = 7
-SINGULAR_TT_DEPTH_SLACK = 3
-SINGULAR_MARGIN_PER_DEPTH = 2
-
 # Quiet SEE is a conservative shallow non-PV pruning rule. Checks, killers,
 # high-history moves and the first ordered move are always preserved.
 QUIET_SEE_MAX_DEPTH = 6
@@ -143,12 +128,7 @@ STAT_LMR_REDUCTIONS = 6
 STAT_LMR_RESEARCHES = 7
 STAT_Q_EVAL_PROBES = 8
 STAT_Q_EVAL_HITS = 9
-STAT_TT_COLLISIONS = 10
-STAT_TT_REPLACEMENTS = 11
-STAT_CAPTURE_HISTORY_UPDATES = 12
-STAT_SINGULAR_ATTEMPTS = 13
-STAT_SINGULAR_EXTENSIONS = 14
-STAT_COUNT = 15
+STAT_COUNT = 10
 
 MG_VALUE = np.array((100, 320, 330, 500, 900, 0), dtype=np.int32)
 EG_VALUE = np.array((120, 310, 335, 525, 900, 0), dtype=np.int32)
@@ -220,8 +200,6 @@ class SearchMemory:
     tt_keys: NDArray[np.uint64]
     tt_data: NDArray[np.int32]
     quiet_history: NDArray[np.int32]
-    capture_history: NDArray[np.int32]
-    countermoves: NDArray[np.int32]
     q_eval_keys: NDArray[np.uint64]
     q_eval_scores: NDArray[np.int32]
     q_eval_valid: NDArray[np.uint8]
@@ -237,8 +215,6 @@ class SearchMemory:
             np.zeros(size, dtype=np.uint64),
             np.zeros((size, TT_FIELD_COUNT), dtype=np.int32),
             np.zeros((2, 64, 64), dtype=np.int32),
-            np.zeros((2, engine.PIECE_KIND_COUNT, 64, engine.PIECE_KIND_COUNT), dtype=np.int32),
-            np.zeros((2, 64, 64), dtype=np.int32),
             np.zeros(q_eval_size, dtype=np.uint64),
             np.zeros(q_eval_size, dtype=np.int32),
             np.zeros(q_eval_size, dtype=np.uint8),
@@ -252,8 +228,6 @@ class SearchMemory:
         self.tt_keys.fill(0)
         self.tt_data.fill(0)
         self.quiet_history.fill(0)
-        self.capture_history.fill(0)
-        self.countermoves.fill(0)
         self.q_eval_valid.fill(0)
         self.generation = 0
 
@@ -274,11 +248,6 @@ class SearchResult:
     lmr_researches: int
     q_eval_probes: int
     q_eval_hits: int
-    tt_collisions: int = 0
-    tt_replacements: int = 0
-    capture_history_updates: int = 0
-    singular_attempts: int = 0
-    singular_extensions: int = 0
 
 
 @njit(cache=False)
@@ -618,9 +587,6 @@ def _move_order_score(
     ply: int,
     killers: NDArray[np.int32],
     quiet_history: NDArray[np.int32],
-    capture_history: NDArray[np.int32],
-    countermoves: NDArray[np.int32],
-    previous_move: int,
     see_gains: NDArray[np.int32],
 ) -> int:
     if move == tt_move:
@@ -639,7 +605,6 @@ def _move_order_score(
             (side + 1) * engine.PIECE_KIND_COUNT,
         )
         victim_value = int(MG_VALUE[engine.PAWN])
-        victim = engine.NO_PIECE
         if flags & engine.FLAG_EN_PASSANT == 0:
             enemy = engine.BLACK if side == engine.WHITE else engine.WHITE
             victim = engine.piece_at(
@@ -650,14 +615,6 @@ def _move_order_score(
             )
             if victim != engine.NO_PIECE:
                 victim_value = int(MG_VALUE[victim % engine.PIECE_KIND_COUNT])
-        attacker_kind = (
-            attacker % engine.PIECE_KIND_COUNT
-            if attacker != engine.NO_PIECE
-            else engine.PAWN
-        )
-        victim_kind = engine.PAWN
-        if flags & engine.FLAG_EN_PASSANT == 0 and victim != engine.NO_PIECE:
-            victim_kind = victim % engine.PIECE_KIND_COUNT
         attacker_value = (
             int(MG_VALUE[attacker % engine.PIECE_KIND_COUNT])
             if attacker != engine.NO_PIECE
@@ -665,22 +622,12 @@ def _move_order_score(
         )
         see = static_exchange_eval(pieces, state, move, see_gains)
         category = 10_000_000 if see >= 0 else 1_000_000
-        history_score = (
-            int(capture_history[side, attacker_kind, to_square, victim_kind])
-            if ENABLE_CAPTURE_HISTORY
-            else 0
-        )
-        return category + 16 * victim_value - attacker_value + see + history_score
+        return category + 16 * victim_value - attacker_value + see
     if ply < MAX_PLY:
         if move == int(killers[ply, 0]):
             return 9_000_000
         if move == int(killers[ply, 1]):
             return 8_000_000
-    if ENABLE_COUNTERMOVES and previous_move != 0:
-        previous_from = engine.move_from(previous_move)
-        previous_to = engine.move_to(previous_move)
-        if move == int(countermoves[side, previous_from, previous_to]):
-            return COUNTERMOVE_ORDER_SCORE
     return int(quiet_history[side, from_square, to_square])
 
 
@@ -695,9 +642,6 @@ def _order_moves(
     ply: int,
     killers: NDArray[np.int32],
     quiet_history: NDArray[np.int32],
-    capture_history: NDArray[np.int32],
-    countermoves: NDArray[np.int32],
-    previous_move: int,
     scores: NDArray[np.int32],
     see_gains: NDArray[np.int32],
 ) -> None:
@@ -711,9 +655,6 @@ def _order_moves(
             ply,
             killers,
             quiet_history,
-            capture_history,
-            countermoves,
-            previous_move,
             see_gains,
         )
     for index in range(1, count):
@@ -759,8 +700,6 @@ def _record_quiet_cutoff(
     depth: int,
     killers: NDArray[np.int32],
     quiet_history: NDArray[np.int32],
-    countermoves: NDArray[np.int32],
-    previous_move: int,
 ) -> None:
     if ply < MAX_PLY and move != int(killers[ply, 0]):
         killers[ply, 1] = killers[ply, 0]
@@ -776,12 +715,6 @@ def _record_quiet_cutoff(
         quiet_history[side, from_square, to_square] = min(
             1_000_000, previous + bonus
         )
-    if ENABLE_COUNTERMOVES and previous_move != 0:
-        countermoves[
-            side,
-            engine.move_from(previous_move),
-            engine.move_to(previous_move),
-        ] = np.int32(move)
 
 
 @njit(cache=False, inline="always")
@@ -796,92 +729,8 @@ def _record_quiet_failures(
     """Penalize quiet alternatives actually searched before a quiet cutoff."""
     malus = -(HISTORY_V2_DEPTH_SCALE * depth * depth)
     for index in range(cutoff_index):
-        if searched_quiet[index] == 1:
+        if searched_quiet[index] != 0:
             _bounded_history_update(side, int(moves[index]), malus, quiet_history)
-
-
-@njit(cache=False, inline="always")
-def _capture_kinds(
-    pieces: NDArray[np.uint64],
-    side: int,
-    move: int,
-) -> tuple[int, int]:
-    from_square = engine.move_from(move)
-    to_square = engine.move_to(move)
-    attacker = engine.piece_at(
-        pieces,
-        from_square,
-        side * engine.PIECE_KIND_COUNT,
-        (side + 1) * engine.PIECE_KIND_COUNT,
-    )
-    attacker_kind = (
-        attacker % engine.PIECE_KIND_COUNT
-        if attacker != engine.NO_PIECE
-        else engine.PAWN
-    )
-    if engine.move_flags(move) & engine.FLAG_EN_PASSANT:
-        return attacker_kind, engine.PAWN
-    enemy = engine.BLACK if side == engine.WHITE else engine.WHITE
-    victim = engine.piece_at(
-        pieces,
-        to_square,
-        enemy * engine.PIECE_KIND_COUNT,
-        (enemy + 1) * engine.PIECE_KIND_COUNT,
-    )
-    victim_kind = (
-        victim % engine.PIECE_KIND_COUNT
-        if victim != engine.NO_PIECE
-        else engine.PAWN
-    )
-    return attacker_kind, victim_kind
-
-
-@njit(cache=False, inline="always")
-def _bounded_capture_history_update(
-    pieces: NDArray[np.uint64],
-    side: int,
-    move: int,
-    delta: int,
-    capture_history: NDArray[np.int32],
-) -> None:
-    attacker_kind, victim_kind = _capture_kinds(pieces, side, move)
-    to_square = engine.move_to(move)
-    bounded_delta = max(
-        -CAPTURE_HISTORY_UPDATE_CAP,
-        min(CAPTURE_HISTORY_UPDATE_CAP, delta),
-    )
-    previous = int(capture_history[side, attacker_kind, to_square, victim_kind])
-    update = bounded_delta - previous * abs(bounded_delta) // CAPTURE_HISTORY_LIMIT
-    capture_history[side, attacker_kind, to_square, victim_kind] = np.int32(
-        max(-CAPTURE_HISTORY_LIMIT, min(CAPTURE_HISTORY_LIMIT, previous + update))
-    )
-
-
-@njit(cache=False)
-def _record_capture_cutoff(
-    pieces: NDArray[np.uint64],
-    side: int,
-    move: int,
-    depth: int,
-    moves: NDArray[np.int32],
-    searched_moves: NDArray[np.int32],
-    cutoff_index: int,
-    capture_history: NDArray[np.int32],
-    stats: NDArray[np.int64],
-) -> None:
-    bonus = CAPTURE_HISTORY_DEPTH_SCALE * depth * depth
-    _bounded_capture_history_update(pieces, side, move, bonus, capture_history)
-    stats[STAT_CAPTURE_HISTORY_UPDATES] += 1
-    for index in range(cutoff_index):
-        if searched_moves[index] == 2:
-            _bounded_capture_history_update(
-                pieces,
-                side,
-                int(moves[index]),
-                -bonus,
-                capture_history,
-            )
-            stats[STAT_CAPTURE_HISTORY_UPDATES] += 1
 
 
 @njit(cache=False)
@@ -904,9 +753,6 @@ def _quiescence(
     see_gain_stack: NDArray[np.int32],
     killers: NDArray[np.int32],
     quiet_history: NDArray[np.int32],
-    capture_history: NDArray[np.int32],
-    countermoves: NDArray[np.int32],
-    move_stack: NDArray[np.int32],
     q_eval_keys: NDArray[np.uint64],
     q_eval_scores: NDArray[np.int32],
     q_eval_valid: NDArray[np.uint8],
@@ -988,15 +834,10 @@ def _quiescence(
         side,
         legal_stack[ply],
         count,
-        # Keep this sentinel dynamically typed at the Numba boundary. A bare
-        # literal creates redundant _order_moves specializations at import.
-        np.int64(0),  # type: ignore[arg-type]
+        0,
         ply,
         killers,
         quiet_history,
-        capture_history,
-        countermoves,
-        int(move_stack[ply - 1]) if ply > 0 else 0,
         score_stack[ply],
         see_gain_stack[ply],
     )
@@ -1013,7 +854,6 @@ def _quiescence(
         engine.make_move(
             pieces, state, key, move, undo_stack[ply], undo_key_stack[ply]
         )
-        move_stack[ply] = np.int32(move)
         gives_check = engine.is_in_check(pieces, int(state[engine.STATE_SIDE]))
         if not in_check and not gives_check:
             losing_non_promotion = (
@@ -1057,9 +897,6 @@ def _quiescence(
             see_gain_stack,
             killers,
             quiet_history,
-            capture_history,
-            countermoves,
-            move_stack,
             q_eval_keys,
             q_eval_scores,
             q_eval_valid,
@@ -1091,123 +928,6 @@ def _has_non_pawn_material(pieces: NDArray[np.uint64], side: int) -> bool:
     return bool(occupied != np.uint64(0))
 
 
-@njit(cache=False, inline="always")
-def _reverse_futility_allowed(
-    excluded_move: int,
-    have_static_eval: bool,
-    depth: int,
-    has_non_pawn_material: bool,
-) -> bool:
-    """Return whether RFP may terminate this node without searching moves.
-
-    An excluded-move search must inspect the alternatives to its excluded move.
-    Letting reverse futility return from that verification can falsely classify
-    the transposition-table move as singular.
-    """
-    return bool(
-        ENABLE_V10_REVERSE_FUTILITY
-        and excluded_move == 0
-        and have_static_eval
-        and depth <= V10_RFP_MAX_DEPTH
-        and has_non_pawn_material
-    )
-
-
-@njit(cache=False, inline="always")
-def _singular_candidate_allowed(
-    excluded_move: int,
-    depth: int,
-    tt_move: int,
-    tt_depth: int,
-    tt_bound: int,
-    tt_score: int,
-    tt_halfmove_ok: bool,
-) -> bool:
-    """Validate every score-dependent precondition for singular verification."""
-    return bool(
-        ENABLE_SINGULAR_EXTENSIONS
-        and excluded_move == 0
-        and depth >= SINGULAR_MIN_DEPTH
-        and tt_move != 0
-        and tt_depth >= depth - SINGULAR_TT_DEPTH_SLACK
-        and tt_bound in (TT_EXACT, TT_LOWER)
-        and abs(tt_score) < MATE_BOUND
-        and tt_halfmove_ok
-    )
-
-
-@njit(cache=False, inline="always")
-def _tt_bucket_start(key: np.uint64, table_size: int) -> int:
-    index = int(key & np.uint64(table_size - 1))
-    return index & ~(TT_BUCKET_SIZE - 1) if ENABLE_TT2 else index
-
-
-@njit(cache=False, inline="always")
-def _tt_probe_index(
-    key: np.uint64,
-    tt_keys: NDArray[np.uint64],
-    tt_data: NDArray[np.int32],
-) -> int:
-    start = _tt_bucket_start(key, len(tt_keys))
-    slots = TT_BUCKET_SIZE if ENABLE_TT2 else 1
-    best_index = -1
-    best_depth = -1
-    for offset in range(slots):
-        index = start + offset
-        if (
-            tt_keys[index] == key
-            and int(tt_data[index, TT_BOUND]) != TT_EMPTY
-            and int(tt_data[index, TT_DEPTH]) > best_depth
-        ):
-            best_index = index
-            best_depth = int(tt_data[index, TT_DEPTH])
-    return best_index
-
-
-@njit(cache=False, inline="always")
-def _tt_replacement_index(
-    key: np.uint64,
-    depth: int,
-    generation: int,
-    tt_keys: NDArray[np.uint64],
-    tt_data: NDArray[np.int32],
-    stats: NDArray[np.int64],
-) -> int:
-    start = _tt_bucket_start(key, len(tt_keys))
-    slots = TT_BUCKET_SIZE if ENABLE_TT2 else 1
-    replacement = start
-    replacement_priority = 1_000_000_000
-    collision = False
-    for offset in range(slots):
-        index = start + offset
-        bound = int(tt_data[index, TT_BOUND])
-        if tt_keys[index] == key and bound != TT_EMPTY:
-            old_depth = int(tt_data[index, TT_DEPTH])
-            old_generation = int(tt_data[index, TT_GENERATION])
-            if old_generation == generation and depth + 2 < old_depth:
-                return -1
-            return index
-        if bound == TT_EMPTY:
-            return index
-        collision = True
-        entry_depth = int(tt_data[index, TT_DEPTH])
-        entry_generation = int(tt_data[index, TT_GENERATION])
-        stale_penalty = -1_000_000 if entry_generation != generation else 0
-        exact_bonus = 2 if int(tt_data[index, TT_BOUND]) == TT_EXACT else 0
-        priority = stale_penalty + entry_depth * 4 + exact_bonus
-        if priority < replacement_priority:
-            replacement = index
-            replacement_priority = priority
-    if collision:
-        stats[STAT_TT_COLLISIONS] += 1
-    old_depth = int(tt_data[replacement, TT_DEPTH])
-    old_generation = int(tt_data[replacement, TT_GENERATION])
-    if old_generation == generation and depth + 2 < old_depth:
-        return -1
-    stats[STAT_TT_REPLACEMENTS] += 1
-    return replacement
-
-
 @njit(cache=False)
 def _negamax(
     pieces: NDArray[np.uint64],
@@ -1230,16 +950,12 @@ def _negamax(
     see_gain_stack: NDArray[np.int32],
     killers: NDArray[np.int32],
     quiet_history: NDArray[np.int32],
-    capture_history: NDArray[np.int32],
-    countermoves: NDArray[np.int32],
-    move_stack: NDArray[np.int32],
     q_eval_keys: NDArray[np.uint64],
     q_eval_scores: NDArray[np.int32],
     q_eval_valid: NDArray[np.uint8],
     tt_keys: NDArray[np.uint64],
     tt_data: NDArray[np.int32],
     generation: int,
-    excluded_move: int,
     stop: NDArray[np.uint8],
     node_limit: int,
     stats: NDArray[np.int64],
@@ -1264,9 +980,6 @@ def _negamax(
             see_gain_stack,
             killers,
             quiet_history,
-            capture_history,
-            countermoves,
-            move_stack,
             q_eval_keys,
             q_eval_scores,
             q_eval_valid,
@@ -1299,97 +1012,29 @@ def _negamax(
 
     original_alpha = alpha
     original_beta = beta
-    tt_index = _tt_probe_index(key[0], tt_keys, tt_data)
+    tt_index = int(key[0] & np.uint64(len(tt_keys) - 1))
     tt_move = 0
-    tt_score = 0
-    tt_bound = TT_EMPTY
-    tt_depth = -1
-    tt_halfmove_ok = False
     stats[STAT_TT_PROBES] += 1
-    if excluded_move == 0 and tt_index >= 0:
+    if tt_keys[tt_index] == key[0] and int(tt_data[tt_index, TT_BOUND]) != TT_EMPTY:
         stats[STAT_TT_HITS] += 1
         tt_move = int(tt_data[tt_index, TT_MOVE])
-        tt_score = _score_from_table(int(tt_data[tt_index, TT_SCORE]), ply)
-        tt_bound = int(tt_data[tt_index, TT_BOUND])
-        tt_depth = int(tt_data[tt_index, TT_DEPTH])
-        tt_halfmove_ok = int(tt_data[tt_index, TT_HALFMOVE]) == min(
-            TT_HALFMOVE_LIMIT, int(state[engine.STATE_HALFMOVE])
-        )
-        if tt_depth >= depth and tt_halfmove_ok:
-            if tt_bound == TT_EXACT:
+        if (
+            int(tt_data[tt_index, TT_DEPTH]) >= depth
+            and int(tt_data[tt_index, TT_HALFMOVE]) == min(
+                100, int(state[engine.STATE_HALFMOVE])
+            )
+        ):
+            tt_score = _score_from_table(int(tt_data[tt_index, TT_SCORE]), ply)
+            bound = int(tt_data[tt_index, TT_BOUND])
+            if bound == TT_EXACT:
                 return tt_score, False
-            if tt_bound == TT_LOWER and tt_score > alpha:
+            if bound == TT_LOWER and tt_score > alpha:
                 alpha = tt_score
-            elif tt_bound == TT_UPPER and tt_score < beta:
+            elif bound == TT_UPPER and tt_score < beta:
                 beta = tt_score
             if alpha >= beta:
                 stats[STAT_TT_CUTOFFS] += 1
                 return tt_score, False
-
-    singular_move = 0
-    if _singular_candidate_allowed(
-        excluded_move,
-        depth,
-        tt_move,
-        tt_depth,
-        tt_bound,
-        tt_score,
-        tt_halfmove_ok,
-    ):
-        stats[STAT_SINGULAR_ATTEMPTS] += 1
-        singular_beta = tt_score - SINGULAR_MARGIN_PER_DEPTH * depth
-        verification_depth = max(1, (depth - 1) // 2)
-        verification_score, aborted = _negamax(
-            pieces,
-            state,
-            key,
-            verification_depth,
-            singular_beta - 1,
-            singular_beta,
-            ply,
-            False,
-            history,
-            history_count,
-            root_history_count,
-            legal_stack,
-            pseudo_stack,
-            undo_stack,
-            undo_key_stack,
-            accumulator_stack,
-            score_stack,
-            see_gain_stack,
-            killers,
-            quiet_history,
-            capture_history,
-            countermoves,
-            move_stack,
-            q_eval_keys,
-            q_eval_scores,
-            q_eval_valid,
-            tt_keys,
-            tt_data,
-            generation,
-            tt_move,
-            stop,
-            node_limit,
-            stats,
-        )
-        if aborted:
-            return 0, True
-        if verification_score < singular_beta:
-            singular_move = tt_move
-            stats[STAT_SINGULAR_EXTENSIONS] += 1
-        # The excluded search shares per-ply move buffers with this node.
-        # Restore the current node's legal list before normal move ordering.
-        count = engine.generate_legal_moves(
-            pieces,
-            state,
-            key,
-            legal_stack[ply],
-            pseudo_stack[ply],
-            undo_stack[ply],
-            undo_key_stack[ply],
-        )
 
     # Search V10: cache the exact static evaluation once when a selective
     # mechanism needs it. Reusing the existing exact q-eval cache avoids
@@ -1415,8 +1060,7 @@ def _negamax(
         else beta - alpha == 1
     )
     null_move_candidate = (
-        excluded_move == 0
-        and allow_null
+        allow_null
         and depth >= 3
         and not in_check
         and non_pv
@@ -1424,14 +1068,11 @@ def _negamax(
         and _has_non_pawn_material(pieces, side)
     )
     if (
-        excluded_move == 0
-        and not in_check
+        not in_check
         and abs(beta) < MATE_BOUND
         and non_pv
         and (
-            (
-                ENABLE_V10_REVERSE_FUTILITY and depth <= V10_RFP_MAX_DEPTH
-            )
+            (ENABLE_V10_REVERSE_FUTILITY and depth <= V10_RFP_MAX_DEPTH)
             or (ENABLE_V10_QUIET_FUTILITY and depth <= V10_QF_MAX_DEPTH)
             or (ENABLE_V10_DYNAMIC_NMP and null_move_candidate)
         )
@@ -1452,12 +1093,10 @@ def _negamax(
     # of check, and away from pawn-only endings where static evaluation is a
     # less trustworthy substitute for search.
     if (
-        _reverse_futility_allowed(
-            excluded_move,
-            have_static_eval,
-            depth,
-            _has_non_pawn_material(pieces, side),
-        )
+        ENABLE_V10_REVERSE_FUTILITY
+        and have_static_eval
+        and depth <= V10_RFP_MAX_DEPTH
+        and _has_non_pawn_material(pieces, side)
     ):
         rfp_margin = V10_RFP_MARGIN_BASE + V10_RFP_MARGIN_PER_DEPTH * depth
         if static_eval - rfp_margin >= beta:
@@ -1491,7 +1130,6 @@ def _negamax(
         engine.make_null_move(
             pieces, state, key, undo_stack[ply], undo_key_stack[ply]
         )
-        move_stack[ply] = np.int32(0)
         null_score, aborted = _negamax(
             pieces,
             state,
@@ -1513,16 +1151,12 @@ def _negamax(
             see_gain_stack,
             killers,
             quiet_history,
-            capture_history,
-            countermoves,
-            move_stack,
             q_eval_keys,
             q_eval_scores,
             q_eval_valid,
             tt_keys,
             tt_data,
             generation,
-            0,
             stop,
             node_limit,
             stats,
@@ -1557,18 +1191,14 @@ def _negamax(
                     score_stack,
                     see_gain_stack,
                     killers,
-            quiet_history,
-            capture_history,
-            countermoves,
-            move_stack,
-            q_eval_keys,
+                    quiet_history,
+                    q_eval_keys,
                     q_eval_scores,
                     q_eval_valid,
                     tt_keys,
                     tt_data,
-            generation,
-            0,
-            stop,
+                    generation,
+                    stop,
                     node_limit,
                     stats,
                 )
@@ -1593,9 +1223,6 @@ def _negamax(
         ply,
         killers,
         quiet_history,
-        capture_history,
-        countermoves,
-        int(move_stack[ply - 1]) if ply > 0 else 0,
         score_stack[ply],
         see_gain_stack[ply],
     )
@@ -1609,8 +1236,6 @@ def _negamax(
     best_move = 0
     for index in range(count):
         move = int(legal_stack[ply, index])
-        if move == excluded_move:
-            continue
         flags = engine.move_flags(move)
         quiet = flags & (engine.FLAG_CAPTURE | engine.FLAG_PROMOTION) == 0
         quiet_hist = 0
@@ -1661,21 +1286,14 @@ def _negamax(
             pieces, state, key, move, undo_stack[ply], undo_key_stack[ply]
         )
         history[history_count] = key[0]
-        move_stack[ply] = np.int32(move)
         gives_check = engine.is_in_check(pieces, int(state[engine.STATE_SIDE]))
 
         # Search V10 shallow move pruning. These rules apply only to late,
         # non-checking moves at non-PV nodes. They deliberately preserve the
         # first moves, checks, promotions, and all in-check evasions.
         prune_move = False
-        if (
-            excluded_move == 0
-            and non_pv
-            and not in_check
-            and not gives_check
-            and index > 0
-        ):
-            if quiet and excluded_move == 0:
+        if non_pv and not in_check and not gives_check and index > 0:
+            if quiet:
                 if ENABLE_V10_LATE_MOVE_PRUNING and depth <= V10_LMP_MAX_DEPTH:
                     # More moves survive as depth grows. With zero-based index,
                     # this begins pruning only after 4/8/14 ordered moves at
@@ -1738,8 +1356,7 @@ def _negamax(
         reduction = 0
         lmr_start_index = 3 if ENABLE_V10_CONTEXTUAL_LMR else 4
         if (
-            excluded_move == 0
-            and depth >= 3
+            depth >= 3
             and index >= lmr_start_index
             and quiet
             and not in_check
@@ -1763,8 +1380,7 @@ def _negamax(
             reduction = max(0, min(reduction, depth - 2))
 
         reduced = reduction > 0
-        extension = 1 if move == singular_move else 0
-        child_depth = depth - 1 + extension - reduction
+        child_depth = depth - 1 - reduction if reduced else depth - 1
         if reduced:
             stats[STAT_LMR_REDUCTIONS] += 1
         if index == 0:
@@ -1788,18 +1404,14 @@ def _negamax(
                 score_stack,
                 see_gain_stack,
                 killers,
-            quiet_history,
-            capture_history,
-            countermoves,
-            move_stack,
-            q_eval_keys,
+                quiet_history,
+                q_eval_keys,
                 q_eval_scores,
                 q_eval_valid,
                 tt_keys,
                 tt_data,
-            generation,
-            0,
-            stop,
+                generation,
+                stop,
                 node_limit,
                 stats,
             )
@@ -1824,18 +1436,14 @@ def _negamax(
                 score_stack,
                 see_gain_stack,
                 killers,
-            quiet_history,
-            capture_history,
-            countermoves,
-            move_stack,
-            q_eval_keys,
+                quiet_history,
+                q_eval_keys,
                 q_eval_scores,
                 q_eval_valid,
                 tt_keys,
                 tt_data,
-            generation,
-            0,
-            stop,
+                generation,
+                stop,
                 node_limit,
                 stats,
             )
@@ -1845,7 +1453,7 @@ def _negamax(
                     pieces,
                     state,
                     key,
-                    depth - 1 + extension,
+                    depth - 1,
                     -alpha - 1,
                     -alpha,
                     ply + 1,
@@ -1861,18 +1469,14 @@ def _negamax(
                     score_stack,
                     see_gain_stack,
                     killers,
-            quiet_history,
-            capture_history,
-            countermoves,
-            move_stack,
-            q_eval_keys,
+                    quiet_history,
+                    q_eval_keys,
                     q_eval_scores,
                     q_eval_valid,
                     tt_keys,
                     tt_data,
-            generation,
-            0,
-            stop,
+                    generation,
+                    stop,
                     node_limit,
                     stats,
                 )
@@ -1881,7 +1485,7 @@ def _negamax(
                     pieces,
                     state,
                     key,
-                    depth - 1 + extension,
+                    depth - 1,
                     -beta,
                     -alpha,
                     ply + 1,
@@ -1897,18 +1501,14 @@ def _negamax(
                     score_stack,
                     see_gain_stack,
                     killers,
-            quiet_history,
-            capture_history,
-            countermoves,
-            move_stack,
-            q_eval_keys,
+                    quiet_history,
+                    q_eval_keys,
                     q_eval_scores,
                     q_eval_valid,
                     tt_keys,
                     tt_data,
-            generation,
-            0,
-            stop,
+                    generation,
+                    stop,
                     node_limit,
                     stats,
                 )
@@ -1919,12 +1519,6 @@ def _negamax(
             return 0, True
         if ENABLE_HISTORY_V2 and quiet:
             score_stack[ply, index] = 1
-        elif (
-            ENABLE_CAPTURE_HISTORY
-            and flags & engine.FLAG_CAPTURE
-            and flags & engine.FLAG_PROMOTION == 0
-        ):
-            score_stack[ply, index] = 2
         score = -child_score
         if score > best:
             best = score
@@ -1933,16 +1527,9 @@ def _negamax(
             alpha = score
         if alpha >= beta:
             stats[STAT_BETA_CUTOFFS] += 1
-            if quiet and excluded_move == 0:
+            if quiet:
                 _record_quiet_cutoff(
-                    side,
-                    move,
-                    ply,
-                    depth,
-                    killers,
-                    quiet_history,
-                    countermoves,
-                    int(move_stack[ply - 1]) if ply > 0 else 0,
+                    side, move, ply, depth, killers, quiet_history
                 )
                 if ENABLE_HISTORY_V2:
                     _record_quiet_failures(
@@ -1953,32 +1540,16 @@ def _negamax(
                         index,
                         quiet_history,
                     )
-            elif (
-                ENABLE_CAPTURE_HISTORY
-                and excluded_move == 0
-                and flags & engine.FLAG_CAPTURE
-                and flags & engine.FLAG_PROMOTION == 0
-            ):
-                _record_capture_cutoff(
-                    pieces,
-                    side,
-                    move,
-                    depth,
-                    legal_stack[ply],
-                    score_stack[ply],
-                    index,
-                    capture_history,
-                    stats,
-                )
             break
 
     bound = TT_UPPER if best <= original_alpha else TT_LOWER if best >= original_beta else TT_EXACT
-    tt_index = (
-        _tt_replacement_index(key[0], depth, generation, tt_keys, tt_data, stats)
-        if excluded_move == 0
-        else -1
-    )
-    if tt_index >= 0:
+    old_depth = int(tt_data[tt_index, TT_DEPTH])
+    old_generation = int(tt_data[tt_index, TT_GENERATION])
+    if (
+        tt_keys[tt_index] == key[0]
+        or old_generation != generation
+        or depth + 2 >= old_depth
+    ):
         tt_keys[tt_index] = key[0]
         tt_data[tt_index, TT_MOVE] = np.int32(best_move)
         tt_data[tt_index, TT_SCORE] = np.int32(_score_to_table(best, ply))
@@ -1986,7 +1557,7 @@ def _negamax(
         tt_data[tt_index, TT_BOUND] = np.int32(bound)
         tt_data[tt_index, TT_GENERATION] = np.int32(generation)
         tt_data[tt_index, TT_HALFMOVE] = np.int32(
-            min(TT_HALFMOVE_LIMIT, int(state[engine.STATE_HALFMOVE]))
+            min(100, int(state[engine.STATE_HALFMOVE]))
         )
     return best, False
 
@@ -2012,9 +1583,6 @@ def _search_root(
     see_gain_stack: NDArray[np.int32],
     killers: NDArray[np.int32],
     quiet_history: NDArray[np.int32],
-    capture_history: NDArray[np.int32],
-    countermoves: NDArray[np.int32],
-    move_stack: NDArray[np.int32],
     q_eval_keys: NDArray[np.uint64],
     q_eval_scores: NDArray[np.int32],
     q_eval_valid: NDArray[np.uint8],
@@ -2042,9 +1610,9 @@ def _search_root(
         score = -MATE_SCORE if engine.is_in_check(pieces, side) else 0
         return score, 0, False, 0
 
-    tt_index = _tt_probe_index(key[0], tt_keys, tt_data)
+    tt_index = int(key[0] & np.uint64(len(tt_keys) - 1))
     tt_move = preferred_move
-    if tt_index >= 0 and int(tt_data[tt_index, TT_MOVE]) != 0:
+    if tt_keys[tt_index] == key[0] and int(tt_data[tt_index, TT_MOVE]) != 0:
         tt_move = int(tt_data[tt_index, TT_MOVE])
     _order_moves(
         pieces,
@@ -2056,9 +1624,6 @@ def _search_root(
         0,
         killers,
         quiet_history,
-        capture_history,
-        countermoves,
-        np.int64(0),  # type: ignore[arg-type]
         score_stack[0],
         see_gain_stack[0],
     )
@@ -2087,7 +1652,6 @@ def _search_root(
             accumulator_stack[1],
         )
         engine.make_move(pieces, state, key, move, undo_stack[0], undo_key_stack[0])
-        move_stack[0] = np.int32(move)
         history[history_count] = key[0]
         gives_check = engine.is_in_check(pieces, int(state[engine.STATE_SIDE]))
         good_root_history = (
@@ -2119,7 +1683,7 @@ def _search_root(
                 child_depth,
                 -beta,
                 -alpha,
-                np.int64(1),  # type: ignore[arg-type]
+                1,
                 True,
                 history,
                 history_count + 1,
@@ -2132,18 +1696,14 @@ def _search_root(
                 score_stack,
                 see_gain_stack,
                 killers,
-            quiet_history,
-            capture_history,
-            countermoves,
-            move_stack,
-            q_eval_keys,
+                quiet_history,
+                q_eval_keys,
                 q_eval_scores,
                 q_eval_valid,
                 tt_keys,
                 tt_data,
-            generation,
-            0,
-            stop,
+                generation,
+                stop,
                 node_limit,
                 stats,
             )
@@ -2155,7 +1715,7 @@ def _search_root(
                 child_depth,
                 -alpha - 1,
                 -alpha,
-                np.int64(1),  # type: ignore[arg-type]
+                1,
                 True,
                 history,
                 history_count + 1,
@@ -2168,18 +1728,14 @@ def _search_root(
                 score_stack,
                 see_gain_stack,
                 killers,
-            quiet_history,
-            capture_history,
-            countermoves,
-            move_stack,
-            q_eval_keys,
+                quiet_history,
+                q_eval_keys,
                 q_eval_scores,
                 q_eval_valid,
                 tt_keys,
                 tt_data,
-            generation,
-            0,
-            stop,
+                generation,
+                stop,
                 node_limit,
                 stats,
             )
@@ -2195,7 +1751,7 @@ def _search_root(
                     depth - 1,
                     -alpha - 1,
                     -alpha,
-                    np.int64(1),  # type: ignore[arg-type]
+                    1,
                     True,
                     history,
                     history_count + 1,
@@ -2208,18 +1764,14 @@ def _search_root(
                     score_stack,
                     see_gain_stack,
                     killers,
-            quiet_history,
-            capture_history,
-            countermoves,
-            move_stack,
-            q_eval_keys,
+                    quiet_history,
+                    q_eval_keys,
                     q_eval_scores,
                     q_eval_valid,
                     tt_keys,
                     tt_data,
-            generation,
-            0,
-            stop,
+                    generation,
+                    stop,
                     node_limit,
                     stats,
                 )
@@ -2231,7 +1783,7 @@ def _search_root(
                     depth - 1,
                     -beta,
                     -alpha,
-                    np.int64(1),  # type: ignore[arg-type]
+                    1,
                     True,
                     history,
                     history_count + 1,
@@ -2244,18 +1796,14 @@ def _search_root(
                     score_stack,
                     see_gain_stack,
                     killers,
-            quiet_history,
-            capture_history,
-            countermoves,
-            move_stack,
-            q_eval_keys,
+                    quiet_history,
+                    q_eval_keys,
                     q_eval_scores,
                     q_eval_valid,
                     tt_keys,
                     tt_data,
-            generation,
-            0,
-            stop,
+                    generation,
+                    stop,
                     node_limit,
                     stats,
                 )
@@ -2360,7 +1908,6 @@ def search_position(
     score_stack = np.empty((MAX_PLY, engine.MAX_MOVES), dtype=np.int32)
     see_gain_stack = np.empty((MAX_PLY, SEE_MAX_EXCHANGES), dtype=np.int32)
     killers = np.zeros((MAX_PLY, 2), dtype=np.int32)
-    move_stack = np.zeros(MAX_PLY, dtype=np.int32)
     stop = np.zeros(1, dtype=np.uint8)
     stats = np.zeros(STAT_COUNT, dtype=np.int64)
     generation = memory.next_generation()
@@ -2407,9 +1954,6 @@ def search_position(
                 see_gain_stack,
                 killers,
                 memory.quiet_history,
-                memory.capture_history,
-                memory.countermoves,
-                move_stack,
                 memory.q_eval_keys,
                 memory.q_eval_scores,
                 memory.q_eval_valid,
@@ -2449,9 +1993,6 @@ def search_position(
                     see_gain_stack,
                     killers,
                     memory.quiet_history,
-                    memory.capture_history,
-                    memory.countermoves,
-                    move_stack,
                     memory.q_eval_keys,
                     memory.q_eval_scores,
                     memory.q_eval_valid,
@@ -2530,11 +2071,6 @@ def search_position(
         int(stats[STAT_LMR_RESEARCHES]),
         int(stats[STAT_Q_EVAL_PROBES]),
         int(stats[STAT_Q_EVAL_HITS]),
-        int(stats[STAT_TT_COLLISIONS]),
-        int(stats[STAT_TT_REPLACEMENTS]),
-        int(stats[STAT_CAPTURE_HISTORY_UPDATES]),
-        int(stats[STAT_SINGULAR_ATTEMPTS]),
-        int(stats[STAT_SINGULAR_EXTENSIONS]),
     )
 
 
