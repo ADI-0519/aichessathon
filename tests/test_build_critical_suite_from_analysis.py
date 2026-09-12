@@ -60,6 +60,31 @@ class BuildCriticalSuiteTests(unittest.TestCase):
         }
         self.assertEqual(build_positions(payload, 80, 10), [])
 
+    def test_filters_low_clock_errors_when_requested(self) -> None:
+        payload = {
+            "games": [
+                {
+                    "file": "round.pgn",
+                    "moves": [
+                        {
+                            "selected": True,
+                            "cp_loss": 120,
+                            "clock_before_s": 4.0,
+                            "best_uci": "a1a2",
+                            "uci": "e1d1",
+                            "fen": "4k3/8/8/8/8/8/q7/R3K3 w - - 0 1",
+                            "ply": 1,
+                            "san": "Kd1",
+                        }
+                    ],
+                }
+            ]
+        }
+        self.assertEqual(
+            build_positions(payload, 80, 10, min_clock_before_s=20.0),
+            [],
+        )
+
 
 if __name__ == "__main__":
     unittest.main()

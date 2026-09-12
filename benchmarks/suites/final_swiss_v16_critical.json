@@ -1,0 +1,186 @@
+{
+  "schema_version": 1,
+  "description": "Search regressions selected from machine-readable rated-PGN analysis; minimum loss 100 cp, teacher node limits [100000].",
+  "positions": [
+    {
+      "id": "aichessathon-round-121-zak-ply-226",
+      "label": "aichessathon-round-121-zak, ply 226 (Qc5+)",
+      "fen": "3K4/5q2/2Q5/8/8/8/8/5qk1 w - - 2 119",
+      "played_move": "c6c5",
+      "reference_move": "c6b6",
+      "baseline_move": "c6c5",
+      "diagnosis": "Focused player chose Qc5+ (c6c5); the 100000 node teacher preferred c6b6, with an estimated loss of 4758 cp."
+    },
+    {
+      "id": "aichessathon-round-121-zak-ply-222",
+      "label": "aichessathon-round-121-zak, ply 222 (Kd8)",
+      "fen": "8/2K2q2/1Q6/8/8/8/5p2/7k w - - 22 117",
+      "played_move": "c7d8",
+      "reference_move": "c7c8",
+      "baseline_move": "c7d8",
+      "diagnosis": "Focused player chose Kd8 (c7d8); the 100000 node teacher preferred c7c8, with an estimated loss of 1751 cp."
+    },
+    {
+      "id": "aichessathon-round-121-zak-ply-220",
+      "label": "aichessathon-round-121-zak, ply 220 (Kc7)",
+      "fen": "3K4/8/1Q6/3q4/8/8/5p2/7k w - - 20 116",
+      "played_move": "d8c7",
+      "reference_move": "d8e7",
+      "baseline_move": "d8c7",
+      "diagnosis": "Focused player chose Kc7 (d8c7); the 100000 node teacher preferred d8e7, with an estimated loss of 435 cp."
+    },
+    {
+      "id": "aichessathon-round-116-agread-1-ply-166",
+      "label": "aichessathon-round-116-agread (1), ply 166 (Qa2)",
+      "fen": "8/1kp5/1p2Q3/1n3r2/5r2/p6K/8/8 w - - 0 91",
+      "played_move": "e6a2",
+      "reference_move": "h3h2",
+      "baseline_move": "e6a2",
+      "diagnosis": "Focused player chose Qa2 (e6a2); the 100000 node teacher preferred h3h2, with an estimated loss of 278 cp."
+    },
+    {
+      "id": "aichessathon-round-115-finlay-phillips-1-ply-51",
+      "label": "aichessathon-round-115-finlay-phillips (1), ply 51 (Qxf4)",
+      "fen": "5bk1/pr3p2/Q1b2q2/2p1r3/P2pPP1P/1P6/3N2B1/2R1R1K1 b - - 0 32",
+      "played_move": "f6f4",
+      "reference_move": "e5e6",
+      "baseline_move": "f6f4",
+      "diagnosis": "Focused player chose Qxf4 (f6f4); the 100000 node teacher preferred e5e6, with an estimated loss of 183 cp."
+    },
+    {
+      "id": "aichessathon-round-121-zak-ply-140",
+      "label": "aichessathon-round-121-zak, ply 140 (hxg5)",
+      "fen": "1K6/4Qp1k/5P2/6pp/2q4P/6P1/8/8 w - - 0 76",
+      "played_move": "h4g5",
+      "reference_move": "e7f8",
+      "baseline_move": "h4g5",
+      "diagnosis": "Focused player chose hxg5 (h4g5); the 100000 node teacher preferred e7f8, with an estimated loss of 182 cp."
+    },
+    {
+      "id": "aichessathon-round-113-ms-1-ply-122",
+      "label": "aichessathon-round-113-ms (1), ply 122 (Rxa7)",
+      "fen": "r7/Pk3KP1/8/8/8/8/5P2/R7 b - - 0 67",
+      "played_move": "a8a7",
+      "reference_move": "b7c6",
+      "baseline_move": "a8a7",
+      "diagnosis": "Focused player chose Rxa7 (a8a7); the 100000 node teacher preferred b7c6, with an estimated loss of 174 cp."
+    },
+    {
+      "id": "aichessathon-round-114-david-naylor-1-ply-76",
+      "label": "aichessathon-round-114-david-naylor (1), ply 76 (Qh6+)",
+      "fen": "8/7k/4pQ2/P4pPq/2b1p3/4P3/4P3/5BK1 w - - 14 45",
+      "played_move": "f6h6",
+      "reference_move": "f1g2",
+      "baseline_move": "f6h6",
+      "diagnosis": "Focused player chose Qh6+ (f6h6); the 100000 node teacher preferred f1g2, with an estimated loss of 162 cp."
+    },
+    {
+      "id": "aichessathon-round-121-zak-ply-212",
+      "label": "aichessathon-round-121-zak, ply 212 (Kc7)",
+      "fen": "8/8/2K5/8/8/5q2/2Q2pk1/8 w - - 12 112",
+      "played_move": "c6c7",
+      "reference_move": "c6b5",
+      "baseline_move": "c6c7",
+      "diagnosis": "Focused player chose Kc7 (c6c7); the 100000 node teacher preferred c6b5, with an estimated loss of 146 cp."
+    },
+    {
+      "id": "aichessathon-round-116-agread-1-ply-84",
+      "label": "aichessathon-round-116-agread (1), ply 84 (f5)",
+      "fen": "5k2/1bp2r1r/1p6/pP1p3n/P2P1P1P/7Q/2R2P1K/8 w - - 10 50",
+      "played_move": "f4f5",
+      "reference_move": "c2e2",
+      "baseline_move": "f4f5",
+      "diagnosis": "Focused player chose f5 (f4f5); the 100000 node teacher preferred c2e2, with an estimated loss of 140 cp."
+    },
+    {
+      "id": "aichessathon-round-114-david-naylor-1-ply-236",
+      "label": "aichessathon-round-114-david-naylor (1), ply 236 (Bf1)",
+      "fen": "2b5/8/3k4/4pp2/2K1p3/4P2B/4P3/8 w - - 38 125",
+      "played_move": "h3f1",
+      "reference_move": "c4c3",
+      "baseline_move": "h3f1",
+      "diagnosis": "Focused player chose Bf1 (h3f1); the 100000 node teacher preferred c4c3, with an estimated loss of 139 cp."
+    },
+    {
+      "id": "aichessathon-round-122-logang-ply-68",
+      "label": "aichessathon-round-122-logang, ply 68 (Ng5)",
+      "fen": "3k4/p2bb3/Pp3pK1/3p4/2nP3P/P1r2NP1/8/1RB1R3 w - - 7 40",
+      "played_move": "f3g5",
+      "reference_move": "e1f1",
+      "baseline_move": "f3g5",
+      "diagnosis": "Focused player chose Ng5 (f3g5); the 100000 node teacher preferred e1f1, with an estimated loss of 133 cp."
+    },
+    {
+      "id": "aichessathon-round-115-finlay-phillips-1-ply-61",
+      "label": "aichessathon-round-115-finlay-phillips (1), ply 61 (Qg4)",
+      "fen": "3Q1bk1/p4p2/6r1/2p1r3/P2pPq1P/1P6/3NR1B1/5RK1 b - - 8 37",
+      "played_move": "f4g4",
+      "reference_move": "f4h6",
+      "baseline_move": "f4g4",
+      "diagnosis": "Focused player chose Qg4 (f4g4); the 100000 node teacher preferred f4h6, with an estimated loss of 131 cp."
+    },
+    {
+      "id": "aichessathon-round-116-agread-1-ply-22",
+      "label": "aichessathon-round-116-agread (1), ply 22 (Nxg6)",
+      "fen": "3rr1k1/1bp4p/ppnq1pp1/3p4/1P1P3N/P3P1PB/2Q2P1P/2R2RK1 w - - 0 19",
+      "played_move": "h4g6",
+      "reference_move": "h4g2",
+      "baseline_move": "h4g6",
+      "diagnosis": "Focused player chose Nxg6 (h4g6); the 100000 node teacher preferred h4g2, with an estimated loss of 131 cp."
+    },
+    {
+      "id": "aichessathon-round-117-kingfish-1-ply-29",
+      "label": "aichessathon-round-117-kingfish (1), ply 29 (Re4)",
+      "fen": "r3r1k1/pp3pp1/1qn4p/3p4/3N4/P1P3bP/1P2BRP1/R1BQ2K1 b - - 2 19",
+      "played_move": "e8e4",
+      "reference_move": "g3f2",
+      "baseline_move": "e8e4",
+      "diagnosis": "Focused player chose Re4 (e8e4); the 100000 node teacher preferred g3f2, with an estimated loss of 130 cp."
+    },
+    {
+      "id": "aichessathon-round-115-finlay-phillips-1-ply-95",
+      "label": "aichessathon-round-115-finlay-phillips (1), ply 95 (Rh8)",
+      "fen": "8/p5k1/2NRP3/7r/P7/1P6/6B1/6K1 b - - 0 54",
+      "played_move": "h5h8",
+      "reference_move": "h5c5",
+      "baseline_move": "h5h8",
+      "diagnosis": "Focused player chose Rh8 (h5h8); the 100000 node teacher preferred h5c5, with an estimated loss of 121 cp."
+    },
+    {
+      "id": "aichessathon-round-116-agread-1-ply-44",
+      "label": "aichessathon-round-116-agread (1), ply 44 (Qh3)",
+      "fen": "4rk2/1bp3r1/ppnq1p2/3p1B1Q/1P1P4/P3P1P1/2R2P1P/2R3K1 w - - 19 30",
+      "played_move": "h5h3",
+      "reference_move": "f5d3",
+      "baseline_move": "h5h3",
+      "diagnosis": "Focused player chose Qh3 (h5h3); the 100000 node teacher preferred f5d3, with an estimated loss of 113 cp."
+    },
+    {
+      "id": "aichessathon-round-115-finlay-phillips-1-ply-69",
+      "label": "aichessathon-round-115-finlay-phillips (1), ply 69 (Rg8)",
+      "fen": "5Q2/p6k/6r1/2p1r3/P2pP1qP/1P3N2/5RB1/6K1 b - - 2 41",
+      "played_move": "g6g8",
+      "reference_move": "e5h5",
+      "baseline_move": "g6g8",
+      "diagnosis": "Focused player chose Rg8 (g6g8); the 100000 node teacher preferred e5h5, with an estimated loss of 111 cp."
+    },
+    {
+      "id": "aichessathon-round-115-finlay-phillips-1-ply-25",
+      "label": "aichessathon-round-115-finlay-phillips (1), ply 25 (Qg5)",
+      "fen": "1r1qrbk1/pb3p1p/1n6/2pp4/6p1/1QB1P1P1/PP1N1PBP/3RR1K1 b - - 5 19",
+      "played_move": "d8g5",
+      "reference_move": "d5d4",
+      "baseline_move": "d8g5",
+      "diagnosis": "Focused player chose Qg5 (d8g5); the 100000 node teacher preferred d5d4, with an estimated loss of 110 cp."
+    },
+    {
+      "id": "aichessathon-round-114-david-naylor-1-ply-106",
+      "label": "aichessathon-round-114-david-naylor (1), ply 106 (Bg2)",
+      "fen": "8/8/4p3/1b3p2/1k2p3/4P2B/3KP3/8 w - - 8 60",
+      "played_move": "h3g2",
+      "reference_move": "d2e1",
+      "baseline_move": "h3g2",
+      "diagnosis": "Focused player chose Bg2 (h3g2); the 100000 node teacher preferred d2e1, with an estimated loss of 109 cp."
+    }
+  ]
+}

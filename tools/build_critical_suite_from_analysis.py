@@ -16,7 +16,10 @@ def _slug(value: str) -> str:
 
 
 def build_positions(
-    payload: dict[str, Any], min_cp_loss: int, limit: int
+    payload: dict[str, Any],
+    min_cp_loss: int,
+    limit: int,
+    min_clock_before_s: float | None = None,
 ) -> list[dict[str, str]]:
     """Select the largest legal, non-duplicate errors made by the focused player."""
     candidates: list[tuple[int, str, int, dict[str, Any]]] = []
@@ -28,6 +31,12 @@ def build_positions(
             if not record.get("selected") or not isinstance(loss, int):
                 continue
             if loss < min_cp_loss or record.get("best_uci") in {None, record.get("uci")}:
+                continue
+            clock_before = record.get("clock_before_s")
+            if min_clock_before_s is not None and (
+                not isinstance(clock_before, (int, float))
+                or clock_before < min_clock_before_s
+            ):
                 continue
             candidates.append((loss, filename, nodes, record))
     candidates.sort(key=lambda item: (-item[0], item[1], int(item[3]["ply"])))
@@ -85,15 +94,29 @@ def main() -> None:
     parser.add_argument("--analysis", required=True, type=Path)
     parser.add_argument("--output", required=True, type=Path)
     parser.add_argument("--min-cp-loss", type=int, default=80)
+    parser.add_argument(
+        "--min-clock-before-s",
+        type=float,
+        help="keep only mistakes made with at least this much clock remaining",
+    )
     parser.add_argument("--limit", type=int, default=25)
     args = parser.parse_args()
-    if args.min_cp_loss < 0 or args.limit <= 0:
-        parser.error("--min-cp-loss must be nonnegative and --limit positive")
+    if (
+        args.min_cp_loss < 0
+        or args.limit <= 0
+        or (args.min_clock_before_s is not None and args.min_clock_before_s < 0)
+    ):
+        parser.error("loss/clock thresholds must be nonnegative and --limit positive")
 
     payload = json.loads(args.analysis.read_text(encoding="utf-8"))
     if payload.get("schema_version") != 1 or not isinstance(payload.get("games"), list):
         parser.error("analysis must be schema-version 1 PGN analysis JSON")
-    positions = build_positions(payload, args.min_cp_loss, args.limit)
+    positions = build_positions(
+        payload,
+        args.min_cp_loss,
+        args.limit,
+        args.min_clock_before_s,
+    )
     if not positions:
         parser.error("analysis contains no qualifying focused-player errors")
     nodes = sorted(
@@ -106,7 +129,8 @@ def main() -> None:
         "schema_version": 1,
         "description": (
             "Search regressions selected from machine-readable rated-PGN analysis; "
-            f"minimum loss {args.min_cp_loss} cp, teacher node limits {nodes}."
+            f"minimum loss {args.min_cp_loss} cp, "
+            f"minimum clock {args.min_clock_before_s} s, teacher node limits {nodes}."
         ),
         "positions": positions,
     }

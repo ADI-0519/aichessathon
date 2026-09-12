@@ -69,6 +69,7 @@ files = [
     "tools/materialize_nnue_blend.py",
     "tools/verify_v5_nnue.py",
     "tools/verify_kingnet.py",
+    "tools/evaluator_calibration.py",
     "tools/king_features.py",
     "tools/train_king_factored.py",
     "tools/train_kingnet_v11.py",

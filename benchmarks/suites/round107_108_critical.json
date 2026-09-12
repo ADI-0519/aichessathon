@@ -1,0 +1,69 @@
+{
+  "schema_version": 1,
+  "description": "Stockfish-50k diagnostic positions from AIY ladder rounds 107 and 108.",
+  "positions": [
+    {
+      "id": "round107-30-qh4",
+      "label": "Round 107, Black move 30",
+      "fen": "1k4r1/1p2pb2/p2p1q2/P1pPb3/R4Nn1/1P1P1B2/2P1Q3/2BK4 b - - 7 30",
+      "played_move": "f6h4",
+      "reference_move": "g4h6",
+      "baseline_move": "f6h4",
+      "diagnosis": "Qh4 retained a winning position but lost 120 cp at the 50k-node reference analysis."
+    },
+    {
+      "id": "round107-64-kc4",
+      "label": "Round 107, Black move 64",
+      "fen": "8/3B4/8/1k6/3pq3/8/7K/8 b - - 5 64",
+      "played_move": "b5c4",
+      "reference_move": "b5b4",
+      "baseline_move": "b5c4",
+      "diagnosis": "Kc4 made conversion less precise in an already winning queen ending."
+    },
+    {
+      "id": "round107-66-kd4",
+      "label": "Round 107, Black move 66",
+      "fen": "8/8/8/8/B1k1q3/3p2K1/8/8 b - - 1 66",
+      "played_move": "c4d4",
+      "reference_move": "c4b4",
+      "baseline_move": "c4d4",
+      "diagnosis": "Kd4 surrendered 127 cp while Black remained decisively winning."
+    },
+    {
+      "id": "round108-10-re8",
+      "label": "Round 108, Black move 10",
+      "fen": "r2q1rk1/2pbbppp/p1np1n2/1p2p3/P2PP3/1BP2N2/1P3PPP/RNBQR1K1 b - - 0 10",
+      "played_move": "f8e8",
+      "reference_move": "d7g4",
+      "baseline_move": "f8e8",
+      "diagnosis": "Re8 conceded most of Black's opening advantage according to the 50k-node reference."
+    },
+    {
+      "id": "round108-23-b4",
+      "label": "Round 108, Black move 23",
+      "fen": "rr4k1/2qb1pb1/p2p1np1/PpnPp2p/2p1P3/2P1BPNP/RPBN1QP1/4R1K1 b - - 1 23",
+      "played_move": "b5b4",
+      "reference_move": "h5h4",
+      "baseline_move": "b5b4",
+      "diagnosis": "b4 changed a small advantage into a small disadvantage at the reference depth."
+    },
+    {
+      "id": "round108-34-rf6",
+      "label": "Round 108, Black move 34",
+      "fen": "r5k1/2q5/p2n2pb/P1pPp2p/1pB1Pr2/2P4P/RP1N2P1/3RQ2K b - - 2 34",
+      "played_move": "f4f6",
+      "reference_move": "g6g5",
+      "baseline_move": "f4f6",
+      "diagnosis": "Rf6 changed a small advantage into a small disadvantage at the reference depth."
+    },
+    {
+      "id": "round108-55-rd8",
+      "label": "Round 108, Black move 55",
+      "fen": "1r6/3P1R2/P5k1/3Bp1bp/4n3/6Pp/8/5N1K b - - 2 55",
+      "played_move": "b8d8",
+      "reference_move": "e4c3",
+      "baseline_move": "b8d8",
+      "diagnosis": "Rd8 was the largest measured AIY error in the drawn rook-and-minor-piece ending."
+    }
+  ]
+}

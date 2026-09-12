@@ -1,0 +1,142 @@
+{
+  "schema_version": 1,
+  "split": {
+    "method": "sha256-game-identity",
+    "holdout_percent": 25,
+    "calibration_count": 1859,
+    "holdout_count": 505
+  },
+  "blend_holdout": {
+    "0": {
+      "count": 505,
+      "mae_cp": 168.33663366336634,
+      "rmse_cp": 265.2491151150309,
+      "bias_cp": 12.902970297029704
+    },
+    "25": {
+      "count": 505,
+      "mae_cp": 144.82871287128714,
+      "rmse_cp": 230.3585023478847,
+      "bias_cp": 10.800990099009901
+    },
+    "50": {
+      "count": 505,
+      "mae_cp": 133.30693069306932,
+      "rmse_cp": 212.13166563329585,
+      "bias_cp": 8.699009900990099
+    },
+    "75": {
+      "count": 505,
+      "mae_cp": 133.63366336633663,
+      "rmse_cp": 214.8522863515654,
+      "bias_cp": 6.597029702970297
+    },
+    "100": {
+      "count": 505,
+      "mae_cp": 145.7029702970297,
+      "rmse_cp": 237.80248897430874,
+      "bias_cp": 4.4950495049504955
+    }
+  },
+  "bands": {
+    "2-8": {
+      "calibration_count": 410,
+      "holdout_count": 9,
+      "learned_scale": 0.503580573007731,
+      "raw_learned": {
+        "count": 9,
+        "mae_cp": 511.6666666666667,
+        "rmse_cp": 664.572460726109,
+        "bias_cp": -511.6666666666667
+      },
+      "scaled_learned": {
+        "count": 9,
+        "mae_cp": 223.85577910439184,
+        "rmse_cp": 247.51895551556908,
+        "bias_cp": 85.1949577203715
+      }
+    },
+    "9-12": {
+      "calibration_count": 368,
+      "holdout_count": 69,
+      "learned_scale": 0.5139552889295613,
+      "raw_learned": {
+        "count": 69,
+        "mae_cp": 240.56521739130434,
+        "rmse_cp": 332.93523328902484,
+        "bias_cp": 44.507246376811594
+      },
+      "scaled_learned": {
+        "count": 69,
+        "mae_cp": 162.785641161329,
+        "rmse_cp": 191.53669290326104,
+        "bias_cp": 45.415938662725885
+      }
+    },
+    "13-16": {
+      "calibration_count": 299,
+      "holdout_count": 56,
+      "learned_scale": 0.535364621442176,
+      "raw_learned": {
+        "count": 56,
+        "mae_cp": 155.94642857142858,
+        "rmse_cp": 257.5875371319705,
+        "bias_cp": -63.625
+      },
+      "scaled_learned": {
+        "count": 56,
+        "mae_cp": 249.40149484566422,
+        "rmse_cp": 287.2613216819829,
+        "bias_cp": 66.83797665077188
+      }
+    },
+    "17-24": {
+      "calibration_count": 414,
+      "holdout_count": 181,
+      "learned_scale": 0.4450819611767193,
+      "raw_learned": {
+        "count": 181,
+        "mae_cp": 165.08839779005524,
+        "rmse_cp": 245.61611560134634,
+        "bias_cp": 28.314917127071823
+      },
+      "scaled_learned": {
+        "count": 181,
+        "mae_cp": 206.02943723360758,
+        "rmse_cp": 263.3181566025397,
+        "bias_cp": 21.165365378254744
+      }
+    },
+    "25-32": {
+      "calibration_count": 368,
+      "holdout_count": 190,
+      "learned_scale": 0.5549478232157383,
+      "raw_learned": {
+        "count": 190,
+        "mae_cp": 72.43157894736842,
+        "rmse_cp": 110.01377904129723,
+        "bias_cp": 11.8
+      },
+      "scaled_learned": {
+        "count": 190,
+        "mae_cp": 65.93345124892977,
+        "rmse_cp": 98.4997143306921,
+        "bias_cp": 22.193139517851417
+      }
+    }
+  },
+  "engine_root": "challengers\\exp_finals_v18_core",
+  "inputs": [
+    "benchmarks\\diagnostics\\platform-recent-stockfish.json",
+    "benchmarks\\diagnostics\\final-swiss-rounds110-112-stockfish100k.json",
+    "benchmarks\\diagnostics\\final-swiss-rounds113-122-stockfish100k.json",
+    "benchmarks\\diagnostics\\round82-90-current-losses-stockfish100k.json",
+    "benchmarks\\diagnostics\\v14-round103-stockfish100k.json",
+    "benchmarks\\diagnostics\\v14-round104-stockfish100k.json",
+    "benchmarks\\diagnostics\\v14-round107-108-stockfish50k.json",
+    "benchmarks\\diagnostics\\round77-78-raw-v9-stockfish100k.json",
+    "benchmarks\\diagnostics\\round79-qcache-stockfish500k.json"
+  ],
+  "selected_only": true,
+  "max_abs_cp": 1500
+}
